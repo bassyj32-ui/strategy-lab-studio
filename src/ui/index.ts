@@ -1,0 +1,4 @@
+// UI module (P0). Editor panels: palette toolbar, inspector, layers panel.
+export { Toolbar } from './Toolbar';
+export { Inspector } from './Inspector';
+export { LayersPanel } from './LayersPanel';
