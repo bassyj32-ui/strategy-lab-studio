@@ -16,3 +16,5 @@ build/
 # Logs
 *.log
 npm-debug.log*
+# Remotion render outputs
+out/
