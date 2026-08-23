@@ -2,6 +2,9 @@ import { useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { useSceneStore } from '../scene/store';
 import type { SceneObjectType } from '../scene/types';
+// Placing an object must also SELECT it (both stores) so the Inspector and
+// timeline immediately target the new object.
+import { selectObjectUnified } from '../timeline/selection';
 
 // MVP-1 palette: only `shape` and `marker`. Unit is reserved (not included).
 const PALETTE: { type: SceneObjectType; label: string }[] = [
@@ -14,6 +17,12 @@ export function Toolbar() {
   const createObjectOfType = useSceneStore((s) => s.createObjectOfType);
   const mapFileRef = useRef<HTMLInputElement | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+
+  /** Click-to-place: create the object, then select it everywhere. */
+  const placeAndSelect = (type: SceneObjectType) => {
+    const id = createObjectOfType(type);
+    selectObjectUnified(id);
+  };
 
   const handleMapFile = async (e: ChangeEvent<HTMLInputElement>) => {
     // Reset first so re-selecting the same file still fires onChange.
@@ -61,11 +70,11 @@ export function Toolbar() {
             e.dataTransfer.setData('text/plain', item.type);
             e.dataTransfer.effectAllowed = 'copy';
           }}
-          onClick={() => createObjectOfType(item.type)}
+          onClick={() => placeAndSelect(item.type)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
-              createObjectOfType(item.type);
+              placeAndSelect(item.type);
             }
           }}
         >

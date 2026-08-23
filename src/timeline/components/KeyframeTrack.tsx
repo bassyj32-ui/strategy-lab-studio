@@ -1,6 +1,10 @@
 import type { ObjId } from '../../scene/types';
 import { useSceneStore } from '../../scene/store';
-import { useTimelineSelection } from '../selection';
+import {
+  selectObjectUnified,
+  selectKeyframeUnified,
+  useTimelineSelection,
+} from '../selection';
 
 interface KeyframeTrackProps {
   objId: ObjId;
@@ -15,8 +19,6 @@ export function KeyframeTrack({ objId }: KeyframeTrackProps) {
   const objects = useSceneStore((s) => s.scene.objects);
   const selectedObjId = useTimelineSelection((s) => s.selectedObjId);
   const selectedKeyframeTime = useTimelineSelection((s) => s.selectedKeyframeTime);
-  const selectObject = useTimelineSelection((s) => s.selectObject);
-  const selectKeyframe = useTimelineSelection((s) => s.selectKeyframe);
 
   const keyframes = keyframesMap[objId] ?? [];
   const name = objects[objId]?.id ?? objId;
@@ -29,10 +31,7 @@ export function KeyframeTrack({ objId }: KeyframeTrackProps) {
         type="button"
         className={isActive ? 'track-label active' : 'track-label'}
         data-testid={`track-select-${objId}`}
-        onClick={() => {
-          selectObject(objId);
-          selectKeyframe(null);
-        }}
+        onClick={() => selectObjectUnified(objId)}
       >
         {name}
       </button>
@@ -48,11 +47,13 @@ export function KeyframeTrack({ objId }: KeyframeTrackProps) {
               aria-label={`keyframe at ${kf.time}`}
               onClick={(e) => {
                 e.stopPropagation();
-                selectObject(objId);
-                selectKeyframe(kf.time);
+                // Unified: object selected everywhere + keyframe focused.
+                selectKeyframeUnified(objId, kf.time);
               }}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') selectKeyframe(kf.time);
+                if (e.key === 'Enter' || e.key === ' ') {
+                  selectKeyframeUnified(objId, kf.time);
+                }
               }}
               title={`${name} @ ${kf.time}s`}
               style={{

@@ -2,6 +2,9 @@ import { Group, Rect, Ellipse, Text } from 'react-konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import type { ObjId, SceneObject } from '../scene/types';
 import { useSceneStore } from '../scene/store';
+// Unified selection: canvas clicks must reach BOTH the scene store (canvas
+// highlight + Inspector) and the timeline selection store (KeyframeEditor).
+import { selectObjectUnified } from '../timeline/selection';
 
 // Base sizes in world units (object center sits at transform.x / transform.y).
 export const SHAPE_SIZE = 80;
@@ -41,6 +44,12 @@ export function ObjectNode({ obj, onSelect }: ObjectNodeProps) {
 
   const handleSelect = (e: KonvaEventObject<MouseEvent>) => {
     e.cancelBubble = true;
+    // SINGLE CHOKE POINT for canvas selection: sync both stores here so the
+    // Inspector, canvas outline and timeline always agree, no matter which
+    // parent supplies `onSelect`.
+    selectObjectUnified(obj.id);
+    // Keep the parent contract (CanvasStage passes scene setSelected — an
+    // idempotent re-write of the same value).
     onSelect(obj.id);
   };
 
