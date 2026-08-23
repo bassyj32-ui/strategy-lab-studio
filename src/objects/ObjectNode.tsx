@@ -15,12 +15,27 @@ export const ARROW_SHAFT_WIDTH = 6;
 export const ARROWHEAD_LENGTH = 18;
 export const ARROWHEAD_HALF_WIDTH = 11;
 
+// Editor preview shadows mirror the Remotion render (src/render/draw.ts) so
+// what the commander sees matches the export. Keep these four in sync with the
+// render constants (SHADOW_* in draw.ts).
+const SHADOW_COLOR = 'rgba(0, 0, 0, 0.45)';
+const SHADOW_BLUR = 12;
+const SHADOW_OFFSET_X = 4;
+const SHADOW_OFFSET_Y = 6;
+
 interface ObjectNodeProps {
   obj: SceneObject;
   /** WORLD-space transform to render at (parent chain already folded). */
   world: Transform;
   /** WORLD transform of this object's parent, or null if it is a root. */
   parentWorld: Transform | null;
+  /**
+   * Preview shadows whose asset declares `defaultShadow` (Tab D render-only
+   * shadows, now surfaced in the editor too). `shadowZoom` is the camera
+   * zoom × display scale so the preview tracks the render's screen.scale.
+   */
+  wantShadow?: boolean;
+  shadowZoom?: number;
   onSelect: (id: ObjId) => void;
 }
 
@@ -34,7 +49,14 @@ interface ObjectNodeProps {
  * the pointer's world position back into the object's LOCAL frame before
  * writing, so grouping is preserved while dragging.
  */
-export function ObjectNode({ obj, world, parentWorld, onSelect }: ObjectNodeProps) {
+export function ObjectNode({
+  obj,
+  world,
+  parentWorld,
+  wantShadow,
+  shadowZoom = 1,
+  onSelect,
+}: ObjectNodeProps) {
   const beginInteraction = useSceneStore((s) => s.beginInteraction);
   const endInteraction = useSceneStore((s) => s.endInteraction);
   const updateTransform = useSceneStore((s) => s.updateTransform);
@@ -84,6 +106,14 @@ export function ObjectNode({ obj, world, parentWorld, onSelect }: ObjectNodeProp
     onDragEnd: handleDragEnd,
     onClick: handleSelect,
     onTap: handleSelect,
+    ...(wantShadow
+      ? {
+          shadowColor: SHADOW_COLOR,
+          shadowBlur: SHADOW_BLUR * shadowZoom,
+          shadowOffsetX: SHADOW_OFFSET_X * shadowZoom,
+          shadowOffsetY: SHADOW_OFFSET_Y * shadowZoom,
+        }
+      : {}),
   };
 
   if (obj.type === 'shape') {

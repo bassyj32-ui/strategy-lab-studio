@@ -550,21 +550,28 @@ export function CanvasStage() {
           {/* One Konva layer per visible scene layer. */}
           {visibleLayersOrdered(scene).map((layer) => (
             <Layer key={layer.id}>
-              {objectsForLayer(scene, layer.id).map((obj) => {
-                const worldT = resolveWorldTransform(scene.objects, obj.id);
-                const parentWorldT = obj.parentId
-                  ? resolveWorldTransform(scene.objects, obj.parentId)
-                  : null;
-                return (
-                  <ObjectNode
-                    key={obj.id}
-                    obj={obj}
-                    world={worldT}
-                    parentWorld={parentWorldT}
-                    onSelect={setSelected}
-                  />
-                );
-              })}
+               {objectsForLayer(scene, layer.id).map((obj) => {
+                 const worldT = resolveWorldTransform(scene.objects, obj.id);
+                 const parentWorldT = obj.parentId
+                   ? resolveWorldTransform(scene.objects, obj.parentId)
+                   : null;
+                 // Editor shadow preview (Tab D): mirror the Remotion render's
+                 // asset-driven `defaultShadow` so the canvas matches the export.
+                 const asset = obj.assetId ? scene.assets[obj.assetId] : undefined;
+                 const wantShadow = asset?.metadata?.defaultShadow === true;
+                 const shadowZoom = scene.camera.zoom * DISPLAY_SCALE;
+                 return (
+                   <ObjectNode
+                     key={obj.id}
+                     obj={obj}
+                     world={worldT}
+                     parentWorld={parentWorldT}
+                     wantShadow={wantShadow}
+                     shadowZoom={shadowZoom}
+                     onSelect={setSelected}
+                   />
+                 );
+               })}
             </Layer>
           ))}
 

@@ -86,8 +86,9 @@ Objects whose asset metadata sets `defaultShadow: true` (§44) draw a fixed soft
 offset shadow via canvas 2D (`shadowColor/shadowBlur/shadowOffsetX/Y`). The
 parameters are compile-time constants scaled only by camera zoom — no
 randomness, no time-of-day — so shadows are byte-deterministic like everything
-else. Shadows are render-only today: the editing canvas does not preview them
-(known gap, out of scope for this change).
+else. The editing canvas now previews these same shadows (the editor's
+`ObjectNode` applies the identical constants scaled by camera zoom × display
+scale), so what the commander sees matches the export (Tab D gap closed).
 
 ### 3d. Export expectations (MVP-1)
 
@@ -105,7 +106,6 @@ else. Shadows are render-only today: the editing canvas does not preview them
 ## 5. Open items for MVP-2+
 
 - Proxy rendering + render queue (MVP-3) for long/4K jobs.
-- Editor-canvas shadow preview (shadows are render-only today; see §3c).
 
 ## 6. Multi-scene export (manual, per scene)
 
@@ -113,12 +113,14 @@ Projects may contain several scenes (Scenes panel). Rendering is still
 per-scene and manual — there is no CLI batch exporter yet:
 
 1. Make the target scene active (click it in the Scenes panel).
-2. Save just that scene via **Save Scene** in the toolbar — this downloads
-   `scene.json` containing ONLY the active scene (plain `Scene` JSON).
-3. Render that single scene:
+2. Click **Export Video (copy command)** in the toolbar. This saves the active
+   scene as `scene.json` (plain `Scene` JSON) AND copies the exact render
+   command below to your clipboard — so you never hand-write it.
+   (Plain **Save Scene JSON** also just downloads `scene.json` if you prefer.)
+3. Paste and run that single-scene command in your terminal:
 
    ```bash
-   npx remotion render src/render/index.ts BattleScene out/video.mp4 \
+   npx remotion render src/render/index.ts BattleScene out/scene.mp4 \
      --props=scene.json
    ```
 

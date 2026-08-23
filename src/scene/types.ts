@@ -27,7 +27,7 @@ export interface AssetMetadata {
   defaultScale: number;       // suggested placement scale, 1 = 100%
   category?: AssetCategory;   // §44; maps usually omit
   faction?: Faction;          // §44; metadata only
-  defaultShadow?: boolean;    // §44 metadata ONLY — NOT rendered in MVP-1
+  defaultShadow?: boolean;    // §44 + §3c: fixed soft shadow in render AND editor preview
 }
 
 export interface Asset {

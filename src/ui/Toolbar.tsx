@@ -88,6 +88,24 @@ export function Toolbar() {
     setStatus('Saved scene.json');
   };
 
+  // Per-scene export helper (Tab A): persist the active scene to a portable
+  // `scene.json` (headless Remotion export input) AND copy the exact render
+  // command so the commander never hand-writes it. The browser cannot run the
+  // Remotion CLI itself, so we bridge the last mile with clipboard + download.
+  const handleExportVideo = async () => {
+    handleSaveScene();
+    const cmd =
+      'npx remotion render src/render/index.ts BattleScene out/scene.mp4 --props=scene.json';
+    try {
+      await navigator.clipboard.writeText(cmd);
+      setStatus('Saved scene.json + copied export command. Paste it in your terminal.');
+    } catch {
+      // Non-secure context: clipboard unavailable. The status text still
+      // carries the command so the commander can copy it by hand.
+      setStatus(`Export command: ${cmd}`);
+    }
+  };
+
   // Group the current multi-selection into one parent (one undoable txn).
   const handleGroup = () => {
     const parentId = groupObject(selectedIds);
@@ -177,6 +195,13 @@ export function Toolbar() {
         onClick={handleSaveScene}
       >
         Save Scene JSON
+      </button>
+      <button
+        type="button"
+        data-testid="export-video"
+        onClick={handleExportVideo}
+      >
+        Export Video (copy command)
       </button>
       <input
         ref={mapFileRef}
