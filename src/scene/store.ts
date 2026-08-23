@@ -22,6 +22,12 @@ import { importMapAsset } from '../assets/import';
 
 const MAX_HISTORY = 100;
 
+/**
+ * Canvas tool (store-root UI state, never undoable). `select` is the default
+ * pan/select behaviour; `arrow` turns background drags into arrow drawing.
+ */
+export type EditorTool = 'select' | 'arrow';
+
 /** Push a deep snapshot of the current Scene onto `past` and clear `future`. */
 function pushHistory(state: Draft<SceneState>) {
   state.past.push(current(state.scene));
@@ -44,6 +50,7 @@ export interface SceneState {
   // ---- Selection / active layer: STORE-ROOT, excluded from Scene + undo ----
   selectedObjId: ObjId | null;
   activeLayerId: LayerId;
+  activeTool: EditorTool;
 
   // ---- History primitives ----
   /** Apply a discrete mutation as a single undoable transaction. */
@@ -62,6 +69,8 @@ export interface SceneState {
       assetId?: AssetId;
       x?: number;
       y?: number;
+      /** DEGREES (object-transform convention). */
+      rotation?: number;
       /** ARROW-ONLY. */
       length?: number;
       /** ARROW-ONLY. */
@@ -70,6 +79,14 @@ export interface SceneState {
   ) => ObjId;
   addObject: (obj: SceneObject) => void;
   updateTransform: (id: ObjId, partial: Partial<Transform>) => void;
+  /**
+   * Patch non-transform object props (ARROW length/color today). No snapshot:
+   * call within a begin/endInteraction edit session (Inspector fields do).
+   */
+  updateObjectProps: (
+    id: ObjId,
+    props: Partial<Pick<SceneObject, 'length' | 'color'>>
+  ) => void;
   /** Drag helper: nudge an object by a delta (no extra snapshot). */
   moveObjectBy: (id: ObjId, dx: number, dy: number) => void;
 
@@ -97,6 +114,7 @@ export interface SceneState {
     // ---- Selection / active layer (store-root, never undoable) ----
     setSelected: (id: ObjId | null) => void;
     setActiveLayer: (id: LayerId) => void;
+    setTool: (tool: EditorTool) => void;
 
     // ---- Camera (single source of truth: Scene.camera, PRD §87) ----
     /** Writes a NEW camera state derived by `updater`; never mutates in place. */
@@ -114,8 +132,9 @@ export const useSceneStore = create<SceneState>()(
     scene: createDefaultScene(),
     past: [],
     future: [],
-    selectedObjId: null,
-    activeLayerId: DEFAULT_LAYER_ID,
+  selectedObjId: null,
+  activeLayerId: DEFAULT_LAYER_ID,
+  activeTool: 'select',
 
     transaction: (fn) => {
       let result: ReturnType<typeof fn>;
@@ -185,6 +204,7 @@ export const useSceneStore = create<SceneState>()(
           assetId: opts?.assetId,
           x: opts?.x,
           y: opts?.y,
+          rotation: opts?.rotation,
           length: opts?.length,
           color: opts?.color,
         });
@@ -205,6 +225,16 @@ export const useSceneStore = create<SceneState>()(
         const obj = state.scene.objects[id];
         if (!obj) return;
         obj.transform = mergeTransform(obj.transform, partial);
+      });
+    },
+
+    updateObjectProps: (id, props) => {
+      // No snapshot: same coalesced-session contract as updateTransform.
+      set((state) => {
+        const obj = state.scene.objects[id];
+        if (!obj) return;
+        if (props.length !== undefined) obj.length = props.length;
+        if (props.color !== undefined) obj.color = props.color;
       });
     },
 
@@ -364,6 +394,12 @@ export const useSceneStore = create<SceneState>()(
     setActiveLayer: (id) => {
       set((state) => {
         state.activeLayerId = id;
+      });
+    },
+
+    setTool: (tool) => {
+      set((state) => {
+        state.activeTool = tool;
       });
     },
 

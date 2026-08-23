@@ -51,6 +51,49 @@ describe('scene store', () => {
     expect(s().scene.objects[id]?.length).toBe(240);
   });
 
+  it('createObjectOfType passes rotation through (draw-gesture placement)', () => {
+    const id = s().createObjectOfType('arrow', {
+      x: 100,
+      y: 200,
+      rotation: -37.5,
+      length: 180,
+    });
+    const t = s().scene.objects[id].transform;
+    expect(t.x).toBe(100);
+    expect(t.y).toBe(200);
+    expect(t.rotation).toBeCloseTo(-37.5);
+  });
+
+  it('updateObjectProps patches length/color without touching the transform', () => {
+    const id = s().createObjectOfType('arrow', { x: 5, y: 6 });
+    const before = { ...s().scene.objects[id].transform };
+    s().beginInteraction();
+    s().updateObjectProps(id, { length: 400, color: '#123456' });
+    s().endInteraction();
+    const obj = s().scene.objects[id];
+    expect(obj.length).toBe(400);
+    expect(obj.color).toBe('#123456');
+    expect(obj.transform).toEqual(before);
+
+    // One undoable session restores both props.
+    s().undo();
+    expect(s().scene.objects[id].length).not.toBe(400);
+  });
+
+  it('updateObjectProps is a no-op for unknown ids', () => {
+    expect(() => s().updateObjectProps('nope', { length: 99 })).not.toThrow();
+  });
+
+  it('setTool toggles the canvas tool (store-root, not undoable)', () => {
+    expect(s().activeTool).toBe('select');
+    s().setTool('arrow');
+    expect(s().activeTool).toBe('arrow');
+    s().undo();
+    expect(s().activeTool).toBe('arrow'); // Tool state survives undo/redo.
+    s().setTool('select');
+    expect(s().activeTool).toBe('select');
+  });
+
   it('updateTransform performs a PARTIAL merge (keeps unspecified fields)', () => {
     const id = s().createObjectOfType('shape');
     s().updateTransform(id, { x: 50 });

@@ -6,15 +6,19 @@ import type { SceneObjectType } from '../scene/types';
 // timeline immediately target the new object.
 import { selectObjectUnified } from '../timeline/selection';
 
-// MVP-1 palette: only `shape` and `marker`. Unit is reserved (not included).
+// MVP-1 palette: `shape` and `marker`. Arrow (MVP-2): clicking ARMS the
+// canvas draw tool instead of instant-placing; drag-drop places a default.
 const PALETTE: { type: SceneObjectType; label: string }[] = [
   { type: 'shape', label: 'Shape (blue)' },
   { type: 'marker', label: 'Marker (red)' },
+  { type: 'arrow', label: 'Arrow (amber)' },
 ];
 
 export function Toolbar() {
   const importMap = useSceneStore((s) => s.importMap);
   const createObjectOfType = useSceneStore((s) => s.createObjectOfType);
+  const activeTool = useSceneStore((s) => s.activeTool);
+  const setTool = useSceneStore((s) => s.setTool);
   const mapFileRef = useRef<HTMLInputElement | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
@@ -22,6 +26,19 @@ export function Toolbar() {
   const placeAndSelect = (type: SceneObjectType) => {
     const id = createObjectOfType(type);
     selectObjectUnified(id);
+  };
+
+  /**
+   * Arrows are drawn, not stamped: clicking the palette item toggles the
+   * arrow tool; the canvas gesture then creates tail→head. Other types place
+   * immediately as before.
+   */
+  const handlePaletteClick = (type: SceneObjectType) => {
+    if (type === 'arrow') {
+      setTool(activeTool === 'arrow' ? 'select' : 'arrow');
+      return;
+    }
+    placeAndSelect(type);
   };
 
   const handleMapFile = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -57,7 +74,11 @@ export function Toolbar() {
   return (
     <div className="toolbar">
       <h3>Palette</h3>
-      <p className="hint">Drag onto the canvas — or click to place.</p>
+      <p className="hint">
+        {activeTool === 'arrow'
+          ? 'Arrow tool armed — drag on the canvas to draw tail → head. Click again to disarm.'
+          : 'Drag onto the canvas — or click to place.'}
+      </p>
       {PALETTE.map((item) => (
         <div
           key={item.type}
@@ -66,15 +87,16 @@ export function Toolbar() {
           role="button"
           tabIndex={0}
           data-testid={`palette-${item.type}`}
+          aria-pressed={item.type === 'arrow' && activeTool === 'arrow'}
           onDragStart={(e) => {
             e.dataTransfer.setData('text/plain', item.type);
             e.dataTransfer.effectAllowed = 'copy';
           }}
-          onClick={() => placeAndSelect(item.type)}
+          onClick={() => handlePaletteClick(item.type)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
-              placeAndSelect(item.type);
+              handlePaletteClick(item.type);
             }
           }}
         >

@@ -1,6 +1,7 @@
 import type { Transform } from '../scene/types';
 import { useSceneStore } from '../scene/store';
 import { selectedObject } from '../scene/selectors';
+import { DEFAULT_ARROW_LENGTH, DEFAULT_ARROW_COLOR } from '../objects/factory';
 
 interface FieldDef {
   key: keyof Transform;
@@ -22,6 +23,7 @@ export function Inspector() {
   const beginInteraction = useSceneStore((s) => s.beginInteraction);
   const endInteraction = useSceneStore((s) => s.endInteraction);
   const updateTransform = useSceneStore((s) => s.updateTransform);
+  const updateObjectProps = useSceneStore((s) => s.updateObjectProps);
 
   const obj = selectedObject({ selectedObjId, scene });
 
@@ -36,10 +38,51 @@ export function Inspector() {
 
   const t = obj.transform;
 
+  // ARROW-ONLY props. Length edits the local shaft span (tail→tip); color
+  // overrides the stroke everywhere it renders (canvas + Remotion export).
+  const isArrow = obj.type === 'arrow';
+
   return (
     <div className="inspector">
       <h3>Inspector</h3>
       <div className="inspector-type">Type: {obj.type}</div>
+      {isArrow && (
+        <>
+          <label className="inspector-field">
+            <span>Length</span>
+            <input
+              type="number"
+              spellCheck={false}
+              autoComplete="off"
+              data-testid="inspector-length"
+              min={8}
+              value={obj.length ?? DEFAULT_ARROW_LENGTH}
+              step={10}
+              onFocus={beginInteraction}
+              onBlur={endInteraction}
+              onChange={(e) => {
+                const raw = e.target.value;
+                const v = raw === '' ? 0 : Number(raw);
+                if (!Number.isFinite(v)) return;
+                updateObjectProps(obj.id, { length: Math.max(8, v) });
+              }}
+            />
+          </label>
+          <label className="inspector-field">
+            <span>Color</span>
+            <input
+              type="color"
+              data-testid="inspector-color"
+              value={obj.color ?? DEFAULT_ARROW_COLOR}
+              onFocus={beginInteraction}
+              onBlur={endInteraction}
+              onChange={(e) => {
+                updateObjectProps(obj.id, { color: e.target.value });
+              }}
+            />
+          </label>
+        </>
+      )}
       {FIELDS.map((f) => (
         <label key={f.key} className="inspector-field">
           <span>{f.label}</span>

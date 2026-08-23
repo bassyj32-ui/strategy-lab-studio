@@ -61,4 +61,55 @@ describe('Inspector', () => {
     expect(useSceneStore.getState().scene.objects[id!].transform.opacity).toBe(0.25);
     fireEvent.blur(opacityInput);
   });
+
+  it('shows Length + Color fields only for arrows', () => {
+    let arrowId: string;
+    let shapeId: string;
+    act(() => {
+      shapeId = useSceneStore.getState().createObjectOfType('shape');
+      arrowId = useSceneStore.getState().createObjectOfType('arrow');
+      useSceneStore.getState().setSelected(shapeId);
+    });
+    render(<Inspector />);
+    expect(screen.queryByTestId('inspector-length')).toBeNull();
+    expect(screen.queryByTestId('inspector-color')).toBeNull();
+
+    act(() => useSceneStore.getState().setSelected(arrowId));
+    expect(screen.getByTestId('inspector-length')).toBeDefined();
+    expect(
+      (screen.getByTestId('inspector-color') as HTMLInputElement).value
+    ).toMatch(/^#[0-9a-fA-F]{6}$/);
+  });
+
+  it('edits arrow length as one undoable session', () => {
+    let id: string;
+    act(() => {
+      id = useSceneStore.getState().createObjectOfType('arrow');
+      useSceneStore.getState().setSelected(id);
+    });
+    render(<Inspector />);
+    const lenInput = screen.getByTestId('inspector-length') as HTMLInputElement;
+    fireEvent.focus(lenInput);
+    fireEvent.change(lenInput, { target: { value: '300' } });
+    expect(useSceneStore.getState().scene.objects[id!].length).toBe(300);
+    fireEvent.blur(lenInput);
+
+    act(() => useSceneStore.getState().undo());
+    // Undo restores the factory default length.
+    expect(useSceneStore.getState().scene.objects[id!].length).toBe(120);
+  });
+
+  it('edits arrow color via the color input', () => {
+    let id: string;
+    act(() => {
+      id = useSceneStore.getState().createObjectOfType('arrow');
+      useSceneStore.getState().setSelected(id);
+    });
+    render(<Inspector />);
+    const colorInput = screen.getByTestId('inspector-color') as HTMLInputElement;
+    fireEvent.focus(colorInput);
+    fireEvent.change(colorInput, { target: { value: '#00ff88' } });
+    expect(useSceneStore.getState().scene.objects[id!].color).toBe('#00ff88');
+    fireEvent.blur(colorInput);
+  });
 });

@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent, ReactNode } from 'react';
 import { Stage, Layer, Rect, Line, Group, Image as KonvaImage } from 'react-konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
@@ -22,7 +22,8 @@ import {
   ARROWHEAD_HALF_WIDTH,
   ARROWHEAD_LENGTH,
 } from '../objects/ObjectNode';
-import { DEFAULT_ARROW_LENGTH } from '../objects/factory';
+import { DEFAULT_ARROW_LENGTH, DEFAULT_ARROW_COLOR } from '../objects/factory';
+import { arrowFromDrag } from '../objects/drawGesture';
 import type { SceneObject, SceneObjectType } from '../scene/types';
 import {
   useCamera,
@@ -96,6 +97,10 @@ export function CanvasStage() {
   const createObjectOfType = useSceneStore((s) => s.createObjectOfType);
   // Existing spine action — the HUD routes through it; no store changes.
   const updateCamera = useSceneStore((s) => s.updateCamera);
+  // Arrow draw tool: when armed, background drags draw tail→head instead of
+  // panning (wheel-zoom + HUD zoom/pan stay available).
+  const activeTool = useSceneStore((s) => s.activeTool);
+  const setTool = useSceneStore((s) => s.setTool);
 
   const { worldSize } = scene;
   const selected = selectedObject({ selectedObjId, scene });
@@ -132,6 +137,48 @@ export function CanvasStage() {
     },
   });
 
+  // ---- Arrow draw gesture ----
+  // Tail is captured on pointer-down in WORLD space; every move re-projects
+  // the pointer so the ghost stays glued to the cursor at any pan/zoom.
+  const arrowTailRef = useRef<{ x: number; y: number } | null>(null);
+  const [arrowHead, setArrowHead] = useState<{ x: number; y: number } | null>(
+    null
+  );
+  // Finishing a drag emits a browser `click` right after our mouseup; without
+  // this flag handleStageClick would immediately clear the selection we just
+  // made for the brand-new arrow.
+  const suppressNextClickRef = useRef(false);
+
+  /** Pointer position → world coords under the CURRENT camera. */
+  const pointerWorld = (): { x: number; y: number } | null => {
+    const sp = stageRef.current?.getPointerPosition();
+    if (!sp) return null;
+    return screenToWorld(sp, scene.camera, vp);
+  };
+
+  const finishArrowDraw = (): void => {
+    const tail = arrowTailRef.current;
+    const head = arrowHead;
+    arrowTailRef.current = null;
+    setArrowHead(null);
+    if (!tail || !head) return;
+    suppressNextClickRef.current = true;
+    const placement = arrowFromDrag(tail, head);
+    if (!placement) return; // Mis-click: too short, discard silently.
+    const id = createObjectOfType('arrow', placement);
+    setSelected(id);
+    setTool('select'); // One arrow per arming — predictable hand-off.
+  };
+
+  /** Ghost line while drawing (world coords, rendered non-interactively). */
+  const ghost =
+    arrowTailRef.current && arrowHead
+      ? {
+          tail: arrowTailRef.current,
+          head: arrowHead,
+        }
+      : null;
+
   /** True when this event hit the EMPTY canvas rather than an object. */
   const isBackgroundTarget = (
     e: KonvaEventObject<MouseEvent | WheelEvent>
@@ -145,6 +192,15 @@ export function CanvasStage() {
   };
 
   const handleStageClick = (e: KonvaEventObject<MouseEvent>) => {
+    // The click that follows a completed arrow draw must not wipe the
+    // selection that draw just made.
+    if (suppressNextClickRef.current) {
+      suppressNextClickRef.current = false;
+      return;
+    }
+    // While the arrow tool is armed the gesture handlers own background
+    // clicks (a too-short drag is discarded above) — never clear selection.
+    if (activeTool === 'arrow') return;
     // A background pan ends with a click on the empty canvas — don't punish
     // the gesture by clearing the current selection.
     if (panMovedRef.current) {
@@ -175,7 +231,7 @@ export function CanvasStage() {
   const handleDrop = (e: ReactDragEvent<HTMLDivElement>) => {
     e.preventDefault();
     const type = e.dataTransfer.getData('text/plain') as SceneObjectType;
-    if (type !== 'shape' && type !== 'marker') return;
+    if (type !== 'shape' && type !== 'marker' && type !== 'arrow') return;
     // Drop point → stage pixels → world coords through the CURRENT camera,
     // so objects land under the cursor at any pan/zoom.
     //
@@ -246,13 +302,42 @@ export function CanvasStage() {
           onDblTap={handleStageDblClick}
           onWheel={handleWheel}
           onMouseDown={(e) => {
+            // Arrow tool: a background press starts a draw gesture instead of
+            // a pan; object presses stay object drags.
+            if (activeTool === 'arrow') {
+              if (e.target !== e.target.getStage()) return;
+              const world = pointerWorld();
+              if (!world) return;
+              arrowTailRef.current = world;
+              setArrowHead(world);
+              return;
+            }
             // Only empty-canvas presses start a pan; object drags stay object
             // drags.
             if (e.target === e.target.getStage()) panHandlers.onPointerDown();
           }}
-          onMouseMove={() => panHandlers.onPointerMove()}
-          onMouseUp={() => panHandlers.onPointerUp()}
-          onMouseLeave={() => panHandlers.onPointerUp()}
+          onMouseMove={() => {
+            if (arrowTailRef.current) {
+              const world = pointerWorld();
+              if (world) setArrowHead(world);
+              return;
+            }
+            panHandlers.onPointerMove();
+          }}
+          onMouseUp={() => {
+            if (arrowTailRef.current) {
+              finishArrowDraw();
+              return;
+            }
+            panHandlers.onPointerUp();
+          }}
+          onMouseLeave={() => {
+            if (arrowTailRef.current) {
+              finishArrowDraw();
+              return;
+            }
+            panHandlers.onPointerUp();
+          }}
         >
           {/* World background, battlefield map, then grid (non-interactive). */}
           <Layer listening={false}>
@@ -291,6 +376,35 @@ export function CanvasStage() {
               ))}
             </Layer>
           ))}
+
+          {/* Arrow-draw ghost preview (non-interactive, topmost under HUD). */}
+          <Layer listening={false}>
+            {ghost && (
+              <Group>
+                <Line
+                  points={[
+                    ghost.tail.x,
+                    ghost.tail.y,
+                    ghost.head.x,
+                    ghost.head.y,
+                  ]}
+                  stroke={DEFAULT_ARROW_COLOR}
+                  strokeWidth={4}
+                  opacity={0.6}
+                  dash={[10, 8]}
+                  lineCap="round"
+                />
+                {/* Tail anchor dot so the gesture origin is visible. */}
+                <Group x={ghost.tail.x} y={ghost.tail.y}>
+                  <Line
+                    points={[-6, 0, 6, 0, 0, -6, -6, 0]}
+                    fill={DEFAULT_ARROW_COLOR}
+                    opacity={0.8}
+                  />
+                </Group>
+              </Group>
+            )}
+          </Layer>
 
           {/* Selection outline on top (non-interactive). */}
           <Layer listening={false}>
