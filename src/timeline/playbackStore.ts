@@ -13,6 +13,10 @@ export interface PlaybackState {
   toggle: () => void;
   stop: () => void; // pause + seek(0)
   seek: (time: number, opts?: { snap?: boolean }) => void;
+  /** Manual ±frame scrubbing (transport buttons / keyboard). Pauses first. */
+  stepFrames: (delta: number) => void;
+  seekStart: () => void; // jump to time 0
+  seekEnd: () => void; // jump to duration
   setLoop: (loop: boolean) => void;
   setSnapToFrame: (snap: boolean) => void;
   tick: (deltaSeconds: number) => void; // advance; respects duration/loop
@@ -59,6 +63,27 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
     let t = clamp(time, 0, s.duration);
     if (useSnap) t = snap(t, s.fps);
     set({ currentTime: t });
+  },
+  stepFrames: (delta) => {
+    if (!Number.isFinite(delta) || delta === 0) return;
+    const s = get();
+    // Stepping is manual control: pause, exactly like scrub-start does.
+    const max = Math.max(0, s.duration);
+    const fd = s.fps > 0 ? 1 / s.fps : 0.1; // sane fallback when fps unset
+    let t = clamp(s.currentTime + delta * fd, 0, max);
+    // Respect snapToFrame: land on the frame grid (then re-clamp in case
+    // rounding pushed past a non-frame-aligned duration).
+    if (s.snapToFrame && fd > 0) t = clamp(snap(t, s.fps), 0, max);
+    set({ currentTime: t, isPlaying: false });
+  },
+  seekStart: () => {
+    get().pause();
+    get().seek(0);
+  },
+  seekEnd: () => {
+    const s = get();
+    s.pause();
+    s.seek(s.duration);
   },
   setLoop: (loop) => set({ loop }),
   setSnapToFrame: (snapToFrame) => set({ snapToFrame }),
