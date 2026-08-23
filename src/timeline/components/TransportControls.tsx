@@ -17,7 +17,6 @@ export function TransportControls() {
     <div
       className="transport-controls"
       data-testid="transport-controls"
-      style={{ display: 'flex', gap: 8, alignItems: 'center' }}
     >
       <button type="button" onClick={toggle}>
         {isPlaying ? 'Pause' : 'Play'}

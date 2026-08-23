@@ -45,6 +45,8 @@ export function Inspector() {
           <span>{f.label}</span>
           <input
             type="number"
+            spellCheck={false}
+            autoComplete="off"
             data-testid={`inspector-${f.key}`}
             value={t[f.key]}
             step={f.step}

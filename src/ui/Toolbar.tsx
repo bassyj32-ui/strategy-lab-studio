@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import type { ChangeEvent, CSSProperties } from 'react';
+import type { ChangeEvent } from 'react';
 import { useSceneStore } from '../scene/store';
 import type { SceneObjectType } from '../scene/types';
 
@@ -9,16 +9,9 @@ const PALETTE: { type: SceneObjectType; label: string }[] = [
   { type: 'marker', label: 'Marker (red)' },
 ];
 
-const actionButtonStyle: CSSProperties = {
-  display: 'block',
-  width: '100%',
-  marginBottom: 6,
-  padding: '6px 8px',
-  cursor: 'pointer',
-};
-
 export function Toolbar() {
   const importMap = useSceneStore((s) => s.importMap);
+  const createObjectOfType = useSceneStore((s) => s.createObjectOfType);
   const mapFileRef = useRef<HTMLInputElement | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
@@ -55,26 +48,34 @@ export function Toolbar() {
   return (
     <div className="toolbar">
       <h3>Palette</h3>
-      <p className="hint">Drag an item onto the canvas to create it.</p>
+      <p className="hint">Drag onto the canvas — or click to place.</p>
       {PALETTE.map((item) => (
         <div
           key={item.type}
           className="palette-item"
           draggable
+          role="button"
+          tabIndex={0}
           data-testid={`palette-${item.type}`}
           onDragStart={(e) => {
             e.dataTransfer.setData('text/plain', item.type);
             e.dataTransfer.effectAllowed = 'copy';
+          }}
+          onClick={() => createObjectOfType(item.type)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              createObjectOfType(item.type);
+            }
           }}
         >
           {item.label}
         </div>
       ))}
 
-      <h3 style={{ marginTop: 12 }}>Map</h3>
+      <h3 style={{ marginTop: 16 }}>Map</h3>
       <button
         type="button"
-        style={actionButtonStyle}
         data-testid="import-map"
         onClick={() => mapFileRef.current?.click()}
       >
@@ -82,7 +83,6 @@ export function Toolbar() {
       </button>
       <button
         type="button"
-        style={actionButtonStyle}
         data-testid="save-scene"
         onClick={handleSaveScene}
       >
@@ -92,14 +92,13 @@ export function Toolbar() {
         ref={mapFileRef}
         type="file"
         accept="image/*"
+        aria-label="Map image file"
         style={{ display: 'none' }}
         onChange={handleMapFile}
       />
-      {status && (
-        <p className="hint" data-testid="toolbar-status">
-          {status}
-        </p>
-      )}
+      <p className="hint" aria-live="polite" data-testid="toolbar-status">
+        {status}
+      </p>
     </div>
   );
 }

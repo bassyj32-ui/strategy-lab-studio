@@ -63,7 +63,7 @@ function SelectionOutline({ obj }: { obj: SceneObject }) {
         y={-h / 2}
         width={w}
         height={h}
-        stroke="#22c55e"
+        stroke="#f5a83c"
         strokeWidth={2}
         strokeScaleEnabled={false}
         fillEnabled={false}

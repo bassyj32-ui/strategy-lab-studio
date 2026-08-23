@@ -27,24 +27,14 @@ export function TimelinePanel() {
   const ids = Object.keys(objects);
 
   return (
-    <div
-      className="timeline-panel"
-      data-testid="timeline-panel"
-      style={{
-        borderTop: '1px solid #444',
-        padding: 8,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 8,
-      }}
-    >
+    <div className="timeline-panel" data-testid="timeline-panel">
       <TransportControls />
       <Ruler />
       {ids.map((id) => (
         <KeyframeTrack key={id} objId={id} />
       ))}
       {ids.length === 0 ? (
-        <div style={{ color: '#777', fontSize: 12 }}>No objects yet.</div>
+        <div className="empty-note">No objects yet.</div>
       ) : null}
       <KeyframeEditor />
     </div>

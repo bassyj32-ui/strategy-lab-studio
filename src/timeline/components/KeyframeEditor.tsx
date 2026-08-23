@@ -19,11 +19,7 @@ export function KeyframeEditor() {
   const kfTime = selectedKeyframeTime;
 
   return (
-    <div
-      className="keyframe-editor"
-      data-testid="keyframe-editor"
-      style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}
-    >
+    <div className="keyframe-editor" data-testid="keyframe-editor">
       <button
         type="button"
         disabled={!obj}

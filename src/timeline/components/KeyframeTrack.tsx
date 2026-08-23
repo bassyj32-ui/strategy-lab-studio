@@ -25,40 +25,18 @@ export function KeyframeTrack({ objId }: KeyframeTrackProps) {
 
   return (
     <div className="keyframe-track" data-testid={`keyframe-track-${objId}`}>
-      <div
-        role="button"
-        tabIndex={0}
+      <button
+        type="button"
+        className={isActive ? 'track-label active' : 'track-label'}
+        data-testid={`track-select-${objId}`}
         onClick={() => {
           selectObject(objId);
           selectKeyframe(null);
         }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            selectObject(objId);
-            selectKeyframe(null);
-          }
-        }}
-        style={{
-          width: 120,
-          fontSize: 12,
-          color: isActive ? '#fff' : '#9aa3b2',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          cursor: 'pointer',
-          padding: '2px 4px',
-        }}
       >
         {name}
-      </div>
-      <div
-        style={{
-          position: 'relative',
-          flex: 1,
-          height: 24,
-          background: isActive ? '#232936' : '#1a1e26',
-        }}
-      >
+      </button>
+      <div className={isActive ? 'kf-lane active' : 'kf-lane'}>
         {keyframes.map((kf) => {
           const leftPct = duration > 0 ? (kf.time / duration) * 100 : 0;
           const isSelected = isActive && selectedKeyframeTime === kf.time;
@@ -84,8 +62,9 @@ export function KeyframeTrack({ objId }: KeyframeTrackProps) {
                 width: DIAMOND,
                 height: DIAMOND,
                 transform: 'rotate(45deg)',
-                background: isSelected ? '#ffd166' : '#7f8ea3',
-                border: isSelected ? '1px solid #fff' : 'none',
+                background: isSelected ? '#f5a83c' : '#5c6f8f',
+                border: isSelected ? '1px solid #ffe3b3' : 'none',
+                borderRadius: 1,
                 cursor: 'pointer',
               }}
             />
