@@ -7,6 +7,10 @@ class MockCtx {
   fillStyleHistory: string[] = [];
   private _fillStyle = '';
   globalAlpha = 1;
+  shadowColor = '';
+  shadowBlur = 0;
+  shadowOffsetX = 0;
+  shadowOffsetY = 0;
   save = vi.fn();
   restore = vi.fn();
   translate = vi.fn();
@@ -146,5 +150,136 @@ describe('drawScene', () => {
       String(c[0]).includes('MAP ASSET FAILED TO LOAD')
     );
     expect(banner).toBe(false);
+  });
+
+  // ---- Shadows (owner-approved P1 pull-forward; deterministic) ----
+
+  /** Give obj1 a sprite asset whose metadata carries `defaultShadow`. */
+  function makeShadowScene(withFlag: boolean): Scene {
+    const scene = makeScene();
+    scene.objects.obj1.assetId = 'a1';
+    scene.assets.a1 = {
+      id: 'a1',
+      kind: 'sprite',
+      name: 'u',
+      src: 'u.png',
+      width: 64,
+      height: 64,
+      metadata: {
+        aspectRatio: 1,
+        defaultScale: 1,
+        ...(withFlag ? { defaultShadow: true } : {}),
+      },
+    };
+    return scene;
+  }
+
+  const SHADOW_COLOR = 'rgba(0, 0, 0, 0.45)';
+
+  it('sets fixed soft-shadow state when asset metadata.defaultShadow is true', () => {
+    const { ctx, raw } = makeCtx();
+    drawScene(
+      ctx,
+      makeShadowScene(true),
+      0,
+      30,
+      { w: 1920, h: 1080 },
+      { a1: {} as HTMLImageElement }
+    );
+    expect(raw.shadowColor).toBe(SHADOW_COLOR);
+    expect(raw.shadowBlur).toBe(12); // SHADOW_BLUR * screen.scale(=1)
+    expect(raw.shadowOffsetX).toBe(4);
+    expect(raw.shadowOffsetY).toBe(6);
+  });
+
+  it('sets NO shadow state without defaultShadow metadata', () => {
+    const { ctx, raw } = makeCtx();
+    drawScene(
+      ctx,
+      makeShadowScene(false),
+      0,
+      30,
+      { w: 1920, h: 1080 },
+      { a1: {} as HTMLImageElement }
+    );
+    expect(raw.shadowColor).toBe('');
+    expect(raw.shadowBlur).toBe(0);
+    expect(raw.shadowOffsetX).toBe(0);
+    expect(raw.shadowOffsetY).toBe(0);
+  });
+
+  it('shadow values are deterministic constants across repeated frames', () => {
+    const { ctx, raw } = makeCtx();
+    const scene = makeShadowScene(true);
+    const images = { a1: {} as HTMLImageElement };
+    drawScene(ctx, scene, 3, 30, { w: 1920, h: 1080 }, images);
+    const first = {
+      c: raw.shadowColor,
+      b: raw.shadowBlur,
+      x: raw.shadowOffsetX,
+      y: raw.shadowOffsetY,
+    };
+    drawScene(ctx, scene, 7, 30, { w: 1920, h: 1080 }, images);
+    expect({
+      c: raw.shadowColor,
+      b: raw.shadowBlur,
+      x: raw.shadowOffsetX,
+      y: raw.shadowOffsetY,
+    }).toEqual(first);
+  });
+
+  // ---- Alpha export mode (owner-approved P1 pull-forward) ----
+
+  it('alpha mode skips the opaque background fill but still clears', () => {
+    const { ctx, raw } = makeCtx();
+    drawScene(
+      ctx,
+      makeScene(),
+      0,
+      30,
+      { w: 1920, h: 1080 },
+      {},
+      { transparentBackground: true }
+    );
+    expect(raw.clearRect).toHaveBeenCalledWith(0, 0, 1920, 1080);
+    expect(raw.fillStyleHistory).not.toContain('#0b0e14');
+    const bgFill = raw.fillRect.mock.calls.some(
+      (c) => c[0] === 0 && c[1] === 0 && c[2] === 1920 && c[3] === 1080
+    );
+    expect(bgFill).toBe(false);
+  });
+
+  it('alpha mode skips the map image AND suppresses the failure banner', () => {
+    const { ctx, raw } = makeCtx();
+    const scene = makeScene();
+    scene.mapAssetId = 'map1'; // declared, but NOT loaded -> banner case
+    drawScene(
+      ctx,
+      scene,
+      0,
+      30,
+      { w: 1920, h: 1080 },
+      {},
+      { transparentBackground: true }
+    );
+    expect(raw.fillText).not.toHaveBeenCalled(); // no banner
+    expect(raw.drawImage).not.toHaveBeenCalled(); // no map
+  });
+
+  it('alpha mode still paints objects (placeholder visible)', () => {
+    const { ctx, raw } = makeCtx();
+    drawScene(
+      ctx,
+      makeScene(),
+      0,
+      30,
+      { w: 1920, h: 1080 },
+      {},
+      { transparentBackground: true }
+    );
+    const drewPlaceholder = raw.fillRect.mock.calls.some(
+      (c) => c[0] === -20 && c[1] === -20 && c[2] === 40 && c[3] === 40
+    );
+    expect(drewPlaceholder).toBe(true);
   });
 });

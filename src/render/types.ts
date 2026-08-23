@@ -1,6 +1,14 @@
 import type { Scene, AssetId } from '../scene/types';
 
 /**
+ * Export mode (owner-approved P1 pull-forward).
+ * - `standard`: opaque background + map + objects -> deterministic MP4.
+ * - `alpha`: objects only, transparent background -> overlay footage for
+ *   layering in external tools (ProRes 4444 / VP9 / PNG sequence).
+ */
+export type ExportMode = 'standard' | 'alpha';
+
+/**
  * Props object passed to the `BattleScene` Remotion component.
  *
  * A TYPE ALIAS on purpose (not an interface): Remotion's `<Composition>`
@@ -9,6 +17,8 @@ import type { Scene, AssetId } from '../scene/types';
  */
 export type BattleSceneProps = {
   scene: Scene;
+  /** Defaults to `'standard'` when omitted. */
+  exportMode?: ExportMode;
 };
 
 /**

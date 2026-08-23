@@ -7,6 +7,29 @@ import { applyCamera } from './camera';
 
 const BACKGROUND = '#0b0e14';
 
+/**
+ * Drop-shadow constants (owner-approved P1 pull-forward). All values are FIXED
+ * constants — no randomness, no time-of-day, no per-object variation beyond
+ * camera scale — so a shadowed frame is byte-identical across renders.
+ * Offsets/blur multiply by screen scale so the shadow stays world-consistent
+ * at any zoom (same rule as arrow lineWidth).
+ */
+const SHADOW_COLOR = 'rgba(0, 0, 0, 0.45)';
+const SHADOW_BLUR = 12;
+const SHADOW_OFFSET_X = 4;
+const SHADOW_OFFSET_Y = 6;
+
+/** Options for `drawScene` (all optional; defaults reproduce MVP-1 behavior). */
+export interface DrawSceneOptions {
+  /**
+   * ALPHA EXPORT MODE: paint objects only — skip the opaque background fill
+   * AND the map image — so the output is a transparent overlay for layering
+   * in external tools (CapCut/DaVinci). The failure banner is suppressed too,
+   * because the map is intentionally not part of an overlay's output.
+   */
+  transparentBackground?: boolean;
+}
+
 /** Placeholder fill color by object type when its asset image is unavailable. */
 const PLACEHOLDER_COLORS: Record<string, string> = {
   unit: '#4ade80',
@@ -20,10 +43,13 @@ const PLACEHOLDER_SIZE = 40;
  * Paint one frame of the scene onto a 2D canvas context, deterministically.
  *
  * Stable draw order (for byte-stable output):
- *   1. clear + fill background
- *   2. draw the map image (centered on world center; objects are NEVER baked in)
+ *   1. clear + fill background (skipped in alpha mode)
+ *   2. draw the map image (centered on world center; objects are NEVER baked in;
+ *      skipped in alpha mode)
  *   3. for each layer (asc by `order`, skip invisible), for each object
- *      (asc by ObjId): interpolate -> project -> draw image or placeholder.
+ *      (asc by ObjId): interpolate -> project -> draw image or placeholder,
+ *      with a fixed soft offset shadow when the object's asset metadata says
+ *      `defaultShadow: true` (owner-approved P1 pull-forward).
  *
  * READ-ONLY: this function never mutates `scene`, its keyframes, assets, or the
  * camera. The same scene + frame always paints identically.
@@ -34,18 +60,24 @@ export function drawScene(
   frame: number,
   fps: number,
   videoSize: { w: number; h: number },
-  images: AssetImageMap
+  images: AssetImageMap,
+  options: DrawSceneOptions = {}
 ): void {
   const { worldSize, camera } = scene;
+  const { transparentBackground = false } = options;
 
-  // 1. clear + background
+  // 1. clear + background (skipped in alpha mode: output must stay transparent)
   ctx.clearRect(0, 0, videoSize.w, videoSize.h);
-  ctx.fillStyle = BACKGROUND;
-  ctx.fillRect(0, 0, videoSize.w, videoSize.h);
+  if (!transparentBackground) {
+    ctx.fillStyle = BACKGROUND;
+    ctx.fillRect(0, 0, videoSize.w, videoSize.h);
+  }
 
   // 1b. LOUD deterministic failure banner: a scene that DECLARES a map but
   // whose map image is missing must never look like intentional art.
-  if (scene.mapAssetId && !images[scene.mapAssetId]) {
+  // (Standard mode only — an alpha overlay intentionally excludes the map,
+  // so a missing map is not a defect of that output.)
+  if (!transparentBackground && scene.mapAssetId && !images[scene.mapAssetId]) {
     const asset = scene.assets[scene.mapAssetId];
     ctx.save();
     ctx.fillStyle = '#ef4444';
@@ -61,8 +93,9 @@ export function drawScene(
     ctx.restore();
   }
 
-  // 2. map image (centered at world center, never baked with objects)
-  if (scene.mapAssetId) {
+  // 2. map image (centered at world center, never baked with objects).
+  // Skipped entirely in alpha mode: the overlay is objects-only.
+  if (!transparentBackground && scene.mapAssetId) {
     const mapImg = images[scene.mapAssetId];
     if (mapImg) {
       const mapTransform: Transform = {
@@ -94,6 +127,10 @@ export function drawScene(
       .sort();
     for (const id of objIds) {
       const obj = scene.objects[id];
+      // Asset resolved ONCE per object: image source + shadow decision both
+      // come from the SAME asset record (non-destructive; PRD §43).
+      const asset = obj.assetId ? scene.assets[obj.assetId] : undefined;
+      const wantShadow = asset?.metadata?.defaultShadow === true;
       // Single consumption path (architecture.md §6.2): the Remotion render
       // reads animation through the SAME pure selector as the editor preview.
       const world = getObjectTransformAtTime(scene, id, t);
@@ -106,12 +143,20 @@ export function drawScene(
 
       ctx.save();
       ctx.globalAlpha = screen.opacity;
+      if (wantShadow) {
+        // Fixed soft offset shadow (canvas 2D). Scale-relative so world-space
+        // shadow geometry is identical at any camera zoom. Fully deterministic:
+        // constant color/blur/offsets, applied in stable draw order.
+        ctx.shadowColor = SHADOW_COLOR;
+        ctx.shadowBlur = SHADOW_BLUR * screen.scale;
+        ctx.shadowOffsetX = SHADOW_OFFSET_X * screen.scale;
+        ctx.shadowOffsetY = SHADOW_OFFSET_Y * screen.scale;
+      }
       ctx.translate(screen.x, screen.y);
       ctx.rotate((screen.rotation * Math.PI) / 180);
 
       const img = obj.assetId ? images[obj.assetId] : null;
       if (img) {
-        const asset = obj.assetId ? scene.assets[obj.assetId] : undefined;
         const w = (asset?.width ?? img.width) * screen.scale;
         const h = (asset?.height ?? img.height) * screen.scale;
         ctx.drawImage(img, -w / 2, -h / 2, w, h);

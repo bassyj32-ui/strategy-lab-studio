@@ -17,7 +17,7 @@ import { drawScene } from './draw';
  * are produced (used by both the headless `remotion render` and the in-editor
  * `<Player>` preview), keeping a single source of truth for rendering.
  */
-export const BattleScene: FC<BattleSceneProps> = ({ scene }) => {
+export const BattleScene: FC<BattleSceneProps> = ({ scene, exportMode }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -63,8 +63,17 @@ export const BattleScene: FC<BattleSceneProps> = ({ scene }) => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     assertExportIntegrity(scene, loaded.imgs, getRemotionEnvironment().isRendering);
-    drawScene(ctx, scene, frame, fps, { w: width, h: height }, loaded.imgs);
-  }, [scene, frame, loaded, width, height, fps]);
+    drawScene(
+      ctx,
+      scene,
+      frame,
+      fps,
+      { w: width, h: height },
+      loaded.imgs,
+      // Alpha export mode paints objects only (transparent background).
+      { transparentBackground: exportMode === 'alpha' }
+    );
+  }, [scene, frame, loaded, width, height, fps, exportMode]);
 
   return (
     <canvas
