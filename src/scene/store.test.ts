@@ -111,6 +111,90 @@ describe('scene store', () => {
     expect(s().scene.objects[id].transform.x).toBe(42);
   });
 
+  describe('setKeyframeCp (P1 curved paths)', () => {
+    const mkAnimated = (): { id: string } => {
+      const id = s().createObjectOfType('shape');
+      s().addKeyframe(id, {
+        time: 0,
+        transform: { x: 0, y: 0, rotation: 0, scale: 1, opacity: 1 },
+      });
+      s().addKeyframe(id, {
+        time: 10,
+        transform: { x: 100, y: 0, rotation: 0, scale: 1, opacity: 1 },
+      });
+      return { id };
+    };
+
+    it('writes cpOut / cpIn offsets onto the right keyframes', () => {
+      const { id } = mkAnimated();
+      s().setKeyframeCp(id, 0, 'cpOut', { dx: 30, dy: -40 });
+      s().setKeyframeCp(id, 10, 'cpIn', { dx: -20, dy: 15 });
+      const kfs = s().scene.keyframes[id];
+      expect(kfs[0].cpOut).toEqual({ dx: 30, dy: -40 });
+      expect(kfs[1].cpIn).toEqual({ dx: -20, dy: 15 });
+    });
+
+    it('null clears a control point (back to linear)', () => {
+      const { id } = mkAnimated();
+      s().setKeyframeCp(id, 0, 'cpOut', { dx: 30, dy: -40 });
+      expect(s().scene.keyframes[id][0].cpOut).toBeDefined();
+      s().setKeyframeCp(id, 0, 'cpOut', null);
+      // Absent — not merely undefined-valued — so JSON round-trips stay clean.
+      expect('cpOut' in s().scene.keyframes[id][0]).toBe(false);
+    });
+
+    it('is a no-op for unknown object ids and unknown times', () => {
+      const { id } = mkAnimated();
+      expect(() =>
+        s().setKeyframeCp('ghost', 0, 'cpOut', { dx: 1, dy: 1 })
+      ).not.toThrow();
+      expect(() =>
+        s().setKeyframeCp(id, 999, 'cpOut', { dx: 1, dy: 1 })
+      ).not.toThrow();
+      expect(s().scene.keyframes[id][0].cpOut).toBeUndefined();
+    });
+
+    it('a handle drag session = exactly ONE undoable history entry', () => {
+      const { id } = mkAnimated();
+      expect(s().past.length).toBeGreaterThan(0);
+      const lenBefore = s().past.length;
+
+      s().beginInteraction();
+      // Simulate many dragMove writes.
+      for (let i = 1; i <= 10; i++) {
+        s().setKeyframeCp(id, 0, 'cpOut', { dx: i * 5, dy: -i * 3 });
+      }
+      s().endInteraction();
+
+      expect(s().scene.keyframes[id][0].cpOut).toEqual({ dx: 50, dy: -30 });
+      expect(s().past.length).toBe(lenBefore + 1);
+      // A single undo reverts the ENTIRE drag.
+      s().undo();
+      expect(s().scene.keyframes[id][0].cpOut).toBeUndefined();
+    });
+
+    it('a discrete clear is one undoable step (session, not nested transaction)', () => {
+      const { id } = mkAnimated();
+      // NOTE: never nest setKeyframeCp INSIDE transaction() — the inner
+      // set() races the open immer producer and the write is lost. Discrete
+      // edits use the same begin/end session as drags.
+      s().beginInteraction();
+      s().setKeyframeCp(id, 0, 'cpOut', { dx: 10, dy: 10 });
+      s().endInteraction();
+      expect(s().scene.keyframes[id][0].cpOut).toEqual({ dx: 10, dy: 10 });
+
+      s().beginInteraction();
+      s().setKeyframeCp(id, 0, 'cpOut', null);
+      s().endInteraction();
+      expect(s().scene.keyframes[id][0].cpOut).toBeUndefined();
+
+      s().undo(); // undoes the clear
+      expect(s().scene.keyframes[id][0].cpOut).toEqual({ dx: 10, dy: 10 });
+      s().undo(); // undoes the set
+      expect(s().scene.keyframes[id][0].cpOut).toBeUndefined();
+    });
+  });
+
   describe('layers', () => {
     it('addLayer appends a visible layer with a higher order', () => {
       s().addLayer('Test');

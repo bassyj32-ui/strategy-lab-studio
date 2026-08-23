@@ -39,12 +39,15 @@ export function KeyframeTrack({ objId }: KeyframeTrackProps) {
         {keyframes.map((kf) => {
           const leftPct = duration > 0 ? (kf.time / duration) * 100 : 0;
           const isSelected = isActive && selectedKeyframeTime === kf.time;
+          // P1 curves: a tiny white dot marks keyframes that carry a bezier
+          // control point (icon/badge only — editing happens on canvas).
+          const isCurved = kf.cpIn !== undefined || kf.cpOut !== undefined;
           return (
             <div
               key={kf.time}
               role="button"
               tabIndex={0}
-              aria-label={`keyframe at ${kf.time}`}
+              aria-label={`keyframe at ${kf.time}${isCurved ? ' (curved)' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
                 // Unified: object selected everywhere + keyframe focused.
@@ -55,7 +58,7 @@ export function KeyframeTrack({ objId }: KeyframeTrackProps) {
                   selectKeyframeUnified(objId, kf.time);
                 }
               }}
-              title={`${name} @ ${kf.time}s`}
+              title={`${name} @ ${kf.time}s${isCurved ? ' · curved' : ''}`}
               style={{
                 position: 'absolute',
                 left: `calc(${leftPct}% - ${DIAMOND / 2}px)`,
@@ -68,7 +71,20 @@ export function KeyframeTrack({ objId }: KeyframeTrackProps) {
                 borderRadius: 1,
                 cursor: 'pointer',
               }}
-            />
+            >
+              {isCurved && (
+                <span
+                  data-testid={`curve-badge-${objId}-${kf.time}`}
+                  style={{
+                    position: 'absolute',
+                    inset: '25%',
+                    borderRadius: '50%',
+                    background: '#ffffff',
+                    transform: 'rotate(-45deg)',
+                  }}
+                />
+              )}
+            </div>
           );
         })}
       </div>

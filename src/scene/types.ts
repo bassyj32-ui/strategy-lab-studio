@@ -1,6 +1,7 @@
 export type AssetId = string;
 export type ObjId = string;
 export type LayerId = string;
+export type SceneId = string;
 
 export interface Vec2 {
   x: number;
@@ -47,7 +48,28 @@ export interface Transform {
   opacity: number;
 }
 
-export type SceneObjectType = 'unit' | 'shape' | 'marker' | 'arrow';
+/**
+ * 'group' is an ORGANIZATIONAL node (P1 pull-forward, owner-approved): it has
+ * a transform and can be keyframed like any object, but it is never painted
+ * itself — its children render relative to it. It is not in the palette.
+ */
+export type SceneObjectType = 'unit' | 'shape' | 'marker' | 'arrow' | 'group';
+
+/** Formation layouts supported by `createFormation` (pure layout math in objects/groups.ts). */
+export type FormationPattern = 'line' | 'column' | 'wedge' | 'grid';
+
+/**
+ * Formation metadata stored on the PARENT group node only. Purely descriptive
+ * (what pattern spawned the children); children remain independently editable
+ * afterwards (PRD §8) — editing a child never rewrites this metadata.
+ */
+export interface FormationMetadata {
+  pattern: FormationPattern;
+  /** Local-units gap between adjacent members. */
+  spacing: number;
+  /** Number of child members spawned (excludes the group parent). */
+  count: number;
+}
 
 export interface SceneObject {
   id: ObjId;
@@ -55,6 +77,14 @@ export interface SceneObject {
   assetId?: AssetId;
   transform: Transform;
   layerId: LayerId;
+  /**
+   * PARENT LINK (groups, P1 pull-forward): when set, `transform` is LOCAL —
+   * expressed relative to the parent's world transform (compose rules in
+   * objects/groups.ts). Objects without parentId are roots: local == world.
+   */
+  parentId?: ObjId;
+  /** FORMATION-ONLY: set on the parent group node created by createFormation. */
+  formation?: FormationMetadata;
   /**
    * ARROW-ONLY: shaft length in LOCAL units (tail at local origin, tip at
    * (length, 0)). Placement/orientation live entirely in `transform`, so
@@ -65,9 +95,24 @@ export interface SceneObject {
   color?: string;
 }
 
+/**
+ * Bezier control-point OFFSET relative to the owning keyframe's transform
+ * position (world units). Stored as deltas so moving a keyframe keeps its
+ * handle shape. Absent on BOTH ends of a segment = LINEAR movement
+ * (byte-identical to pre-curve behavior).
+ */
+export interface ControlPoint {
+  dx: number;
+  dy: number;
+}
+
 export interface Keyframe {
   time: number;
   transform: Transform;
+  /** OUT handle for the segment STARTING at this keyframe (P1 of the cubic). */
+  cpOut?: ControlPoint;
+  /** IN handle for the segment ENDING at this keyframe (P2 of the cubic). */
+  cpIn?: ControlPoint;
 }
 
 export type Keyframes = Record<ObjId, Keyframe[]>;
@@ -114,4 +159,23 @@ export interface Scene {
   keyframes: Keyframes;
   camera: CameraState;
   timeline: Timeline;
+}
+
+// ---------------------------------------------------------------------------
+// Multi-scene project envelope (ADDITIVE ONLY — `Scene` above is untouched).
+// ---------------------------------------------------------------------------
+
+/** Bump on breaking changes to the save format (see `loadProject`). */
+export const PROJECT_SCHEMA_VERSION = 1;
+
+/**
+ * Full-project save format. LAW: we always save the WHOLE project (every
+ * scene), never a lone scene — a project file is the unit of persistence.
+ * `activeSceneId` must match exactly one entry of `scenes`.
+ */
+export interface Project {
+  schemaVersion: number;
+  activeSceneId: string;
+  /** Insertion order is preserved and round-trips through save/load. */
+  scenes: Scene[];
 }

@@ -1,6 +1,14 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useMemo } from 'react';
 import type { DragEvent as ReactDragEvent, ReactNode } from 'react';
-import { Stage, Layer, Rect, Line, Group, Image as KonvaImage } from 'react-konva';
+import {
+  Stage,
+  Layer,
+  Rect,
+  Line,
+  Group,
+  Circle,
+  Image as KonvaImage,
+} from 'react-konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import type Konva from 'konva';
 // The camera lives in world space (PRD §87): its state is owned by the scene
@@ -24,7 +32,12 @@ import {
 } from '../objects/ObjectNode';
 import { DEFAULT_ARROW_LENGTH, DEFAULT_ARROW_COLOR } from '../objects/factory';
 import { arrowFromDrag } from '../objects/drawGesture';
-import type { SceneObject, SceneObjectType } from '../scene/types';
+import type { Keyframe, SceneObject, SceneObjectType } from '../scene/types';
+import {
+  segmentControlPoints,
+  cubicBezierPoint,
+  segmentIsCurved,
+} from '../render/interpolate';
 import {
   useCamera,
   screenToWorld,
@@ -86,6 +99,128 @@ function SelectionOutline({ obj }: { obj: SceneObject }) {
         listening={false}
       />
     </Group>
+  );
+}
+
+/** Bezier guide polyline samples per segment (smooth enough, cheap). */
+const CURVE_SAMPLES = 24;
+const CURVE_COLOR = '#38bdf8';
+const HANDLE_RADIUS_SCREEN = 7;
+
+interface HandleTarget {
+  x: number;
+  y: number;
+  /** Owning keyframe time (identity for setKeyframeCp). */
+  kfTime: number;
+  which: 'cpIn' | 'cpOut';
+}
+
+/**
+ * Curved-path editing overlay (owner-approved P1): for the SELECTED object
+ * with ≥2 keyframes, draws a dashed bezier guide per segment and draggable
+ * circles at each control point (P1 = start+cpOut, P2 = end+cpIn; missing
+ * handles show at the collinear 1/3 / 2/3 defaults). Dragging writes cp
+ * offsets via setKeyframeCp inside ONE begin/endInteraction gesture; a
+ * double-click clears a handle back to its default. All positions are world
+ * coords — the camera transform lives on the Stage.
+ */
+function PathHandles({ obj }: { obj: SceneObject }) {
+  const keyframesMap = useSceneStore((s) => s.scene.keyframes);
+  const zoom = useSceneStore((s) => s.scene.camera.zoom);
+  const beginInteraction = useSceneStore((s) => s.beginInteraction);
+  const endInteraction = useSceneStore((s) => s.endInteraction);
+  const setKeyframeCp = useSceneStore((s) => s.setKeyframeCp);
+
+  const sorted = useMemo(
+    () => [...(keyframesMap[obj.id] ?? [])].sort((a, b) => a.time - b.time),
+    [keyframesMap, obj.id]
+  );
+
+  const r = HANDLE_RADIUS_SCREEN / Math.max(zoom, 0.0001);
+
+  if (sorted.length < 2) return null;
+
+  const guides: ReactNode[] = [];
+  const handles: HandleTarget[] = [];
+
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const a: Keyframe = sorted[i];
+    const b: Keyframe = sorted[i + 1];
+    const { p0, p1, p2, p3 } = segmentControlPoints(a, b);
+    const pts: number[] = [];
+    for (let s = 0; s <= CURVE_SAMPLES; s++) {
+      const pt = cubicBezierPoint(p0, p1, p2, p3, s / CURVE_SAMPLES);
+      pts.push(pt.x, pt.y);
+    }
+    // Only curve-shaped segments get the dashed guide; straight ones stay
+    // visually clean (the chord is obvious).
+    if (segmentIsCurved(a, b)) {
+      guides.push(
+        <Line
+          key={`curve-${a.time}`}
+          points={pts}
+          stroke={CURVE_COLOR}
+          strokeWidth={1.5 / Math.max(zoom, 0.0001)}
+          dash={[8 / Math.max(zoom, 0.0001), 6 / Math.max(zoom, 0.0001)]}
+          listening={false}
+        />
+      );
+    }
+    handles.push(
+      { x: p1.x, y: p1.y, kfTime: a.time, which: 'cpOut' },
+      { x: p2.x, y: p2.y, kfTime: b.time, which: 'cpIn' }
+    );
+  }
+
+  return (
+    <>
+      {guides}
+      {handles.map((h) => (
+        <Circle
+          key={`${obj.id}-${h.kfTime}-${h.which}`}
+          x={h.x}
+          y={h.y}
+          radius={r}
+          fill={CURVE_COLOR}
+          stroke="#ffffff"
+          strokeWidth={1.5 / Math.max(zoom, 0.0001)}
+          opacity={0.9}
+          draggable
+          onMouseEnter={(e) => {
+            const stage = e.target.getStage();
+            if (stage) stage.container().style.cursor = 'move';
+          }}
+          onMouseLeave={(e) => {
+            const stage = e.target.getStage();
+            if (stage) stage.container().style.cursor = 'default';
+          }}
+          onDragStart={() => beginInteraction()}
+          onDragMove={(e) => {
+            const pos = e.target.position();
+            const kf = sorted.find((k) => k.time === h.kfTime);
+            if (!kf) return;
+            setKeyframeCp(obj.id, h.kfTime, h.which, {
+              dx: pos.x - kf.transform.x,
+              dy: pos.y - kf.transform.y,
+            });
+          }}
+          onDragEnd={() => endInteraction()}
+          // Discrete clear: one undoable session (never nest setKeyframeCp
+          // inside transaction() — the inner set() races the immer producer
+          // and the write is silently lost).
+          onDblClick={() => {
+            beginInteraction();
+            setKeyframeCp(obj.id, h.kfTime, h.which, null);
+            endInteraction();
+          }}
+          onDblTap={() => {
+            beginInteraction();
+            setKeyframeCp(obj.id, h.kfTime, h.which, null);
+            endInteraction();
+          }}
+        />
+      ))}
+    </>
   );
 }
 
@@ -410,6 +545,9 @@ export function CanvasStage() {
           <Layer listening={false}>
             {selected && <SelectionOutline obj={selected} />}
           </Layer>
+
+          {/* Curved-path handles for the selected object (interactive). */}
+          <Layer>{selected && <PathHandles obj={selected} />}</Layer>
         </Stage>
       </div>
 

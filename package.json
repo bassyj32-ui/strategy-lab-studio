@@ -12,6 +12,9 @@
     "lint": "eslint .",
     "test": "vitest run",
     "render": "remotion render src/render/index.ts BattleScene out/video.mp4",
+    "render:alpha:prores": "remotion render src/render/index.ts BattleScene out/overlay.mov --props=out/scene.alpha.props.json --image-format=png --pixel-format=yuva444p10le --codec=prores --prores-profile=4444",
+    "render:alpha:webm": "remotion render src/render/index.ts BattleScene out/overlay.webm --props=out/scene.alpha.props.json --image-format=png --pixel-format=yuva420p --codec=vp9",
+    "render:alpha:sequence": "remotion render src/render/index.ts BattleScene out/overlay-frames --props=out/scene.alpha.props.json --image-format=png --sequence",
     "check": "tsc --noEmit && eslint . && vitest run && vite build"
   },
   "dependencies": {

@@ -90,6 +90,20 @@ export function createArrow(opts: CreateObjectOpts): SceneObject {
   };
 }
 
+/**
+ * ORGANIZATIONAL group container (P1 pull-forward). Never painted itself; its
+ * children render relative to its transform. Not exposed in the palette.
+ */
+export function createGroup(opts: CreateObjectOpts): SceneObject {
+  return {
+    id: opts.id,
+    type: 'group',
+    assetId: opts.assetId,
+    transform: withTransform(opts),
+    layerId: opts.layerId,
+  };
+}
+
 export function createSceneObject(
   type: SceneObjectType,
   opts: CreateObjectOpts
@@ -103,5 +117,7 @@ export function createSceneObject(
       return createUnit(opts);
     case 'arrow':
       return createArrow(opts);
+    case 'group':
+      return createGroup(opts);
   }
 }
