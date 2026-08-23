@@ -39,8 +39,8 @@ import {
 import type {
   FormationPattern,
 } from './types';
-import type { ImportMapOptions } from '../assets/types';
-import { importMapAsset } from '../assets/import';
+import type { ImportAssetOptions, ImportMapOptions } from '../assets/types';
+import { importAssetFromFile, importMapAsset } from '../assets/import';
 
 const MAX_HISTORY = 100;
 
@@ -364,11 +364,17 @@ export interface SceneState {
      */
     moveCameraKeyframe: (fromTime: number, toTime: number) => void;
 
-    // ---- Asset / map registry writes ----
+    // ---- Asset / map library writes (project-scoped, mirrored to every scene) ----
     /** Insert-only asset registry write (additive, never overwrites). */
     registerAsset: (asset: Asset) => void;
     /** Imports a map file, registers it, points mapAssetId + worldSize at it. */
     importMap: (file: File, opts?: ImportMapOptions) => Promise<void>;
+    /** Imports a generic image asset (project library) from a File. Undoable. */
+    importAsset: (file: File, opts?: ImportAssetOptions) => Promise<void>;
+    /** True when no object/scene references `id` — safe to delete across all scenes. */
+    canDeleteAsset: (id: AssetId) => boolean;
+    /** Deletes `id` from the project library iff unreferenced. No-op (false) if in use. */
+    deleteAsset: (id: AssetId) => boolean;
   }
 
 export const useSceneStore = create<SceneState>()(
@@ -979,7 +985,11 @@ export const useSceneStore = create<SceneState>()(
     registerAsset: (asset) => {
       set((state) => {
         // Additive insert only. UUID uniqueness makes this a no-overwrite write.
+        // Mirrored into every scene so the asset is visible project-wide.
         state.scene.assets[asset.id] = asset;
+        for (const s of Object.values(state.inactiveScenes)) {
+          s.assets[asset.id] = asset;
+        }
       });
     },
 
@@ -991,9 +1001,58 @@ export const useSceneStore = create<SceneState>()(
         // recoverable (never make irreversible scene changes).
         pushHistory(state);
         state.scene.assets[asset.id] = asset;
+        for (const s of Object.values(state.inactiveScenes)) {
+          s.assets[asset.id] = asset;
+        }
         state.scene.mapAssetId = asset.id;
         state.scene.worldSize = { w: asset.width, h: asset.height };
       });
+    },
+
+    importAsset: async (file, opts) => {
+      const asset = await importAssetFromFile(file, opts ?? { kind: 'image' });
+      set((state) => {
+        // Undoable: a new library asset is a user-level edit that should be
+        // reversible like any other project change.
+        pushHistory(state);
+        // Mirrored into every scene so the asset is visible project-wide.
+        state.scene.assets[asset.id] = asset;
+        for (const s of Object.values(state.inactiveScenes)) {
+          s.assets[asset.id] = asset;
+        }
+      });
+    },
+
+    canDeleteAsset: (id) => {
+      const s = get();
+      const allScenes: Scene[] = [s.scene, ...Object.values(s.inactiveScenes)];
+      for (const scene of allScenes) {
+        if (scene.mapAssetId === id) return false;
+        for (const obj of Object.values(scene.objects)) {
+          if (obj.assetId === id) return false;
+        }
+      }
+      return true;
+    },
+
+    deleteAsset: (id) => {
+      const s = get();
+      const allScenes: Scene[] = [s.scene, ...Object.values(s.inactiveScenes)];
+      for (const scene of allScenes) {
+        if (scene.mapAssetId === id) return false;
+        for (const obj of Object.values(scene.objects)) {
+          if (obj.assetId === id) return false;
+        }
+      }
+      set((state) => {
+        pushHistory(state);
+        // Remove from every scene's asset map (library is shared).
+        delete state.scene.assets[id];
+        for (const s of Object.values(state.inactiveScenes)) {
+          delete s.assets[id];
+        }
+      });
+      return true;
     },
   }))
 );

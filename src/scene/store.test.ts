@@ -485,4 +485,77 @@ describe('scene store', () => {
       expect(getCameraAtTime(scene, 9).x).toBe(100); // HOLD after last
     });
   });
+
+  describe('asset library (project-scoped, mirrored across scenes)', () => {
+    const asset = {
+      id: 'lib-1',
+      kind: 'image' as const,
+      name: 'flag',
+      src: 'data:image/png;base64,xxxx',
+      width: 16,
+      height: 16,
+    };
+
+    const twoScenes = () => {
+      const b = createDefaultScene('b');
+      useSceneStore.setState({
+        scene: createDefaultScene('a'),
+        inactiveScenes: { b },
+      });
+    };
+
+    it('registerAsset mirrors the asset into every scene', () => {
+      twoScenes();
+      s().registerAsset(asset);
+      expect(s().scene.assets['lib-1']).toBeDefined();
+      expect(s().inactiveScenes.b.assets['lib-1']).toBeDefined();
+    });
+
+    it('canDeleteAsset is true for an unreferenced asset', () => {
+      twoScenes();
+      s().registerAsset(asset);
+      expect(s().canDeleteAsset('lib-1')).toBe(true);
+    });
+
+    it('canDeleteAsset is false when an object references the asset', () => {
+      twoScenes();
+      s().registerAsset(asset);
+      s().createObjectOfType('marker', { assetId: 'lib-1' });
+      expect(s().canDeleteAsset('lib-1')).toBe(false);
+    });
+
+    it('canDeleteAsset is false when a scene uses the asset as its map', () => {
+      twoScenes();
+      s().registerAsset(asset);
+      useSceneStore.setState({ scene: { ...s().scene, mapAssetId: 'lib-1' } });
+      expect(s().canDeleteAsset('lib-1')).toBe(false);
+    });
+
+    it('deleteAsset removes the asset project-wide when unreferenced', () => {
+      twoScenes();
+      s().registerAsset(asset);
+      expect(s().deleteAsset('lib-1')).toBe(true);
+      expect(s().scene.assets['lib-1']).toBeUndefined();
+      expect(s().inactiveScenes.b.assets['lib-1']).toBeUndefined();
+    });
+
+    it('deleteAsset is a no-op (returns false) while referenced', () => {
+      twoScenes();
+      s().registerAsset(asset);
+      s().createObjectOfType('marker', { assetId: 'lib-1' });
+      expect(s().deleteAsset('lib-1')).toBe(false);
+      // Asset remains in all scenes.
+      expect(s().scene.assets['lib-1']).toBeDefined();
+      expect(s().inactiveScenes.b.assets['lib-1']).toBeDefined();
+    });
+
+    it('deleteAsset is undoable (one step)', () => {
+      twoScenes();
+      s().registerAsset(asset);
+      expect(s().deleteAsset('lib-1')).toBe(true);
+      s().undo();
+      expect(s().scene.assets['lib-1']).toBeDefined();
+      expect(s().inactiveScenes.b.assets['lib-1']).toBeDefined();
+    });
+  });
 });

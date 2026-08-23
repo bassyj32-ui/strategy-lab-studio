@@ -266,3 +266,25 @@ interactivity, asset import, Remotion export runs.
 - **Reason:** Camera keyframes are MVP-1 wishlist (PRD §1717). Keeping
   `camera` as the live base preserves today's navigation UX and makes
   zero-keyframe scenes byte-identical to pre-track renders.
+
+## 2026-09-03 — Project-scoped asset library (v1 → v2 schema migration)
+
+- **Decision:** Assets are now PROJECT-scoped, not per-scene. On import
+  (`registerAsset` / `importMap` / new `importAsset`) the asset is written
+  into EVERY scene's `assets` map — a mirror, so the render pipeline
+  (`draw.ts`, `ObjectNode`) keeps reading `scene.assets` unchanged. Assets
+  are immutable blob/data URLs, so each scene shares the same asset objects by
+  reference; only the per-scene `assets` *map* is independently editable.
+  `deleteAsset`/`canDeleteAsset` scan ALL scenes (objects' `assetId` + each
+  scene's `mapAssetId`) and refuse to delete while referenced. `duplicateScene`
+  now shares asset values (shallow-copied map) instead of deep-cloning them.
+  Save schema bumped `PROJECT_SCHEMA_VERSION` 1 → 2; `loadProject` transparently
+  migrates legacy v1 files by unioning all scenes' assets into every scene.
+- **Reason:** Original per-scene asset storage hid an import made in scene B
+  from scene A (flagged debt). Full hoist to `Project.assets` would have
+  required rewriting the render pipeline, which is out of this tab's territory
+  and high-risk; the mirror achieves the same user-visible result with no
+  render changes. Known forward item: dropping an asset places a `marker`
+  referencing the `assetId`; rendering the image itself on that marker is a
+  separate render-pipeline task (ObjectNode/draw.ts are intentionally
+  untouched here).

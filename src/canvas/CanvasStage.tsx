@@ -62,6 +62,7 @@ import {
 } from '../camera';
 import { CameraHud } from './CameraHud';
 import { useMapImage } from './useMapImage';
+import { ASSET_DND_MIME } from '../ui/AssetsPanel';
 
 // The MVP-1 editor preview is a low-res proxy: show the 1920x1080 world at
 // half scale so it fits typical screens (performance budget: MacBook Air M1).
@@ -451,8 +452,8 @@ export function CanvasStage() {
 
   const handleDrop = (e: ReactDragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    const type = e.dataTransfer.getData('text/plain') as SceneObjectType;
-    if (type !== 'shape' && type !== 'marker' && type !== 'arrow') return;
+    // Library asset drag (AssetsPanel): place a marker referencing the asset.
+    const assetId = e.dataTransfer.getData(ASSET_DND_MIME);
     // Drop point → stage pixels → world coords through the CURRENT camera,
     // so objects land under the cursor at any pan/zoom.
     //
@@ -479,6 +480,15 @@ export function CanvasStage() {
       e.clientY,
     );
     const world = screenToWorld(sp, displayCamera, vp);
+
+    if (assetId) {
+      const id = createObjectOfType('marker', { assetId, x: world.x, y: world.y });
+      setSelected(id);
+      return;
+    }
+
+    const type = e.dataTransfer.getData('text/plain') as SceneObjectType;
+    if (type !== 'shape' && type !== 'marker' && type !== 'arrow') return;
     const id = createObjectOfType(type, { x: world.x, y: world.y });
     setSelected(id);
   };

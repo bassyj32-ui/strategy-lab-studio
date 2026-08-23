@@ -305,3 +305,55 @@ describe('loadProject validation', () => {
     expect(loadProject(obj).activeSceneId).toBe('s1');
   });
 });
+
+describe('loadProject v1 → v2 migration (project-scoped assets)', () => {
+  // Build a synthetic v1 file: two scenes, each with a distinct per-scene
+  // asset, and assert migration mirrors the UNION into every scene.
+  const makeV1 = () => {
+    const sceneA = createScene({ id: 'a', name: 'A' });
+    const sceneB = createScene({ id: 'b', name: 'B' });
+    const assetA: unknown = {
+      id: 'asset-a',
+      kind: 'image',
+      name: 'A-only',
+      src: 'data:image/png;base64,aaaa',
+      width: 10,
+      height: 10,
+      metadata: { aspectRatio: 1, defaultScale: 1 },
+    };
+    const assetB: unknown = {
+      id: 'asset-b',
+      kind: 'image',
+      name: 'B-only',
+      src: 'data:image/png;base64,bbbb',
+      width: 10,
+      height: 10,
+      metadata: { aspectRatio: 1, defaultScale: 1 },
+    };
+    sceneA.assets = { 'asset-a': assetA as never };
+    sceneB.assets = { 'asset-b': assetB as never };
+    return {
+      schemaVersion: 1,
+      activeSceneId: 'a',
+      scenes: [sceneA, sceneB],
+    };
+  };
+
+  it('migrates v1 files to the current schemaVersion', () => {
+    const loaded = loadProject(makeV1());
+    expect(loaded.schemaVersion).toBe(PROJECT_SCHEMA_VERSION);
+  });
+
+  it('injects the union of assets into every scene', () => {
+    const loaded = loadProject(makeV1());
+    for (const scene of loaded.scenes) {
+      expect(Object.keys(scene.assets).sort()).toEqual(['asset-a', 'asset-b']);
+    }
+  });
+
+  it('preserves the activeSceneId across migration', () => {
+    const loaded = loadProject(makeV1());
+    expect(loaded.activeSceneId).toBe('a');
+    expect(loaded.scenes.map((s) => s.id).sort()).toEqual(['a', 'b']);
+  });
+});

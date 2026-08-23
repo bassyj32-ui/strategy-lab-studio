@@ -184,8 +184,15 @@ export interface Scene {
 // Multi-scene project envelope (ADDITIVE ONLY — `Scene` above is untouched).
 // ---------------------------------------------------------------------------
 
-/** Bump on breaking changes to the save format (see `loadProject`). */
-export const PROJECT_SCHEMA_VERSION = 1;
+/**
+ * Bump on breaking changes to the save format (see `loadProject`).
+ * 1 → 2 (2026-09-03): assets are now a PROJECT-SCOPED library. Old v1 files
+ * store assets per-scene; on load they are transparently migrated by
+ * `migrateProjectV1ToV2` (every scene inherits the union of all scenes'
+ * assets, so imports made in any scene become visible everywhere). See
+ * docs/decisions.md for the rationale behind the mirror approach.
+ */
+export const PROJECT_SCHEMA_VERSION = 2;
 
 /**
  * Full-project save format. LAW: we always save the WHOLE project (every

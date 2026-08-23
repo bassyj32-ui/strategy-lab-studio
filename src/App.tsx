@@ -4,6 +4,7 @@ import { Toolbar } from './ui/Toolbar';
 import { Inspector } from './ui/Inspector';
 import { LayersPanel } from './ui/LayersPanel';
 import { ScenesPanel } from './ui/ScenesPanel';
+import { AssetsPanel } from './ui/AssetsPanel';
 import { PreviewPanel } from './ui/PreviewPanel';
 import { TimelinePanel } from './timeline';
 import { useSceneStore } from './scene/store';
@@ -40,6 +41,9 @@ export function App() {
           </div>
           <div className="right-section">
             <LayersPanel />
+          </div>
+          <div className="right-section">
+            <AssetsPanel />
           </div>
         </div>
       </div>
