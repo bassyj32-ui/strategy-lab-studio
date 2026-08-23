@@ -349,6 +349,21 @@ export interface SceneState {
     /** Writes a NEW camera state derived by `updater`; never mutates in place. */
     updateCamera: (updater: (cam: CameraState) => CameraState) => void;
 
+    // ---- Camera track (per-scene animated camera; see cameraTrack.ts) ----
+    /**
+     * Keys the CURRENT live view (`scene.camera`) at `time`, replacing any
+     * keyframe already at that time. One undo step.
+     */
+    setCameraKeyframe: (time: number) => void;
+    /** Removes the keyframe at `time` if present. One undo step. */
+    removeCameraKeyframe: (time: number) => void;
+    /**
+     * Moves a keyframe to a new time; landing on an occupied time REPLACES
+     * the occupant (same semantics as updateKeyframe). No-op when `fromTime`
+     * has no keyframe. One undo step.
+     */
+    moveCameraKeyframe: (fromTime: number, toTime: number) => void;
+
     // ---- Asset / map registry writes ----
     /** Insert-only asset registry write (additive, never overwrites). */
     registerAsset: (asset: Asset) => void;
@@ -913,6 +928,51 @@ export const useSceneStore = create<SceneState>()(
     updateCamera: (updater) => {
       set((state) => {
         state.scene.camera = updater(state.scene.camera);
+      });
+    },
+
+    setCameraKeyframe: (time) => {
+      set((state) => {
+        pushHistory(state);
+        const cam = current(state.scene.camera);
+        const kf = { time, cam: { x: cam.x, y: cam.y, zoom: cam.zoom } };
+        const track = state.scene.cameraTrack ?? (state.scene.cameraTrack = []);
+        const idx = track.findIndex((k) => k.time === time);
+        if (idx >= 0) track[idx] = kf;
+        else {
+          track.push(kf);
+          track.sort((a, b) => a.time - b.time);
+        }
+      });
+    },
+
+    removeCameraKeyframe: (time) => {
+      set((state) => {
+        const track = state.scene.cameraTrack;
+        if (!track) return;
+        const idx = track.findIndex((k) => k.time === time);
+        if (idx < 0) return;
+        pushHistory(state);
+        track.splice(idx, 1);
+        if (track.length === 0) delete state.scene.cameraTrack;
+      });
+    },
+
+    moveCameraKeyframe: (fromTime, toTime) => {
+      set((state) => {
+        const track = state.scene.cameraTrack;
+        if (!track || fromTime === toTime) return;
+        const idx = track.findIndex((k) => k.time === fromTime);
+        if (idx < 0) return;
+        pushHistory(state);
+        // Identity invariant: a keyframe's time is unique within the track.
+        // Landing on an occupied time REPLACES the occupant. Grab the
+        // keyframe FIRST — splicing an earlier collision would shift idx.
+        const kf = track[idx];
+        const collision = track.findIndex((k, i) => i !== idx && k.time === toTime);
+        if (collision >= 0) track.splice(collision, 1);
+        kf.time = toTime;
+        track.sort((a, b) => a.time - b.time);
       });
     },
 

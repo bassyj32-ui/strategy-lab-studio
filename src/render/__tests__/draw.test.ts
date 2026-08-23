@@ -60,8 +60,7 @@ function makeScene(): Scene {
   };
 }
 
-describe('drawScene', () => {
-  it('clears and fills the background color', () => {
+describe('drawScene', () => {  it('clears and fills the background color', () => {
     const { ctx, raw } = makeCtx();
     drawScene(ctx, makeScene(), 0, 30, { w: 1920, h: 1080 }, {});
     expect(raw.clearRect).toHaveBeenCalledWith(0, 0, 1920, 1080);
@@ -311,5 +310,63 @@ describe('drawScene', () => {
     // parent world = (500,300) => (1460, 840)
     expect(calls.some((p) => p.x === 1470 && p.y === 860)).toBe(true);
     expect(calls.some((p) => p.x === 1460 && p.y === 840)).toBe(true);
+  });
+});
+
+describe('drawScene: animated camera (camera track)', () => {
+  it('evaluates the track per frame — the applied view moves with time', () => {
+    const scene = makeScene();
+    scene.cameraTrack = [
+      { time: 0, cam: { x: 0, y: 0, zoom: 1 } },
+      { time: 1, cam: { x: 300, y: 60, zoom: 1 } },
+    ];
+    const f0 = makeCtx();
+    drawScene(f0.ctx, scene, 0, 30, { w: 1920, h: 1080 }, {});
+    const f15 = makeCtx();
+    drawScene(f15.ctx, scene, 15, 30, { w: 1920, h: 1080 }, {});
+    const tx = (m: MockCtx): number =>
+      (m.translate as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    // frame 15 = t=0.5s -> midpoint x=150. Object at world (100,100):
+    // ox = 100 - camX shifts by -150 between frames.
+    expect(tx(f15.raw) - tx(f0.raw)).toBeCloseTo(-150, 6);
+  });
+
+  it('no-track scenes are byte-identical to pre-track behaviour', () => {
+    const sceneA = makeScene();
+    const sceneB = makeScene();
+    sceneB.cameraTrack = [];
+    const a = makeCtx();
+    drawScene(a.ctx, sceneA, 7, 30, { w: 1920, h: 1080 }, {});
+    const b = makeCtx();
+    drawScene(b.ctx, sceneB, 7, 30, { w: 1920, h: 1080 }, {});
+    expect(JSON.stringify(a.raw.fillStyleHistory)).toBe(
+      JSON.stringify(b.raw.fillStyleHistory)
+    );
+    for (const m of ['translate', 'scale'] as const) {
+      expect((a.raw[m] as ReturnType<typeof vi.fn>).mock.calls).toEqual(
+        (b.raw[m] as ReturnType<typeof vi.fn>).mock.calls
+      );
+    }
+  });
+
+  it('same scene + frame paints identically across runs (determinism)', () => {
+    const mkScene = (): Scene => ({
+      ...makeScene(),
+      cameraTrack: [
+        { time: 0, cam: { x: 10, y: 20, zoom: 2 } },
+        { time: 2, cam: { x: 110, y: 120, zoom: 3 } },
+      ],
+    });
+    const run = (): string => {
+      const c = makeCtx();
+      drawScene(c.ctx, mkScene(), 45, 30, { w: 1920, h: 1080 }, {});
+      const m = c.raw as unknown as Record<string, { mock?: { calls?: unknown[] } }>;
+      return JSON.stringify([
+        c.raw.fillStyleHistory,
+        m['translate']?.mock?.calls,
+        m['scale']?.mock?.calls,
+      ]);
+    };
+    expect(run()).toBe(run());
   });
 });

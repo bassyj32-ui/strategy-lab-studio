@@ -24,12 +24,21 @@ export interface CameraBinding {
   zoomAt: (factor: number, screenPoint: { x: number; y: number }) => void;
 }
 
-export function useCamera(vp: Viewport): CameraBinding {
+/**
+ * @param vp viewport in world units
+ * @param displayCameraOverride OPTIONAL evaluated view to DISPLAY (e.g. the
+ *   camera track evaluated at the playhead). Pan/zoom ALWAYS operate on the
+ *   stored base camera regardless of what is displayed.
+ */
+export function useCamera(
+  vp: Viewport,
+  displayCameraOverride?: CameraState
+): CameraBinding {
   // Read camera from the store (re-renders when it changes).
   const camera = useSceneStore((s) => s.scene.camera);
   const updateCamera = useSceneStore((s) => s.updateCamera);
 
-  const stageProps = cameraToStageProps(camera, vp);
+  const stageProps = cameraToStageProps(displayCameraOverride ?? camera, vp);
 
   const panBy = (dxScreen: number, dyScreen: number): void => {
     updateCamera((cam: CameraState) => panCamera(cam, dxScreen, dyScreen));

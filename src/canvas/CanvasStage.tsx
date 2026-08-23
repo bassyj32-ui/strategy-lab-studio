@@ -22,6 +22,8 @@ import {
   objectsForLayer,
   selectedObject,
 } from '../scene/selectors';
+import { getCameraAtTime, hasCameraTrack } from '../timeline/cameraTrack';
+import { usePlaybackStore } from '../timeline/playbackStore';
 import {
   ObjectNode,
   SHAPE_SIZE,
@@ -300,16 +302,51 @@ export function CanvasStage() {
   // preview scale applied to the wrapper below. `stageProps` positions the
   // world; wheel + background-drag handlers below drive `zoomAt`/`panBy`.
   const vp = { width: worldSize.w, height: worldSize.h };
-  const { stageProps, panBy, zoomAt } = useCamera(vp);
+
+  // ---- Animated camera (camera track, PRD §87 + P1) ----
+  // With a track present the stage DISPLAYS the track evaluated at the
+  // playhead — unless the user is actively navigating (pan/wheel/HUD), in
+  // which case it shows the live base camera they are editing. Navigation
+  // keeps a short grace window so a wheel burst does not flicker back.
+  const [navigating, setNavigating] = useState(false);
+  const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const markNavigating = (): void => {
+    if (!hasCameraTrack(scene)) return;
+    setNavigating(true);
+    if (navTimerRef.current) clearTimeout(navTimerRef.current);
+    navTimerRef.current = setTimeout(() => setNavigating(false), 400);
+  };
+  const currentTime = usePlaybackStore((s) => s.currentTime);
+  const keyedCamera = useMemo(
+    () => getCameraAtTime(scene, currentTime),
+    [scene, currentTime]
+  );
+  const displayCamera =
+    hasCameraTrack(scene) && !navigating ? keyedCamera : scene.camera;
+
+  const { stageProps, panBy: panByBase, zoomAt: zoomAtBase } = useCamera(
+    vp,
+    displayCamera
+  );
+  const panBy = (dx: number, dy: number): void => {
+    markNavigating();
+    panByBase(dx, dy);
+  };
+  const zoomAt = (factor: number, at: { x: number; y: number }): void => {
+    markNavigating();
+    zoomAtBase(factor, at);
+  };
   const viewCenter = { x: worldSize.w / 2, y: worldSize.h / 2 };
 
   // ---- HUD actions (same clamped math as wheel-zoom; MIN/MAX unchanged) ----
   const zoomStepIn = (): void => zoomAt(ZOOM_STEP, viewCenter);
   const zoomStepOut = (): void => zoomAt(1 / ZOOM_STEP, viewCenter);
-  const resetView = (): void =>
+  const resetView = (): void => {
+    markNavigating();
     updateCamera(() =>
       resetCamera({ x: worldSize.w / 2, y: worldSize.h / 2 })
     );
+  };
 
   const panMovedRef = useRef(false);
   const panHandlers = useCameraPan({
@@ -332,11 +369,12 @@ export function CanvasStage() {
   // made for the brand-new arrow.
   const suppressNextClickRef = useRef(false);
 
-  /** Pointer position → world coords under the CURRENT camera. */
+  /** Pointer position → world coords under the DISPLAYED camera (matches
+   * what is on screen — the keyed view when a track drives the stage). */
   const pointerWorld = (): { x: number; y: number } | null => {
     const sp = stageRef.current?.getPointerPosition();
     if (!sp) return null;
-    return screenToWorld(sp, scene.camera, vp);
+    return screenToWorld(sp, displayCamera, vp);
   };
 
   const finishArrowDraw = (): void => {
@@ -440,7 +478,7 @@ export function CanvasStage() {
       e.clientX,
       e.clientY,
     );
-    const world = screenToWorld(sp, scene.camera, vp);
+    const world = screenToWorld(sp, displayCamera, vp);
     const id = createObjectOfType(type, { x: world.x, y: world.y });
     setSelected(id);
   };

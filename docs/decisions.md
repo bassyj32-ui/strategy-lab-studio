@@ -251,3 +251,18 @@ interactivity, asset import, Remotion export runs.
   Remotion + FFmpeg rendering. Supabase optional, P3 only.
 - Canvas: **react-konva** chosen over PixiJS (final confirmation pending —
   see architecture.md §2). If switched, record a new decision here.
+
+## 2026-08-23 — Animated camera via an OPTIONAL per-scene cameraTrack
+
+- **Decision:** `Scene.cameraTrack?: CameraKeyframe[]` (time + {x,y,zoom};
+  rotation NOT animated — MVP-1 freezes it). Evaluation lives in ONE pure
+  engine, `src/timeline/cameraTrack.ts::getCameraAtTime` (clamp/HOLD outside
+  the range, LINEAR between keys — same semantics as the object
+  interpolator). The Remotion render (`draw.ts`) evaluates it per frame; the
+  editor stage displays keyed-at-playhead EXCEPT while the user is actively
+  navigating (pan/wheel/HUD), when it shows and writes the live base camera
+  (400 ms grace window). Store mutations: setCameraKeyframe /
+  removeCameraKeyframe / moveCameraKeyframe — one undo step each.
+- **Reason:** Camera keyframes are MVP-1 wishlist (PRD §1717). Keeping
+  `camera` as the live base preserves today's navigation UX and makes
+  zero-keyframe scenes byte-identical to pre-track renders.

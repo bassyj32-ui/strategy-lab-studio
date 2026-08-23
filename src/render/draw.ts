@@ -3,6 +3,7 @@ import type { AssetImageMap, ScreenTransform } from './types';
 // Single consumption path (architecture §6.2): the SAME pure selector the
 // timeline uses. Never duplicate interpolation math here.
 import { getObjectWorldTransformAtTime } from '../timeline/selectors';
+import { getCameraAtTime } from '../timeline/cameraTrack';
 import { applyCamera } from './camera';
 
 const BACKGROUND = '#0b0e14';
@@ -63,7 +64,12 @@ export function drawScene(
   images: AssetImageMap,
   options: DrawSceneOptions = {}
 ): void {
-  const { worldSize, camera } = scene;
+  const { worldSize } = scene;
+  // Animated camera: evaluate the per-scene track at THIS frame's time.
+  // With no track this is a copy of the base camera, so zero-keyframe scenes
+  // stay byte-identical to pre-track renders. Single shared engine — never
+  // duplicate interpolation math here (Law 1).
+  const camera = getCameraAtTime(scene, frame / fps);
   const { transparentBackground = false } = options;
 
   // 1. clear + background (skipped in alpha mode: output must stay transparent)

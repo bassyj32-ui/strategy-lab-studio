@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { useSceneStore } from './store';
 import { createDefaultScene, DEFAULT_LAYER_ID } from './factory';
 import { getObjectWorldTransformAtTime } from '../timeline/selectors';
+import { getCameraAtTime } from '../timeline/cameraTrack';
 import type { Transform } from './types';
 
 const s = () => useSceneStore.getState();
@@ -404,6 +405,84 @@ describe('scene store', () => {
 
       expect(after.x).toBeCloseTo(before.x + 30, 6);
       expect(after.y).toBeCloseTo(before.y - 10, 6);
+    });
+  });
+
+  describe('camera track (animated camera)', () => {
+    beforeEach(reset);
+
+    it('setCameraKeyframe stores the live view at the time and sorts the track', () => {
+      s().updateCamera((cam) => ({ ...cam, x: 500, y: 300, zoom: 2 }));
+      s().setCameraKeyframe(4);
+      s().updateCamera((cam) => ({ ...cam, x: 100, y: 200, zoom: 3 }));
+      s().setCameraKeyframe(1);
+      const track = s().scene.cameraTrack!;
+      expect(track.map((k) => k.time)).toEqual([1, 4]);
+      expect(track[0].cam).toEqual({ x: 100, y: 200, zoom: 3 });
+      expect(track[1].cam).toEqual({ x: 500, y: 300, zoom: 2 });
+    });
+
+    it('re-keying the same time REPLACES instead of duplicating', () => {
+      s().setCameraKeyframe(2);
+      s().updateCamera((cam) => ({ ...cam, x: 42 }));
+      s().setCameraKeyframe(2);
+      expect(s().scene.cameraTrack).toHaveLength(1);
+      expect(s().scene.cameraTrack![0].cam.x).toBe(42);
+    });
+
+    it('removeCameraKeyframe deletes and prunes an emptied track', () => {
+      s().setCameraKeyframe(2);
+      s().removeCameraKeyframe(2);
+      expect(s().scene.cameraTrack).toBeUndefined();
+      // Removing a non-existent key is a no-op that still must not throw.
+      s().removeCameraKeyframe(99);
+      expect(s().scene.cameraTrack).toBeUndefined();
+    });
+
+    it('moveCameraKeyframe relocates a key; landing on an occupied time replaces', () => {
+      s().updateCamera((cam) => ({ ...cam, x: 10 }));
+      s().setCameraKeyframe(1);
+      s().updateCamera((cam) => ({ ...cam, x: 20 }));
+      s().setCameraKeyframe(3);
+      s().moveCameraKeyframe(3, 5);
+      let track = s().scene.cameraTrack!;
+      expect(track.map((k) => k.time)).toEqual([1, 5]);
+      expect(track[1].cam.x).toBe(20);
+      // Moving onto the occupied time 1 replaces the occupant.
+      s().moveCameraKeyframe(5, 1);
+      track = s().scene.cameraTrack!;
+      expect(track).toHaveLength(1);
+      expect(track[0].time).toBe(1);
+      expect(track[0].cam.x).toBe(20);
+      // Moving a non-existent key is a no-op.
+      s().moveCameraKeyframe(99, 2);
+      expect(s().scene.cameraTrack!.map((k) => k.time)).toEqual([1]);
+    });
+
+    it('each camera-track mutation is exactly ONE undo step', () => {
+      s().setCameraKeyframe(1);
+      s().undo();
+      expect(s().scene.cameraTrack).toBeUndefined();
+
+      s().setCameraKeyframe(1);
+      s().setCameraKeyframe(3);
+      s().undo();
+      expect(s().scene.cameraTrack!.map((k) => k.time)).toEqual([1]);
+
+      s().redo();
+      expect(s().scene.cameraTrack!.map((k) => k.time)).toEqual([1, 3]);
+    });
+
+    it('getCameraAtTime sees store-written tracks end-to-end', () => {
+      s().updateCamera((cam) => ({ ...cam, x: 0 }));
+      s().setCameraKeyframe(0);
+      s().updateCamera((cam) => ({ ...cam, x: 100, zoom: 2 }));
+      s().setCameraKeyframe(2);
+      const scene = s().scene;
+      const mid = getCameraAtTime(scene, 1);
+      expect(mid.x).toBeCloseTo(50);
+      expect(mid.zoom).toBeCloseTo(1.5);
+      expect(getCameraAtTime(scene, 9).x).toBe(100); // HOLD after last
     });
   });
 });

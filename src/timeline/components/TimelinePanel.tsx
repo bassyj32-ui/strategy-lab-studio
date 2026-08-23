@@ -6,6 +6,7 @@ import { usePlaybackEngine } from '../usePlaybackEngine';
 import { TransportControls } from './TransportControls';
 import { Ruler } from './Ruler';
 import { KeyframeTrack } from './KeyframeTrack';
+import { CameraTrack } from './CameraTrack';
 import { KeyframeEditor } from './KeyframeEditor';
 
 /**
@@ -91,6 +92,7 @@ export function TimelinePanel() {
       {ids.map((id) => (
         <KeyframeTrack key={id} objId={id} />
       ))}
+      <CameraTrack />
       {ids.length === 0 ? (
         <div className="empty-note" data-testid="empty-coaching">
           Place a unit, select it, then Add keyframe at playhead.
