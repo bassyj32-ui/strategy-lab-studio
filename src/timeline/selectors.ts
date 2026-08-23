@@ -1,5 +1,6 @@
 import type { Scene, ObjId, Transform, Keyframe } from '../scene/types';
 import { interpolateTransform } from './interpolate';
+import { composeTransform } from '../objects/groups';
 
 /**
  * Single consumption path for transforms over time: both the live canvas
@@ -22,4 +23,23 @@ export function getObjectTransformAtTime(
 
 export function getObjectKeyframes(scene: Scene, objId: ObjId): Keyframe[] {
   return scene.keyframes[objId] ?? [];
+}
+
+/**
+ * World-space transform of `objId` at time `t`, folding the parent chain.
+ * A root object's local transform is its world transform; a child's local
+ * transform is composed under each ancestor's WORLD transform (so an animated
+ * parent carries its children). This is the single source of truth used by the
+ * Remotion render path so grouping is visible in the exported video.
+ */
+export function getObjectWorldTransformAtTime(
+  scene: Scene,
+  objId: ObjId,
+  time: number
+): Transform {
+  const obj = scene.objects[objId];
+  const local = getObjectTransformAtTime(scene, objId, time);
+  if (!obj?.parentId) return local;
+  const parentWorld = getObjectWorldTransformAtTime(scene, obj.parentId, time);
+  return composeTransform(parentWorld, local);
 }

@@ -282,4 +282,34 @@ describe('drawScene', () => {
     );
     expect(drewPlaceholder).toBe(true);
   });
+
+  it('folds the parent transform so a grouped child renders at its world position', () => {
+    const scene = makeScene();
+    scene.objects = {
+      p1: {
+        id: 'p1',
+        type: 'unit',
+        transform: { x: 500, y: 300, rotation: 0, scale: 1, opacity: 1 },
+        layerId: 'layer-root',
+      },
+      c1: {
+        id: 'c1',
+        type: 'unit',
+        transform: { x: 10, y: 20, rotation: 0, scale: 1, opacity: 1 },
+        parentId: 'p1',
+        layerId: 'layer-root',
+      },
+    };
+    const { ctx, raw } = makeCtx();
+    drawScene(ctx, scene, 0, 30, { w: 1920, h: 1080 }, {});
+    const calls = raw.translate.mock.calls.map((c) => ({
+      x: Math.round(c[0] as number),
+      y: Math.round(c[1] as number),
+    }));
+    // camera {0,0} zoom 1, video 1920x1080 => screen = (960+wx, 540+wy).
+    // child world = p1(500,300) + local(10,20) = (510,320) => (1470, 860)
+    // parent world = (500,300) => (1460, 840)
+    expect(calls.some((p) => p.x === 1470 && p.y === 860)).toBe(true);
+    expect(calls.some((p) => p.x === 1460 && p.y === 840)).toBe(true);
+  });
 });

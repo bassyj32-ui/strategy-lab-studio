@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useSceneStore } from './store';
 import { createDefaultScene, DEFAULT_LAYER_ID } from './factory';
+import { getObjectWorldTransformAtTime } from '../timeline/selectors';
+import type { Transform } from './types';
 
 const s = () => useSceneStore.getState();
 
@@ -361,6 +363,47 @@ describe('scene store', () => {
         scene.objects[id].transform.x = 9;
       });
       expect(s().future.length).toBe(0);
+    });
+  });
+
+  describe('groups: world transform + keyframe rebase', () => {
+    beforeEach(reset);
+
+    const worldAt = (id: string, t: number): Transform =>
+      getObjectWorldTransformAtTime(s().scene, id, t);
+
+    it('grouping a keyframed child preserves its world position', () => {
+      const parent = s().createObjectOfType('shape', { x: 100, y: 100 });
+      const child = s().createObjectOfType('shape', { x: 150, y: 50 });
+      // Child has a world-space keyframe at t=10.
+      s().addKeyframe(child, {
+        time: 10,
+        transform: { x: 200, y: 50, rotation: 0, scale: 1, opacity: 1 },
+      });
+
+      const before = worldAt(child, 10);
+
+      const pid = s().groupObject([parent, child]);
+      expect(pid).toBe(parent);
+      expect(s().scene.objects[child].parentId).toBe(parent);
+
+      const after = worldAt(child, 10);
+      // Re-parenting must NOT move the object through its animation.
+      expect(after.x).toBeCloseTo(before.x, 6);
+      expect(after.y).toBeCloseTo(before.y, 6);
+    });
+
+    it('moving the group parent moves the child in world space (export-correct)', () => {
+      const parent = s().createObjectOfType('shape', { x: 100, y: 100 });
+      const child = s().createObjectOfType('shape', { x: 150, y: 50 });
+      s().groupObject([parent, child]);
+
+      const before = worldAt(child, 0);
+      s().moveGroup(parent, 30, -10);
+      const after = worldAt(child, 0);
+
+      expect(after.x).toBeCloseTo(before.x + 30, 6);
+      expect(after.y).toBeCloseTo(before.y - 10, 6);
     });
   });
 });

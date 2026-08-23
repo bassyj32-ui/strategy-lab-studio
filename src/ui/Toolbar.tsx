@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { useSceneStore } from '../scene/store';
-import type { SceneObjectType } from '../scene/types';
+import type { SceneObjectType, FormationPattern } from '../scene/types';
 // Placing an object must also SELECT it (both stores) so the Inspector and
 // timeline immediately target the new object.
 import { selectObjectUnified } from '../timeline/selection';
@@ -19,8 +19,25 @@ export function Toolbar() {
   const createObjectOfType = useSceneStore((s) => s.createObjectOfType);
   const activeTool = useSceneStore((s) => s.activeTool);
   const setTool = useSceneStore((s) => s.setTool);
+  const selectedIds = useSceneStore((s) => s.selectedIds);
+  const groupObject = useSceneStore((s) => s.groupObject);
+  const ungroupObject = useSceneStore((s) => s.ungroupObject);
+  const createFormation = useSceneStore((s) => s.createFormation);
+  const worldSize = useSceneStore((s) => s.scene.worldSize);
+  const objects = useSceneStore((s) => s.scene.objects);
   const mapFileRef = useRef<HTMLInputElement | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [pattern, setPattern] = useState<FormationPattern>('line');
+  const [count, setCount] = useState(5);
+  const [spacing, setSpacing] = useState(50);
+  const [childType, setChildType] = useState<SceneObjectType>('unit');
+
+  const canGroup = selectedIds.length >= 2;
+  // Ungroup is available when a selected object IS a group, or is parented.
+  const canUngroup = selectedIds.some((id) => {
+    const o = objects[id];
+    return o?.type === 'group' || o?.parentId != null;
+  });
 
   /** Click-to-place: create the object, then select it everywhere. */
   const placeAndSelect = (type: SceneObjectType) => {
@@ -69,6 +86,48 @@ export function Toolbar() {
     a.click();
     URL.revokeObjectURL(url);
     setStatus('Saved scene.json');
+  };
+
+  // Group the current multi-selection into one parent (one undoable txn).
+  const handleGroup = () => {
+    const parentId = groupObject(selectedIds);
+    if (parentId) {
+      selectObjectUnified(parentId);
+      setStatus('Grouped selection');
+    }
+  };
+
+  // Dissolve the group that owns any selected object.
+  const handleUngroup = () => {
+    for (const id of selectedIds) {
+      const o = objects[id];
+      if (!o) continue;
+      if (o.type === 'group') {
+        ungroupObject(id);
+        setStatus('Ungrouped');
+        return;
+      }
+      if (o.parentId) {
+        ungroupObject(o.parentId);
+        setStatus('Ungrouped');
+        return;
+      }
+    }
+  };
+
+  // Spawn a formation at the map centre on the active layer (one undoable txn).
+  const handleCreateFormation = () => {
+    const { groupId } = createFormation(pattern, {
+      count,
+      spacing,
+      childType,
+      x: worldSize.w / 2,
+      y: worldSize.h / 2,
+    });
+    if (groupId) {
+      selectObjectUnified(groupId);
+      setStatus(`Created ${pattern} formation`);
+    }
   };
 
   return (
@@ -127,6 +186,83 @@ export function Toolbar() {
         style={{ display: 'none' }}
         onChange={handleMapFile}
       />
+
+      <h3 style={{ marginTop: 16 }}>Groups</h3>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          type="button"
+          data-testid="group"
+          disabled={!canGroup}
+          onClick={handleGroup}
+        >
+          Group
+        </button>
+        <button
+          type="button"
+          data-testid="ungroup"
+          disabled={!canUngroup}
+          onClick={handleUngroup}
+        >
+          Ungroup
+        </button>
+      </div>
+
+      <h3 style={{ marginTop: 16 }}>Formation</h3>
+      <label>
+        Pattern{' '}
+        <select
+          data-testid="formation-pattern"
+          value={pattern}
+          onChange={(e) => setPattern(e.target.value as FormationPattern)}
+        >
+          <option value="line">Line</option>
+          <option value="column">Column</option>
+          <option value="wedge">Wedge</option>
+          <option value="grid">Grid</option>
+        </select>
+      </label>
+      <label>
+        Child type{' '}
+        <select
+          data-testid="formation-child-type"
+          value={childType}
+          onChange={(e) => setChildType(e.target.value as SceneObjectType)}
+        >
+          <option value="unit">Unit</option>
+          <option value="shape">Shape</option>
+          <option value="marker">Marker</option>
+        </select>
+      </label>
+      <label>
+        Count{' '}
+        <input
+          type="number"
+          data-testid="formation-count"
+          min={1}
+          value={count}
+          onChange={(e) => setCount(Math.max(1, Number(e.target.value) || 1))}
+          style={{ width: 64 }}
+        />
+      </label>
+      <label>
+        Spacing{' '}
+        <input
+          type="number"
+          data-testid="formation-spacing"
+          min={1}
+          value={spacing}
+          onChange={(e) => setSpacing(Math.max(1, Number(e.target.value) || 1))}
+          style={{ width: 64 }}
+        />
+      </label>
+      <button
+        type="button"
+        data-testid="create-formation"
+        onClick={handleCreateFormation}
+      >
+        Create Formation
+      </button>
+
       <p className="hint" aria-live="polite" data-testid="toolbar-status">
         {status}
       </p>

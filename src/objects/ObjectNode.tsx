@@ -1,7 +1,8 @@
 import { Group, Rect, Ellipse, Text, Line } from 'react-konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
-import type { ObjId, SceneObject } from '../scene/types';
+import type { ObjId, SceneObject, Transform } from '../scene/types';
 import { useSceneStore } from '../scene/store';
+import { worldPointToLocal } from './groups';
 // Unified selection: canvas clicks must reach BOTH the scene store (canvas
 // highlight + Inspector) and the timeline selection store (KeyframeEditor).
 import { selectObjectUnified } from '../timeline/selection';
@@ -16,6 +17,10 @@ export const ARROWHEAD_HALF_WIDTH = 11;
 
 interface ObjectNodeProps {
   obj: SceneObject;
+  /** WORLD-space transform to render at (parent chain already folded). */
+  world: Transform;
+  /** WORLD transform of this object's parent, or null if it is a root. */
+  parentWorld: Transform | null;
   onSelect: (id: ObjId) => void;
 }
 
@@ -23,13 +28,18 @@ interface ObjectNodeProps {
  * A single battlefield object rendered as a Konva node (NOT React DOM).
  * The transform.x / transform.y is treated as the object's CENTER so that the
  * selection outline and all object kinds share one coordinate convention.
+ *
+ * `world` is the object's world transform (parent chain folded in) so grouped
+ * children render at their true on-screen position. The drag handler converts
+ * the pointer's world position back into the object's LOCAL frame before
+ * writing, so grouping is preserved while dragging.
  */
-export function ObjectNode({ obj, onSelect }: ObjectNodeProps) {
+export function ObjectNode({ obj, world, parentWorld, onSelect }: ObjectNodeProps) {
   const beginInteraction = useSceneStore((s) => s.beginInteraction);
   const endInteraction = useSceneStore((s) => s.endInteraction);
   const updateTransform = useSceneStore((s) => s.updateTransform);
 
-  const { x, y, rotation, scale, opacity } = obj.transform;
+  const { x, y, rotation, scale, opacity } = world;
 
   const handleDragStart = () => {
     beginInteraction();
@@ -37,9 +47,13 @@ export function ObjectNode({ obj, onSelect }: ObjectNodeProps) {
 
   const handleDragMove = (e: KonvaEventObject<DragEvent>) => {
     // Live-sync the store so the selection outline follows during the drag.
-    // No extra history is pushed: only the begin snapshot matters.
+    // No extra history is pushed: only the begin snapshot matters. The node
+    // position is in WORLD space (the Stage carries the camera); convert it
+    // into the object's local frame before storing.
     const node = e.target;
-    updateTransform(obj.id, { x: node.x(), y: node.y() });
+    const parent = parentWorld ?? { x: 0, y: 0, rotation: 0, scale: 1, opacity: 1 };
+    const local = worldPointToLocal(parent, node.x(), node.y());
+    updateTransform(obj.id, { x: local.x, y: local.y });
   };
 
   const handleDragEnd = () => {

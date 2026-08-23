@@ -28,6 +28,7 @@ import type { Project } from './types';
 import { createSceneObject } from '../objects/factory';
 import {
   canReparent,
+  composeTransform,
   formationOffsets,
   resolveWorldTransform,
   selectionRoots,
@@ -95,17 +96,30 @@ function attachUnderParent(
   // Draft<SceneObject> is structurally the plain type at runtime; groups.ts
   // only reads, so a cast here keeps the pure helpers draft-agnostic.
   const objects = scene.objects as unknown as Record<ObjId, SceneObject>;
+  const IDENTITY: Transform = {
+    x: 0,
+    y: 0,
+    rotation: 0,
+    scale: 1,
+    opacity: 1,
+  };
+  // Read everything BEFORE mutating obj.
+  const oldParentWorld = obj.parentId
+    ? resolveWorldTransform(objects, obj.parentId)
+    : IDENTITY;
   const world = resolveWorldTransform(objects, childId);
+  const pw = newParentId ? resolveWorldTransform(objects, newParentId) : IDENTITY;
+  const s = pw.scale !== 0 ? pw.scale : 1;
+  const o = pw.opacity !== 0 ? pw.opacity : 1;
+
   if (newParentId) {
-    const pw = resolveWorldTransform(objects, newParentId);
     const p = worldPointToLocal(pw, world.x, world.y);
-    const s = pw.scale !== 0 ? pw.scale : 1;
     obj.transform = {
       x: p.x,
       y: p.y,
       rotation: world.rotation - pw.rotation,
       scale: world.scale / s,
-      opacity: pw.opacity !== 0 ? world.opacity / pw.opacity : world.opacity,
+      opacity: world.opacity / o,
     };
     obj.parentId = newParentId;
   } else {
@@ -118,6 +132,25 @@ function attachUnderParent(
       opacity: world.opacity,
     };
     delete obj.parentId;
+  }
+
+  // Re-base keyframes: a child's keyframes are stored in its OLD parent's
+  // local frame. Convert each through world space into the NEW parent's local
+  // frame so the animation stays put when re-parented (otherwise world
+  // keyframes get reinterpreted as local and the object jumps).
+  const kfs = scene.keyframes[childId];
+  if (kfs) {
+    for (const kf of kfs) {
+      const kw = composeTransform(oldParentWorld, kf.transform);
+      const lp = worldPointToLocal(pw, kw.x, kw.y);
+      kf.transform = {
+        x: lp.x,
+        y: lp.y,
+        rotation: kw.rotation - pw.rotation,
+        scale: kw.scale / s,
+        opacity: kw.opacity / o,
+      };
+    }
   }
 }
 

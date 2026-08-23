@@ -32,7 +32,17 @@ import {
 } from '../objects/ObjectNode';
 import { DEFAULT_ARROW_LENGTH, DEFAULT_ARROW_COLOR } from '../objects/factory';
 import { arrowFromDrag } from '../objects/drawGesture';
-import type { Keyframe, SceneObject, SceneObjectType } from '../scene/types';
+import {
+  resolveWorldTransform,
+  composeTransform,
+  worldPointToLocal,
+} from '../objects/groups';
+import type {
+  Keyframe,
+  SceneObject,
+  SceneObjectType,
+  Transform,
+} from '../scene/types';
 import {
   segmentControlPoints,
   cubicBezierPoint,
@@ -56,8 +66,8 @@ import { useMapImage } from './useMapImage';
 const DISPLAY_SCALE = 0.5;
 const GRID_STEP = 120;
 
-function SelectionOutline({ obj }: { obj: SceneObject }) {
-  const { x, y, rotation, scale } = obj.transform;
+function SelectionOutline({ obj, world }: { obj: SceneObject; world: Transform }) {
+  const { x, y, rotation, scale } = world;
   // Arrows are TAIL-anchored (tip at local (length, 0)); every other kind is
   // center-anchored. The outline must match each convention.
   if (obj.type === 'arrow') {
@@ -124,7 +134,13 @@ interface HandleTarget {
  * double-click clears a handle back to its default. All positions are world
  * coords — the camera transform lives on the Stage.
  */
-function PathHandles({ obj }: { obj: SceneObject }) {
+function PathHandles({
+  obj,
+  parentWorld,
+}: {
+  obj: SceneObject;
+  parentWorld: Transform | null;
+}) {
   const keyframesMap = useSceneStore((s) => s.scene.keyframes);
   const zoom = useSceneStore((s) => s.scene.camera.zoom);
   const beginInteraction = useSceneStore((s) => s.beginInteraction);
@@ -140,6 +156,27 @@ function PathHandles({ obj }: { obj: SceneObject }) {
 
   if (sorted.length < 2) return null;
 
+  // Keyframes are stored in the object's LOCAL frame; the parent (if any)
+  // folds in via `parentWorld`. Map every guide/handle point into world space
+  // so curved paths render correctly for grouped children.
+  const IDENTITY: Transform = {
+    x: 0,
+    y: 0,
+    rotation: 0,
+    scale: 1,
+    opacity: 1,
+  };
+  const toWorld = (p: { x: number; y: number }) => {
+    const w = composeTransform(parentWorld ?? IDENTITY, {
+      x: p.x,
+      y: p.y,
+      rotation: 0,
+      scale: 1,
+      opacity: 1,
+    });
+    return { x: w.x, y: w.y };
+  };
+
   const guides: ReactNode[] = [];
   const handles: HandleTarget[] = [];
 
@@ -150,7 +187,8 @@ function PathHandles({ obj }: { obj: SceneObject }) {
     const pts: number[] = [];
     for (let s = 0; s <= CURVE_SAMPLES; s++) {
       const pt = cubicBezierPoint(p0, p1, p2, p3, s / CURVE_SAMPLES);
-      pts.push(pt.x, pt.y);
+      const w = toWorld(pt);
+      pts.push(w.x, w.y);
     }
     // Only curve-shaped segments get the dashed guide; straight ones stay
     // visually clean (the chord is obvious).
@@ -166,9 +204,11 @@ function PathHandles({ obj }: { obj: SceneObject }) {
         />
       );
     }
+    const w1 = toWorld(p1);
+    const w2 = toWorld(p2);
     handles.push(
-      { x: p1.x, y: p1.y, kfTime: a.time, which: 'cpOut' },
-      { x: p2.x, y: p2.y, kfTime: b.time, which: 'cpIn' }
+      { x: w1.x, y: w1.y, kfTime: a.time, which: 'cpOut' },
+      { x: w2.x, y: w2.y, kfTime: b.time, which: 'cpIn' }
     );
   }
 
@@ -199,9 +239,17 @@ function PathHandles({ obj }: { obj: SceneObject }) {
             const pos = e.target.position();
             const kf = sorted.find((k) => k.time === h.kfTime);
             if (!kf) return;
+            // `pos` is in world space (Stage carries the camera); the control
+            // point offset is stored in the object's LOCAL frame, so map the
+            // pointer back through the parent before subtracting.
+            const local = worldPointToLocal(
+              parentWorld ?? IDENTITY,
+              pos.x,
+              pos.y
+            );
             setKeyframeCp(obj.id, h.kfTime, h.which, {
-              dx: pos.x - kf.transform.x,
-              dy: pos.y - kf.transform.y,
+              dx: local.x - kf.transform.x,
+              dy: local.y - kf.transform.y,
             });
           }}
           onDragEnd={() => endInteraction()}
@@ -502,13 +550,21 @@ export function CanvasStage() {
           {/* One Konva layer per visible scene layer. */}
           {visibleLayersOrdered(scene).map((layer) => (
             <Layer key={layer.id}>
-              {objectsForLayer(scene, layer.id).map((obj) => (
-                <ObjectNode
-                  key={obj.id}
-                  obj={obj}
-                  onSelect={setSelected}
-                />
-              ))}
+              {objectsForLayer(scene, layer.id).map((obj) => {
+                const worldT = resolveWorldTransform(scene.objects, obj.id);
+                const parentWorldT = obj.parentId
+                  ? resolveWorldTransform(scene.objects, obj.parentId)
+                  : null;
+                return (
+                  <ObjectNode
+                    key={obj.id}
+                    obj={obj}
+                    world={worldT}
+                    parentWorld={parentWorldT}
+                    onSelect={setSelected}
+                  />
+                );
+              })}
             </Layer>
           ))}
 
@@ -543,11 +599,27 @@ export function CanvasStage() {
 
           {/* Selection outline on top (non-interactive). */}
           <Layer listening={false}>
-            {selected && <SelectionOutline obj={selected} />}
+            {selected && (
+              <SelectionOutline
+                obj={selected}
+                world={resolveWorldTransform(scene.objects, selected.id)}
+              />
+            )}
           </Layer>
 
           {/* Curved-path handles for the selected object (interactive). */}
-          <Layer>{selected && <PathHandles obj={selected} />}</Layer>
+          <Layer>
+            {selected && (
+              <PathHandles
+                obj={selected}
+                parentWorld={
+                  selected.parentId
+                    ? resolveWorldTransform(scene.objects, selected.parentId)
+                    : null
+                }
+              />
+            )}
+          </Layer>
         </Stage>
       </div>
 

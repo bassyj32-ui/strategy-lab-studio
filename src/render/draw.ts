@@ -2,7 +2,7 @@ import type { Scene, Transform } from '../scene/types';
 import type { AssetImageMap, ScreenTransform } from './types';
 // Single consumption path (architecture §6.2): the SAME pure selector the
 // timeline uses. Never duplicate interpolation math here.
-import { getObjectTransformAtTime } from '../timeline/selectors';
+import { getObjectWorldTransformAtTime } from '../timeline/selectors';
 import { applyCamera } from './camera';
 
 const BACKGROUND = '#0b0e14';
@@ -133,7 +133,7 @@ export function drawScene(
       const wantShadow = asset?.metadata?.defaultShadow === true;
       // Single consumption path (architecture.md §6.2): the Remotion render
       // reads animation through the SAME pure selector as the editor preview.
-      const world = getObjectTransformAtTime(scene, id, t);
+      const world = getObjectWorldTransformAtTime(scene, id, t);
       const screen: ScreenTransform = applyCamera(
         world,
         camera,
