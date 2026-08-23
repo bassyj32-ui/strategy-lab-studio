@@ -1,9 +1,14 @@
 import { useRef } from 'react';
 import type { DragEvent as ReactDragEvent, ReactNode } from 'react';
-import { Stage, Layer, Rect, Line, Group } from 'react-konva';
+import { Stage, Layer, Rect, Line, Group, Image as KonvaImage } from 'react-konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import type Konva from 'konva';
-import { useSceneStore } from '../scene/store';
+// The camera lives in world space (PRD §87): its state is owned by the scene
+// store; this canvas binds it through useCamera and wires interactive
+// wheel-zoom + background drag-pan below.
+import {
+  useSceneStore,
+} from '../scene/store';
 import {
   visibleLayersOrdered,
   objectsForLayer,
@@ -11,42 +16,23 @@ import {
 } from '../scene/selectors';
 import { ObjectNode, SHAPE_SIZE, MARKER_RADIUS } from '../objects/ObjectNode';
 import type { SceneObject, SceneObjectType } from '../scene/types';
-// The camera lives in world space (PRD §87): its state is owned by the scene
-// store; this canvas binds it through useCamera and wires interactive
-// wheel-zoom + background drag-pan below.
 import {
   useCamera,
   screenToWorld,
   wheelDeltaToFactor,
+  normalizeWheelDelta,
+  clientToStagePoint,
+  resetCamera,
+  ZOOM_STEP,
   useCameraPan,
 } from '../camera';
+import { CameraHud } from './CameraHud';
+import { useMapImage } from './useMapImage';
 
 // The MVP-1 editor preview is a low-res proxy: show the 1920x1080 world at
 // half scale so it fits typical screens (performance budget: MacBook Air M1).
 const DISPLAY_SCALE = 0.5;
 const GRID_STEP = 120;
-
-/**
- * Map a viewport (clientX/Y) coordinate to STAGE pixel space. Ratio-based so
- * it stays correct under the CSS preview scale (getBoundingClientRect returns
- * the visually scaled size; stage.width() is the unscaled logical size).
- */
-function clientToStage(
-  stage: Konva.Stage | null,
-  clientX: number,
-  clientY: number
-): { x: number; y: number } {
-  const container = stage?.container();
-  if (!stage || !container) return { x: 0, y: 0 };
-  const rect = container.getBoundingClientRect();
-  if (rect.width <= 0 || rect.height <= 0) return { x: 0, y: 0 };
-  const sx = stage.width() / rect.width;
-  const sy = stage.height() / rect.height;
-  return {
-    x: (clientX - rect.left) * sx,
-    y: (clientY - rect.top) * sy,
-  };
-}
 
 function SelectionOutline({ obj }: { obj: SceneObject }) {
   const { x, y, rotation, scale } = obj.transform;
@@ -79,9 +65,17 @@ export function CanvasStage() {
   const selectedObjId = useSceneStore((s) => s.selectedObjId);
   const setSelected = useSceneStore((s) => s.setSelected);
   const createObjectOfType = useSceneStore((s) => s.createObjectOfType);
+  // Existing spine action — the HUD routes through it; no store changes.
+  const updateCamera = useSceneStore((s) => s.updateCamera);
 
   const { worldSize } = scene;
   const selected = selectedObject({ selectedObjId, scene });
+
+  // The imported battlefield map (data: URL asset) rendered under everything.
+  const mapAssetId = useSceneStore((s) => s.scene.mapAssetId);
+  const mapImg = useMapImage(
+    mapAssetId ? scene.assets[mapAssetId]?.src : undefined
+  );
 
   // ---- Camera (world-space camera, PRD §87) ----
   // The camera viewport is the Stage's own pixel space (Konva reports pointer
@@ -90,6 +84,12 @@ export function CanvasStage() {
   // world; wheel + background-drag handlers below drive `zoomAt`/`panBy`.
   const vp = { width: worldSize.w, height: worldSize.h };
   const { stageProps, panBy, zoomAt } = useCamera(vp);
+  const viewCenter = { x: worldSize.w / 2, y: worldSize.h / 2 };
+
+  // ---- HUD actions (same clamped math as wheel-zoom; MIN/MAX unchanged) ----
+  const zoomStepIn = (): void => zoomAt(ZOOM_STEP, viewCenter);
+  const zoomStepOut = (): void => zoomAt(1 / ZOOM_STEP, viewCenter);
+  const resetView = (): void => updateCamera(() => resetCamera());
 
   const panMovedRef = useRef(false);
   const panHandlers = useCameraPan({
@@ -99,6 +99,18 @@ export function CanvasStage() {
       panBy(dx, dy);
     },
   });
+
+  /** True when this event hit the EMPTY canvas rather than an object. */
+  const isBackgroundTarget = (
+    e: KonvaEventObject<MouseEvent | WheelEvent>
+  ): boolean => e.target === e.target.getStage();
+
+  // Double-click empty canvas = reset view. Skipped right after a pan so a
+  // drag ending in a quick second press can't teleport the view.
+  const handleStageDblClick = (e: KonvaEventObject<MouseEvent>): void => {
+    if (!isBackgroundTarget(e) || panMovedRef.current) return;
+    resetView();
+  };
 
   const handleStageClick = (e: KonvaEventObject<MouseEvent>) => {
     // A background pan ends with a click on the empty canvas — don't punish
@@ -117,7 +129,10 @@ export function CanvasStage() {
     e.evt.preventDefault();
     const sp = stageRef.current?.getPointerPosition();
     if (!sp) return;
-    zoomAt(wheelDeltaToFactor(e.evt.deltaY), sp);
+    // Firefox reports wheel deltas in LINE units — normalize to pixels first
+    // or one notch would zoom ~0.45% (effectively broken).
+    const dyPx = normalizeWheelDelta(e.evt.deltaY, e.evt.deltaMode);
+    zoomAt(wheelDeltaToFactor(dyPx), sp);
   };
 
   const handleDragOver = (e: ReactDragEvent<HTMLDivElement>) => {
@@ -131,7 +146,29 @@ export function CanvasStage() {
     if (type !== 'shape' && type !== 'marker') return;
     // Drop point → stage pixels → world coords through the CURRENT camera,
     // so objects land under the cursor at any pan/zoom.
-    const sp = clientToStage(stageRef.current, e.clientX, e.clientY);
+    //
+    // MEASURE THE CONTENT ELEMENT, not container(): Konva's container div is
+    // a plain block whose layout width follows the CSS wrapper (~958px here),
+    // so under the scale(0.5) preview its visual rect gives a wrong
+    // stage/visual ratio for X. `.konvajs-content` carries the true
+    // stage-sized layout box — the same element Konva's own pointer math
+    // uses. (Audit finding: objects landed at viewport centre-X regardless
+    // of cursor before this fix.)
+    const stage = stageRef.current;
+    const container = stage?.container();
+    if (!stage || !container) return;
+    const content =
+      (stage as unknown as { content?: HTMLDivElement }).content ??
+      container.querySelector<HTMLDivElement>(':scope > .konvajs-content') ??
+      container;
+    const rect = content.getBoundingClientRect();
+    const sp = clientToStagePoint(
+      rect,
+      stage.width(),
+      stage.height(),
+      e.clientX,
+      e.clientY,
+    );
     const world = screenToWorld(sp, scene.camera, vp);
     const id = createObjectOfType(type, { x: world.x, y: world.y });
     setSelected(id);
@@ -173,6 +210,8 @@ export function CanvasStage() {
           {...stageProps}
           onClick={handleStageClick}
           onTap={handleStageClick}
+          onDblClick={handleStageDblClick}
+          onDblTap={handleStageDblClick}
           onWheel={handleWheel}
           onMouseDown={(e) => {
             // Only empty-canvas presses start a pan; object drags stay object
@@ -183,9 +222,18 @@ export function CanvasStage() {
           onMouseUp={() => panHandlers.onPointerUp()}
           onMouseLeave={() => panHandlers.onPointerUp()}
         >
-          {/* Faint world-bounds + grid (non-interactive). */}
+          {/* World background, battlefield map, then grid (non-interactive). */}
           <Layer listening={false}>
             <Rect x={0} y={0} width={worldSize.w} height={worldSize.h} fill="#0b1020" />
+            {mapImg && (
+              <KonvaImage
+                image={mapImg}
+                x={0}
+                y={0}
+                width={worldSize.w}
+                height={worldSize.h}
+              />
+            )}
             {verticalLines}
             {horizontalLines}
             <Rect
@@ -218,6 +266,14 @@ export function CanvasStage() {
           </Layer>
         </Stage>
       </div>
+
+      {/* Camera affordances float above the canvas. Mounted OUTSIDE the
+          scale(0.5) proxy wrapper so they keep natural DOM sizing. */}
+      <CameraHud
+        onZoomIn={zoomStepIn}
+        onZoomOut={zoomStepOut}
+        onResetView={resetView}
+      />
     </div>
   );
 }

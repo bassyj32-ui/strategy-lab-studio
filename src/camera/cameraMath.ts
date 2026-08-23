@@ -43,6 +43,18 @@ export function clampZoom(zoom: number): number {
   return zoom;
 }
 
+/** Fixed multiplicative step for the HUD Zoom In / Zoom Out buttons. */
+export const ZOOM_STEP = 1.25;
+
+/**
+ * The default view: world origin at the viewport centre, 100% zoom.
+ * Used by "Reset View" and double-click-on-empty-canvas. Rotation is dropped
+ * (MVP-1 freezes camera rotation at 0/undefined anyway).
+ */
+export function resetCamera(): CameraState {
+  return { x: 0, y: 0, zoom: 1 };
+}
+
 /**
  * Convert a WORLD point P into a SCREEN point (pixels relative to the
  * top-left of the viewport).

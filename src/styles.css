@@ -421,3 +421,100 @@ h3 {
     animation-duration: 0.01ms !important;
   }
 }
+
+/* --- Camera HUD (zoom readout / zoom buttons / gesture hint chip) --- */
+.camera-hud {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  background: rgba(11, 16, 32, 0.88);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+}
+.camera-hud-btn {
+  padding: 2px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.camera-hud-zoom {
+  min-width: 44px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--signal);
+}
+.camera-hud-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--edge);
+}
+.camera-hud-chip {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px 3px 10px;
+  background: rgba(11, 16, 32, 0.82);
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--dim);
+  white-space: nowrap;
+  pointer-events: auto;
+}
+.camera-hud-chip-close {
+  padding: 0 5px;
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--dim);
+}
+
+/* ======================================================================
+   .timeline-ux — timeline usability pass
+   Frame-step transport buttons, tabular-numeral readouts, keyboard hint
+   row, and visible focus rings. No animations added here, so the global
+   prefers-reduced-motion block above is honored by construction.
+   ====================================================================== */
+.timecode,
+.playback-meta {
+  font-variant-numeric: tabular-nums;
+}
+.playback-meta {
+  color: var(--dim);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.step-btn {
+  min-width: 26px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+.timeline-panel button:focus-visible,
+.timeline-panel [role='slider']:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 1px;
+}
+.timeline-hints {
+  margin-top: 4px;
+  color: var(--dim);
+  font-size: 11px;
+  user-select: none;
+}
+.timeline-hints kbd {
+  padding: 0 4px;
+  border: 1px solid var(--edge);
+  border-radius: 3px;
+  font-size: 10px;
+  font-family: inherit;
+  background: var(--field);
+}

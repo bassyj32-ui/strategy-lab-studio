@@ -8,7 +8,9 @@ export type { CameraState, Vec2 } from '../scene/types';
 export {
   MIN_ZOOM,
   MAX_ZOOM,
+  ZOOM_STEP,
   clampZoom,
+  resetCamera,
   worldToScreen,
   screenToWorld,
   panCamera,
@@ -22,4 +24,15 @@ export {
 export { useCamera, type CameraBinding } from './useCamera';
 
 // Interaction helpers (Konva-free).
-export { wheelDeltaToFactor, useCameraPan, type CameraPanHandlers } from './cameraInteractions';
+export {
+  DELTA_PIXEL,
+  DELTA_LINE,
+  DELTA_PAGE,
+  LINE_HEIGHT_PX,
+  PAGE_HEIGHT_PX,
+  normalizeWheelDelta,
+  wheelDeltaToFactor,
+  clientToStagePoint,
+  useCameraPan,
+  type CameraPanHandlers,
+} from './cameraInteractions';

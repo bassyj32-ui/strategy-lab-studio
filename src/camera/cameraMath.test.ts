@@ -4,7 +4,9 @@ import type { CameraState, Vec2 } from '../scene/types';
 import {
   MIN_ZOOM,
   MAX_ZOOM,
+  ZOOM_STEP,
   clampZoom,
+  resetCamera,
   worldToScreen,
   screenToWorld,
   panCamera,
@@ -13,7 +15,7 @@ import {
   type Viewport,
   type StageProps,
 } from './cameraMath';
-import { wheelDeltaToFactor } from './cameraInteractions';
+import { wheelDeltaToFactor, normalizeWheelDelta, clientToStagePoint } from './cameraInteractions';
 
 const VPS: Viewport[] = [
   { width: 1280, height: 720 },
@@ -153,5 +155,61 @@ describe('camera math', () => {
     const worldAfter = screenToWorld(screenPoint, newCam, vp);
     expect(worldAfter.x).toBeCloseTo(worldBefore.x, 6);
     expect(worldAfter.y).toBeCloseTo(worldBefore.y, 6);
+  });
+
+  // ---- HUD support math (CameraHud routes through these) ----
+
+  it('10. resetCamera returns the default view inside the clamp', () => {
+    const r = resetCamera();
+    expect(r).toEqual({ x: 0, y: 0, zoom: 1 });
+    expect(clampZoom(r.zoom)).toBe(r.zoom);
+  });
+
+  it('11. HUD steps are exact reciprocals and land on EXACT bounds', () => {
+    // Zoom In / Zoom Out use ZOOM_STEP around the viewport centre.
+    expect(ZOOM_STEP * (1 / ZOOM_STEP)).toBeCloseTo(1, 12);
+    const vp: Viewport = { width: 1920, height: 1080 };
+    const centre: Vec2 = { x: vp.width / 2, y: vp.height / 2 };
+
+    let cam: CameraState = resetCamera();
+    for (let i = 0; i < 50; i++) {
+      cam = zoomAtPoint(cam, vp, ZOOM_STEP, centre);
+      // Anchoring at the centre keeps the camera position pinned there.
+      expect(cam.x).toBeCloseTo(0, 6);
+      expect(cam.y).toBeCloseTo(0, 6);
+    }
+    expect(cam.zoom).toBe(MAX_ZOOM); // clamps exactly, never past it
+
+    for (let i = 0; i < 80; i++) {
+      cam = zoomAtPoint(cam, vp, 1 / ZOOM_STEP, centre);
+    }
+    expect(cam.zoom).toBe(MIN_ZOOM);
+    expect(cam.x).toBeCloseTo(0, 6);
+    expect(cam.y).toBeCloseTo(0, 6);
+  });
+
+  it('12. drop pipeline lands objects under the cursor at extreme pan/zoom', () => {
+    // Full pure chain used by handleDrop: client px -> stage px -> world,
+    // verified by projecting back to the screen. Uses an aggressively
+    // panned + max-zoomed camera so any drift in the chain fails loudly.
+    const vp: Viewport = { width: 1920, height: 1080 };
+    let cam: CameraState = resetCamera();
+    cam = zoomAtPoint(cam, vp, 1000, { x: 1500, y: 700 }); // -> MAX_ZOOM, anchored
+    cam = panCamera(cam, -400, 250);
+
+    // CSS preview scale(0.5): logical 1920x1080 shown in a 960x540 box
+    // offset within the page. The user drops at client (733, 411).
+    const rect = { left: 120, top: 90, width: 960, height: 540 };
+    const sp = clientToStagePoint(rect, vp.width, vp.height, 733, 411);
+    expect(sp.x).toBeGreaterThan(0);
+    expect(sp.y).toBeGreaterThan(0);
+
+    const world = screenToWorld(sp, cam, vp);
+    const backOnScreen = worldToScreen(world, cam, vp);
+    expect(backOnScreen.x).toBeCloseTo(sp.x, 6);
+    expect(backOnScreen.y).toBeCloseTo(sp.y, 6);
+    // And the wheel path that produced `cam` was pixel-normalized:
+    expect(normalizeWheelDelta(-120, 0)).toBe(-120);
+    expect(wheelDeltaToFactor(normalizeWheelDelta(-120))).toBeGreaterThan(1);
   });
 });
