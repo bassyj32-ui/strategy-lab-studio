@@ -3,6 +3,7 @@ import { CanvasStage } from './canvas/CanvasStage';
 import { Toolbar } from './ui/Toolbar';
 import { Inspector } from './ui/Inspector';
 import { LayersPanel } from './ui/LayersPanel';
+import { ScenesPanel } from './ui/ScenesPanel';
 import { PreviewPanel } from './ui/PreviewPanel';
 import { TimelinePanel } from './timeline';
 import { useSceneStore } from './scene/store';
@@ -28,6 +29,7 @@ export function App() {
       <div className="app-main">
         <div className="app-side left">
           <Toolbar />
+          <ScenesPanel />
         </div>
         <div className="canvas-center">
           <CanvasStage />

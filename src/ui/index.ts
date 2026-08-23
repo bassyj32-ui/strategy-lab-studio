@@ -2,3 +2,4 @@
 export { Toolbar } from './Toolbar';
 export { Inspector } from './Inspector';
 export { LayersPanel } from './LayersPanel';
+export { ScenesPanel } from './ScenesPanel';
