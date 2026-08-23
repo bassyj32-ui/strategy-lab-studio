@@ -13,12 +13,27 @@ export interface CreateObjectOpts {
   /** Initial world position (object center). Defaults to (0, 0). */
   x?: number;
   y?: number;
+  /**
+   * Initial rotation in DEGREES (object-transform convention in this codebase;
+   * only CameraState is radians-canonical — see render/draw.ts conversion).
+   */
+  rotation?: number;
+  /** ARROW-ONLY: local-space shaft length. Defaults to DEFAULT_ARROW_LENGTH. */
+  length?: number;
+  /** ARROW-ONLY: explicit stroke color override. */
+  color?: string;
 }
+
+/** Default arrow shaft length in world units (tail → tip). */
+export const DEFAULT_ARROW_LENGTH = 120;
+/** Default arrow stroke color — Signals Console amber. */
+export const DEFAULT_ARROW_COLOR = '#f5a83c';
 
 function withTransform(opts: CreateObjectOpts): Transform {
   const t = defaultTransform();
   if (opts.x !== undefined) t.x = opts.x;
   if (opts.y !== undefined) t.y = opts.y;
+  if (opts.rotation !== undefined) t.rotation = opts.rotation;
   return t;
 }
 
@@ -58,6 +73,23 @@ export function createUnit(opts: CreateObjectOpts): SceneObject {
   };
 }
 
+/**
+ * Attack/movement arrow (MVP-2, owner-approved unfreeze). Tail sits at the
+ * object origin; the tip lies `length` local units along +X, so transform
+ * rotation/scale orient and size the whole arrow. Keyframes work unchanged.
+ */
+export function createArrow(opts: CreateObjectOpts): SceneObject {
+  return {
+    id: opts.id,
+    type: 'arrow',
+    assetId: opts.assetId,
+    transform: withTransform(opts),
+    layerId: opts.layerId,
+    length: opts.length ?? DEFAULT_ARROW_LENGTH,
+    color: opts.color ?? DEFAULT_ARROW_COLOR,
+  };
+}
+
 export function createSceneObject(
   type: SceneObjectType,
   opts: CreateObjectOpts
@@ -69,5 +101,7 @@ export function createSceneObject(
       return createMarker(opts);
     case 'unit':
       return createUnit(opts);
+    case 'arrow':
+      return createArrow(opts);
   }
 }

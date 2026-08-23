@@ -146,11 +146,12 @@ describe('camera <-> store integration (PRD §87)', () => {
 
   it('4. pan/zoom write Scene.camera WITHOUT creating undo entries', () => {
     const s = useSceneStore.getState();
+    const x0 = s.scene.camera.x;
     act(() => s.updateCamera((cam) => ({ ...cam, zoom: 2.5 })));
     act(() => s.updateCamera((cam) => ({ ...cam, x: cam.x - 120 })));
     const state = useSceneStore.getState();
     expect(state.scene.camera.zoom).toBe(2.5);
-    expect(state.scene.camera.x).toBe(-120);
+    expect(state.scene.camera.x).toBe(x0 - 120);
     // Navigation state is not content: no snapshots pushed, nothing to undo.
     expect(state.past).toHaveLength(0);
     expect(state.future).toHaveLength(0);

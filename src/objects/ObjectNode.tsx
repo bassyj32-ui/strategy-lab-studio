@@ -1,4 +1,4 @@
-import { Group, Rect, Ellipse, Text } from 'react-konva';
+import { Group, Rect, Ellipse, Text, Line } from 'react-konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import type { ObjId, SceneObject } from '../scene/types';
 import { useSceneStore } from '../scene/store';
@@ -9,6 +9,10 @@ import { selectObjectUnified } from '../timeline/selection';
 // Base sizes in world units (object center sits at transform.x / transform.y).
 export const SHAPE_SIZE = 80;
 export const MARKER_RADIUS = 36;
+// Arrow geometry in LOCAL world units (tail at local origin, tip at +X).
+export const ARROW_SHAFT_WIDTH = 6;
+export const ARROWHEAD_LENGTH = 18;
+export const ARROWHEAD_HALF_WIDTH = 11;
 
 interface ObjectNodeProps {
   obj: SceneObject;
@@ -87,6 +91,40 @@ export function ObjectNode({ obj, onSelect }: ObjectNodeProps) {
     return (
       <Group {...common}>
         <Ellipse radiusX={MARKER_RADIUS} radiusY={MARKER_RADIUS} fill="#ef4444" />
+      </Group>
+    );
+  }
+
+  // Attack/movement arrow (MVP-2). Unlike the other kinds, transform.x/y is
+  // the TAIL anchor (rotation pivots the whole arrow around where it starts);
+  // the tip sits `length` local units along +X.
+  if (obj.type === 'arrow') {
+    const len = obj.length ?? 120;
+    const color = obj.color ?? '#f5a83c';
+    return (
+      <Group {...common}>
+        <Line
+          points={[0, 0, len, 0]}
+          stroke={color}
+          strokeWidth={ARROW_SHAFT_WIDTH}
+          lineCap="round"
+          hitStrokeWidth={24}
+        />
+        <Line
+          points={[
+            len,
+            0,
+            len - ARROWHEAD_LENGTH,
+            -ARROWHEAD_HALF_WIDTH,
+            len - ARROWHEAD_LENGTH,
+            ARROWHEAD_HALF_WIDTH,
+          ]}
+          closed
+          fill={color}
+          stroke={color}
+          strokeWidth={1}
+          hitStrokeWidth={24}
+        />
       </Group>
     );
   }

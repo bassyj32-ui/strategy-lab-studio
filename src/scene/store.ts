@@ -58,7 +58,15 @@ export interface SceneState {
   // ---- Object creation / editing ----
   createObjectOfType: (
     type: SceneObjectType,
-    opts?: { assetId?: AssetId; x?: number; y?: number }
+    opts?: {
+      assetId?: AssetId;
+      x?: number;
+      y?: number;
+      /** ARROW-ONLY. */
+      length?: number;
+      /** ARROW-ONLY. */
+      color?: string;
+    }
   ) => ObjId;
   addObject: (obj: SceneObject) => void;
   updateTransform: (id: ObjId, partial: Partial<Transform>) => void;
@@ -177,6 +185,8 @@ export const useSceneStore = create<SceneState>()(
           assetId: opts?.assetId,
           x: opts?.x,
           y: opts?.y,
+          length: opts?.length,
+          color: opts?.color,
         });
       });
       return id;

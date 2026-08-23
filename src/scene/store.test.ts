@@ -32,6 +32,25 @@ describe('scene store', () => {
     expect(s().scene.objects[id].transform.y).toBe(456);
   });
 
+  it("createObjectOfType('arrow') persists arrow-only fields and is undoable", () => {
+    const id = s().createObjectOfType('arrow', {
+      x: 10,
+      y: 20,
+      length: 240,
+      color: '#ef4444',
+    });
+    const obj = s().scene.objects[id];
+    expect(obj.type).toBe('arrow');
+    expect(obj.length).toBe(240);
+    expect(obj.color).toBe('#ef4444');
+    expect(id.startsWith('arrow-')).toBe(true);
+
+    s().undo();
+    expect(s().scene.objects[id]).toBeUndefined();
+    s().redo();
+    expect(s().scene.objects[id]?.length).toBe(240);
+  });
+
   it('updateTransform performs a PARTIAL merge (keeps unspecified fields)', () => {
     const id = s().createObjectOfType('shape');
     s().updateTransform(id, { x: 50 });

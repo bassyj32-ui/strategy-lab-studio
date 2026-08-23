@@ -26,7 +26,10 @@ export function createDefaultScene(id = 'scene-0'): Scene {
       },
     ],
     keyframes: {},
-    camera: { x: 0, y: 0, zoom: 1 },
+    // Default view centres the WORLD (positive quadrant) in the viewport —
+    // cam.{x,y} is the world point shown at viewport centre (cameraMath §1),
+    // so {0,0} would push the whole map off to the bottom-right.
+    camera: { x: DEFAULT_WORLD.w / 2, y: DEFAULT_WORLD.h / 2, zoom: 1 },
     timeline: { ...DEFAULT_TIMELINE },
   };
 }

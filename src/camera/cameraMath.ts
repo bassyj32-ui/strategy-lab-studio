@@ -47,12 +47,14 @@ export function clampZoom(zoom: number): number {
 export const ZOOM_STEP = 1.25;
 
 /**
- * The default view: world origin at the viewport centre, 100% zoom.
- * Used by "Reset View" and double-click-on-empty-canvas. Rotation is dropped
- * (MVP-1 freezes camera rotation at 0/undefined anyway).
+ * The neutral reset view: 100% zoom, no rotation. Optionally recentres on a
+ * world point — callers managing a positive-quadrant world should pass the
+ * WORLD CENTRE so the whole map fills the viewport (matching
+ * createDefaultScene). No-arg form keeps the historical origin-centred view.
  */
-export function resetCamera(): CameraState {
-  return { x: 0, y: 0, zoom: 1 };
+export function resetCamera(center?: Vec2): CameraState {
+  if (!center) return { x: 0, y: 0, zoom: 1 };
+  return { x: center.x, y: center.y, zoom: 1 };
 }
 
 /**

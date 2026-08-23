@@ -14,7 +14,15 @@ import {
   objectsForLayer,
   selectedObject,
 } from '../scene/selectors';
-import { ObjectNode, SHAPE_SIZE, MARKER_RADIUS } from '../objects/ObjectNode';
+import {
+  ObjectNode,
+  SHAPE_SIZE,
+  MARKER_RADIUS,
+  ARROW_SHAFT_WIDTH,
+  ARROWHEAD_HALF_WIDTH,
+  ARROWHEAD_LENGTH,
+} from '../objects/ObjectNode';
+import { DEFAULT_ARROW_LENGTH } from '../objects/factory';
 import type { SceneObject, SceneObjectType } from '../scene/types';
 import {
   useCamera,
@@ -36,6 +44,27 @@ const GRID_STEP = 120;
 
 function SelectionOutline({ obj }: { obj: SceneObject }) {
   const { x, y, rotation, scale } = obj.transform;
+  // Arrows are TAIL-anchored (tip at local (length, 0)); every other kind is
+  // center-anchored. The outline must match each convention.
+  if (obj.type === 'arrow') {
+    const len = obj.length ?? DEFAULT_ARROW_LENGTH;
+    const padY = ARROWHEAD_HALF_WIDTH + 4;
+    return (
+      <Group x={x} y={y} rotation={rotation} scaleX={scale} scaleY={scale}>
+        <Rect
+          x={-ARROW_SHAFT_WIDTH}
+          y={-padY}
+          width={len + ARROWHEAD_LENGTH + ARROW_SHAFT_WIDTH}
+          height={padY * 2}
+          stroke="#f5a83c"
+          strokeWidth={2}
+          strokeScaleEnabled={false}
+          fillEnabled={false}
+          listening={false}
+        />
+      </Group>
+    );
+  }
   let w = SHAPE_SIZE;
   let h = SHAPE_SIZE;
   if (obj.type === 'marker') {
@@ -89,7 +118,10 @@ export function CanvasStage() {
   // ---- HUD actions (same clamped math as wheel-zoom; MIN/MAX unchanged) ----
   const zoomStepIn = (): void => zoomAt(ZOOM_STEP, viewCenter);
   const zoomStepOut = (): void => zoomAt(1 / ZOOM_STEP, viewCenter);
-  const resetView = (): void => updateCamera(() => resetCamera());
+  const resetView = (): void =>
+    updateCamera(() =>
+      resetCamera({ x: worldSize.w / 2, y: worldSize.h / 2 })
+    );
 
   const panMovedRef = useRef(false);
   const panHandlers = useCameraPan({

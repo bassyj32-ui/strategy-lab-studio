@@ -47,7 +47,7 @@ export interface Transform {
   opacity: number;
 }
 
-export type SceneObjectType = 'unit' | 'shape' | 'marker';
+export type SceneObjectType = 'unit' | 'shape' | 'marker' | 'arrow';
 
 export interface SceneObject {
   id: ObjId;
@@ -55,6 +55,14 @@ export interface SceneObject {
   assetId?: AssetId;
   transform: Transform;
   layerId: LayerId;
+  /**
+   * ARROW-ONLY: shaft length in LOCAL units (tail at local origin, tip at
+   * (length, 0)). Placement/orientation live entirely in `transform`, so
+   * arrows animate through the standard keyframe machinery like any object.
+   */
+  length?: number;
+  /** ARROW-ONLY: explicit stroke color; renderers fall back to their default. */
+  color?: string;
 }
 
 export interface Keyframe {

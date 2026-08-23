@@ -15,6 +15,6 @@ describe('createDefaultScene', () => {
     expect(scene.objects).toEqual({});
     expect(scene.assets).toEqual({});
     expect(scene.layers).toHaveLength(1);
-    expect(scene.camera).toEqual({ x: 0, y: 0, zoom: 1 });
+    expect(scene.camera).toEqual({ x: 960, y: 540, zoom: 1 });
   });
 });

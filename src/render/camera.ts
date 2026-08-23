@@ -30,8 +30,10 @@ export function applyCamera(
   const ox = world.x - camera.x;
   const oy = world.y - camera.y;
 
-  // Rotate the offset by -camera.rotation (view rotation).
-  const rad = (-camRot * Math.PI) / 180;
+  // Rotate the offset by -camera.rotation (view rotation). Camera rotation is
+  // RADIANS-canonical (scene/types.ts) — no degree conversion. (Historical
+  // bug: this converted as if degrees; dormant while rotation stays 0.)
+  const rad = -camRot;
   const cos = Math.cos(rad);
   const sin = Math.sin(rad);
   const rx = ox * cos - oy * sin;

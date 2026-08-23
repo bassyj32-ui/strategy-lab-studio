@@ -115,6 +115,26 @@ export function drawScene(
         const w = (asset?.width ?? img.width) * screen.scale;
         const h = (asset?.height ?? img.height) * screen.scale;
         ctx.drawImage(img, -w / 2, -h / 2, w, h);
+      } else if (obj.type === 'arrow') {
+        // MVP-2 arrow (owner-approved). Tail at local origin, tip along +X —
+        // same local geometry as the Konva door. Sizes scale with the camera
+        // so world-space thickness stays consistent at any zoom.
+        const len = (obj.length ?? 120) * screen.scale;
+        const s = screen.scale;
+        ctx.strokeStyle = obj.color ?? '#f5a83c';
+        ctx.fillStyle = obj.color ?? '#f5a83c';
+        ctx.lineWidth = 6 * s;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(len, 0);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(len, 0);
+        ctx.lineTo(len - 18 * s, -11 * s);
+        ctx.lineTo(len - 18 * s, 11 * s);
+        ctx.closePath();
+        ctx.fill();
       } else {
         const size = PLACEHOLDER_SIZE * screen.scale;
         ctx.fillStyle = PLACEHOLDER_COLORS[obj.type] ?? '#888888';
