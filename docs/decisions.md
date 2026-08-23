@@ -4,6 +4,37 @@
 > reason. When in doubt, this log is the authority on *why* something is the
 > way it is. New decisions go at the TOP (newest first).
 
+## 2026-08-23 — Wave-2 UX integration (owner test-drive feedback) + MVP-2 arrows unfrozen
+
+Scope: three parallel builder sessions (selection sync, timeline usability,
+camera clarity) integrated on the shared working tree.
+
+- **Unified object selection:** the scene store (`selectedObjId`) and the
+  timeline selection store are kept in sync via `initSelectionSync()` (one-way
+  mirror scene → timeline) plus unified select helpers used by `ObjectNode`
+  (single canvas choke point) and palette click-to-place. Fixes two reported
+  dead-ends: placing a unit left nothing selected, and keyframe controls only
+  enabled from timeline-track clicks.
+- **Timeline usability:** frame stepping (`stepFrames`/`seekStart`/`seekEnd`),
+  panel-scoped keyboard transport (Space / ←→ / Home / End, safe around text
+  inputs), fps·duration readout beside the timecode, and a coaching empty
+  state naming the keyframing flow.
+- **Camera clarity + correctness:** `CameraHud` (zoom % readout, −/+/Reset
+  routed through the same clamped `zoomAtPoint`), dismissible navigation hint
+  chip (localStorage-persistent), double-click empty canvas = reset view.
+  Audit fixes: drop coordinates were measured against the CSS wrapper instead
+  of `.konvajs-content`, so objects snapped toward viewport centre at any
+  zoom (now cursor-exact); Firefox line-mode wheel deltas are normalized
+  (`normalizeWheelDelta`) so zoom speed matches other browsers.
+- **Imported maps render on the editing canvas:** `canvas/useMapImage.ts` +
+  Konva Image layer. Previously maps loaded only inside the Remotion preview,
+  which made Import Map look broken to users even though the store worked.
+- **SCOPE CHANGE — owner-approved: MVP-2 arrow annotations UNFROZEN.**
+  The P1–P3 freeze (PRD §100, §112) is relaxed for draw-on-map arrow
+  annotations that track unit transforms, per explicit owner instruction.
+  The spine extension (arrow object type) is integrator-owned. This entry is
+  the authority on why the freeze no longer covers this one feature.
+
 ## 2026-08-22 — Integration pass (all six module sessions merged)
 
 Scope: cross-session integration on the shared working tree — camera
