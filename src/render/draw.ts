@@ -5,6 +5,13 @@ import type { AssetImageMap, ScreenTransform } from './types';
 import { getObjectWorldTransformAtTime } from '../timeline/selectors';
 import { getCameraAtTime } from '../timeline/cameraTrack';
 import { applyCamera } from './camera';
+import {
+  FACTION_COLORS,
+  CONFIDENCE_META,
+  annotationRingRadius,
+  labelOffsetY,
+  badgeOffsetY,
+} from '../objects/annotations';
 
 const BACKGROUND = '#0b0e14';
 
@@ -162,6 +169,10 @@ export function drawScene(
       ctx.rotate((screen.rotation * Math.PI) / 180);
 
       const img = obj.assetId ? images[obj.assetId] : null;
+      // Annotation geometry (P2 §36/§37) is computed in LOCAL units then
+      // scaled to screen so both render doors agree.
+      const ringR =
+        annotationRingRadius(obj, asset ?? undefined) * screen.scale;
       if (img) {
         const w = (asset?.width ?? img.width) * screen.scale;
         const h = (asset?.height ?? img.height) * screen.scale;
@@ -191,7 +202,56 @@ export function drawScene(
         ctx.fillStyle = PLACEHOLDER_COLORS[obj.type] ?? '#888888';
         ctx.fillRect(-size / 2, -size / 2, size, size);
       }
+
+      // Faction ring (P2 §36): a circle is rotation-invariant, so it is safe
+      // to stroke inside the rotated frame. Restrained: 3px world-scaled
+      // stroke, no fill.
+      if (obj.faction) {
+        ctx.beginPath();
+        ctx.arc(0, 0, ringR, 0, Math.PI * 2);
+        ctx.strokeStyle = FACTION_COLORS[obj.faction];
+        ctx.lineWidth = 3 * screen.scale;
+        ctx.stroke();
+      }
       ctx.restore();
+
+      // Name label + confidence badge are painted in SCREEN space AFTER
+      // restore so text stays horizontal no matter how the object (or its
+      // group) is rotated. globalAlpha is re-applied for opacity parity.
+      if ((obj.label || obj.confidence) && screen.opacity > 0) {
+        ctx.globalAlpha = screen.opacity;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        if (obj.label) {
+          const fs = Math.max(12, 16 * screen.scale);
+          ctx.font = `600 ${fs}px system-ui, sans-serif`;
+          ctx.fillStyle = 'rgba(11,14,20,0.75)';
+          const metrics = ctx.measureText(obj.label);
+          const padX = 8 * screen.scale;
+          const chipH = fs + 8 * screen.scale;
+          const chipY =
+            screen.y + labelOffsetY(ringR / screen.scale) * screen.scale;
+          ctx.fillRect(
+            screen.x - metrics.width / 2 - padX,
+            chipY - chipH / 2,
+            metrics.width + padX * 2,
+            chipH
+          );
+          ctx.fillStyle = '#e5e7eb';
+          ctx.fillText(obj.label, screen.x, chipY);
+        }
+        if (obj.confidence) {
+          const meta = CONFIDENCE_META[obj.confidence];
+          const fs = Math.max(9, 11 * screen.scale);
+          ctx.font = `700 ${fs}px system-ui, sans-serif`;
+          ctx.fillStyle = meta.color;
+          ctx.fillText(
+            meta.text,
+            screen.x,
+            screen.y + badgeOffsetY(ringR / screen.scale) * screen.scale
+          );
+        }
+      }
     }
   }
 }

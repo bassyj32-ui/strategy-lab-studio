@@ -1,8 +1,16 @@
 import { Group, Rect, Ellipse, Text, Line, Image as KonvaImage } from 'react-konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
+import type { ReactNode } from 'react';
 import type { ObjId, SceneObject, Transform } from '../scene/types';
 import { useSceneStore } from '../scene/store';
 import { worldPointToLocal } from './groups';
+import {
+  FACTION_COLORS,
+  CONFIDENCE_META,
+  annotationRingRadius,
+  labelOffsetY,
+  badgeOffsetY,
+} from './annotations';
 import { useMapImage } from '../canvas/useMapImage';
 // Unified selection: canvas clicks must reach BOTH the scene store (canvas
 // highlight + Inspector) and the timeline selection store (KeyframeEditor).
@@ -125,55 +133,39 @@ export function ObjectNode({
       : {}),
   };
 
-  // Image-backed object: paint the asset image centred on the transform
-  // (same precedence as the Remotion path — the image wins over vector
-  // placeholders). Local units: the Group's scale already applies camera/
-  // display scaling, so width/height stay in world units.
+  // Body selection mirrors the Remotion path precedence: asset image wins
+  // over vector placeholders. Local units: the Group's scale already applies
+  // camera/display scaling.
+  let body: ReactNode;
   if (img && asset) {
-    return (
-      <Group {...common}>
-        <KonvaImage
-          image={img}
-          width={asset.width}
-          height={asset.height}
-          offsetX={asset.width / 2}
-          offsetY={asset.height / 2}
-        />
-      </Group>
+    body = (
+      <KonvaImage
+        image={img}
+        width={asset.width}
+        height={asset.height}
+        offsetX={asset.width / 2}
+        offsetY={asset.height / 2}
+      />
     );
-  }
-
-  if (obj.type === 'shape') {
-    return (
-      <Group {...common}>
-        <Rect
-          x={-SHAPE_SIZE / 2}
-          y={-SHAPE_SIZE / 2}
-          width={SHAPE_SIZE}
-          height={SHAPE_SIZE}
-          fill="#3b82f6"
-          cornerRadius={4}
-        />
-      </Group>
+  } else if (obj.type === 'shape') {
+    body = (
+      <Rect
+        x={-SHAPE_SIZE / 2}
+        y={-SHAPE_SIZE / 2}
+        width={SHAPE_SIZE}
+        height={SHAPE_SIZE}
+        fill="#3b82f6"
+        cornerRadius={4}
+      />
     );
-  }
-
-  if (obj.type === 'marker') {
-    return (
-      <Group {...common}>
-        <Ellipse radiusX={MARKER_RADIUS} radiusY={MARKER_RADIUS} fill="#ef4444" />
-      </Group>
-    );
-  }
-
-  // Attack/movement arrow (MVP-2). Unlike the other kinds, transform.x/y is
-  // the TAIL anchor (rotation pivots the whole arrow around where it starts);
-  // the tip sits `length` local units along +X.
-  if (obj.type === 'arrow') {
+  } else if (obj.type === 'marker') {
+    body = <Ellipse radiusX={MARKER_RADIUS} radiusY={MARKER_RADIUS} fill="#ef4444" />;
+  } else if (obj.type === 'arrow') {
+    // Attack/movement arrow (MVP-2). Tail at local origin, tip along +X.
     const len = obj.length ?? 120;
     const color = obj.color ?? '#f5a83c';
-    return (
-      <Group {...common}>
+    body = (
+      <>
         <Line
           points={[0, 0, len, 0]}
           stroke={color}
@@ -196,32 +188,97 @@ export function ObjectNode({
           strokeWidth={1}
           hitStrokeWidth={24}
         />
-      </Group>
+      </>
+    );
+  } else {
+    // unit placeholder (reserved)
+    body = (
+      <>
+        <Rect
+          x={-SHAPE_SIZE / 2}
+          y={-SHAPE_SIZE / 2}
+          width={SHAPE_SIZE}
+          height={SHAPE_SIZE}
+          fill="#9ca3af"
+          cornerRadius={4}
+        />
+        <Text
+          text="U"
+          fontSize={28}
+          fill="#111827"
+          width={SHAPE_SIZE}
+          height={SHAPE_SIZE}
+          offsetX={SHAPE_SIZE / 2}
+          offsetY={SHAPE_SIZE / 2}
+          align="center"
+          verticalAlign="middle"
+        />
+      </>
     );
   }
 
-  // unit placeholder (reserved)
+  // Commander annotations (P2 §36/§37). Rendered INSIDE the transform group
+  // (so they inherit position/scale/opacity/shadow) but COUNTER-ROTATED so
+  // text stays readable at any object/group rotation — matching the export,
+  // which paints labels in unrotated screen space.
+  const ringR = annotationRingRadius(obj, asset ?? undefined);
+  const needsAnnotations = Boolean(obj.faction || obj.label || obj.confidence);
   return (
     <Group {...common}>
-      <Rect
-        x={-SHAPE_SIZE / 2}
-        y={-SHAPE_SIZE / 2}
-        width={SHAPE_SIZE}
-        height={SHAPE_SIZE}
-        fill="#9ca3af"
-        cornerRadius={4}
-      />
-      <Text
-        text="U"
-        fontSize={28}
-        fill="#111827"
-        width={SHAPE_SIZE}
-        height={SHAPE_SIZE}
-        offsetX={SHAPE_SIZE / 2}
-        offsetY={SHAPE_SIZE / 2}
-        align="center"
-        verticalAlign="middle"
-      />
+      {body}
+      {needsAnnotations && (
+        <Group listening={false} rotation={-world.rotation}>
+          {obj.faction && (
+            <Ellipse
+              radiusX={ringR}
+              radiusY={ringR}
+              stroke={FACTION_COLORS[obj.faction]}
+              strokeWidth={3}
+              fillEnabled={false}
+            />
+          )}
+          {obj.label && (
+            <>
+              <Rect
+                x={-160}
+                y={labelOffsetY(ringR) - 16}
+                width={320}
+                height={32}
+                fill="rgba(11,14,20,0.75)"
+                cornerRadius={6}
+              />
+              <Text
+                text={obj.label}
+                x={-160}
+                y={labelOffsetY(ringR) - 16}
+                width={320}
+                height={32}
+                fontSize={20}
+                fontStyle="600"
+                fill="#e5e7eb"
+                align="center"
+                verticalAlign="middle"
+                listening={false}
+              />
+            </>
+          )}
+          {obj.confidence && (
+            <Text
+              text={CONFIDENCE_META[obj.confidence].text}
+              x={-100}
+              y={badgeOffsetY(ringR) - 12}
+              width={200}
+              height={24}
+              fontSize={15}
+              fontStyle="700"
+              fill={CONFIDENCE_META[obj.confidence].color}
+              align="center"
+              verticalAlign="middle"
+              listening={false}
+            />
+          )}
+        </Group>
+      )}
     </Group>
   );
 }

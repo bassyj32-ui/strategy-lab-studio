@@ -21,6 +21,12 @@ class MockCtx {
   fillText = vi.fn();
   font = '';
   textBaseline = 'alphabetic';
+  textAlign = 'start';
+  strokeStyle = '';
+  lineWidth = 0;
+  arc = vi.fn();
+  stroke = vi.fn();
+  measureText = vi.fn((text: string) => ({ width: text.length * 7 }));
   drawImage = vi.fn();
   beginPath = vi.fn();
   closePath = vi.fn();
@@ -368,5 +374,62 @@ describe('drawScene: animated camera (camera track)', () => {
       ]);
     };
     expect(run()).toBe(run());
+  });
+});
+
+describe('commander annotations (faction ring / name label / confidence badge)', () => {
+  const annotated = (over: Record<string, unknown>): Scene => {
+    const scene = makeScene();
+    scene.objects.obj1.type = 'marker';
+    Object.assign(scene.objects.obj1, over);
+    return scene;
+  };
+
+  it('strokes a faction-colored ring around the object', () => {
+    const { ctx, raw } = makeCtx();
+    drawScene(ctx, annotated({ faction: 'red' }), 0, 30, { w: 1920, h: 1080 }, {});
+    expect(raw.arc).toHaveBeenCalled();
+    expect(raw.stroke).toHaveBeenCalled();
+    expect(raw.strokeStyle).toBe('#ef4444');
+  });
+
+  it('paints a dark chip + the commander label in screen space', () => {
+    const { ctx, raw } = makeCtx();
+    drawScene(
+      ctx,
+      annotated({ label: 'Alexander' }),
+      0,
+      30,
+      { w: 1920, h: 1080 },
+      {}
+    );
+    expect(raw.measureText).toHaveBeenCalledWith('Alexander');
+    expect(raw.fillText.mock.calls.some((c) => c[0] === 'Alexander')).toBe(true);
+    // Chip rect is wider than the measured text (padding on both sides).
+    const chip = raw.fillRect.mock.calls.find(
+      (c) => c[2] === 'Alexander'.length * 7 + 16
+    );
+    expect(chip).toBeTruthy();
+  });
+
+  it('paints the confidence badge text with its level color', () => {
+    const { ctx, raw } = makeCtx();
+    drawScene(
+      ctx,
+      annotated({ confidence: 'confirmed' }),
+      0,
+      30,
+      { w: 1920, h: 1080 },
+      {}
+    );
+    expect(raw.fillText.mock.calls.some((c) => c[0] === 'CONFIRMED')).toBe(true);
+    expect((raw as unknown as { fillStyle: string }).fillStyle).toBe('#22c55e');
+  });
+
+  it('draws NO annotation text when none of the fields are set', () => {
+    const { ctx, raw } = makeCtx();
+    drawScene(ctx, annotated({}), 0, 30, { w: 1920, h: 1080 }, {});
+    expect(raw.fillText).not.toHaveBeenCalled();
+    expect(raw.arc).not.toHaveBeenCalled();
   });
 });

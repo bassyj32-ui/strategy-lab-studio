@@ -93,7 +93,22 @@ export interface SceneObject {
   length?: number;
   /** ARROW-ONLY: explicit stroke color; renderers fall back to their default. */
   color?: string;
+  /**
+   * COMMANDER MARKER (P2 §36): display name painted UNDER the object by both
+   * render doors. Purely descriptive — never affects animation math.
+   */
+  label?: string;
+  /** COMMANDER MARKER: faction ring drawn AROUND the object (PRD §31 colors). */
+  faction?: Faction;
+  /**
+   * HISTORICAL CONFIDENCE (P2 §37): optional restrained badge ABOVE the
+   * object. Absent = no badge (fully opt-in per PRD).
+   */
+  confidence?: ConfidenceLevel;
 }
+
+/** Historical-confidence vocabulary (PRD §37). `undefined` = no badge. */
+export type ConfidenceLevel = 'confirmed' | 'probable' | 'disputed';
 
 /**
  * Bezier control-point OFFSET relative to the owning keyframe's transform

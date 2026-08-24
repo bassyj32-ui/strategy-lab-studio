@@ -232,12 +232,18 @@ export interface SceneState {
   addObject: (obj: SceneObject) => void;
   updateTransform: (id: ObjId, partial: Partial<Transform>) => void;
   /**
-   * Patch non-transform object props (ARROW length/color today). No snapshot:
-   * call within a begin/endInteraction edit session (Inspector fields do).
+   * Patch non-transform object props (ARROW length/color + COMMANDER
+   * label/faction/confidence). No snapshot: call within a begin/endInteraction
+   * edit session (Inspector fields do).
    */
   updateObjectProps: (
     id: ObjId,
-    props: Partial<Pick<SceneObject, 'length' | 'color'>>
+    props: Omit<
+      Partial<Pick<SceneObject, 'length' | 'color' | 'label' | 'faction' | 'confidence'>>,
+      'confidence'
+    > & {
+      confidence?: SceneObject['confidence'] | null;
+    }
   ) => void;
   /** Drag helper: nudge an object by a delta (no extra snapshot). */
   moveObjectBy: (id: ObjId, dx: number, dy: number) => void;
@@ -503,6 +509,18 @@ export const useSceneStore = create<SceneState>()(
         if (!obj) return;
         if (props.length !== undefined) obj.length = props.length;
         if (props.color !== undefined) obj.color = props.color;
+        // Commander annotations: empty string clears the label; confidence
+        // accepts undefined (badge removed) via an explicit null in props.
+        if (props.label !== undefined) {
+          const trimmed = props.label.trim();
+          if (trimmed) obj.label = trimmed;
+          else delete obj.label;
+        }
+        if (props.faction !== undefined) obj.faction = props.faction;
+        if (props.confidence !== undefined) {
+          if (props.confidence === null) delete obj.confidence;
+          else obj.confidence = props.confidence;
+        }
       });
     },
 

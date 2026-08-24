@@ -87,6 +87,40 @@ describe('scene store', () => {
     expect(() => s().updateObjectProps('nope', { length: 99 })).not.toThrow();
   });
 
+  it('updateObjectProps writes commander annotations (label/faction/confidence)', () => {
+    const id = s().createObjectOfType('marker');
+    s().beginInteraction();
+    s().updateObjectProps(id, {
+      label: 'Alexander',
+      faction: 'red',
+      confidence: 'confirmed',
+    });
+    s().endInteraction();
+    const obj = s().scene.objects[id];
+    expect(obj.label).toBe('Alexander');
+    expect(obj.faction).toBe('red');
+    expect(obj.confidence).toBe('confirmed');
+
+    // One undo step reverts all three.
+    s().undo();
+    const reverted = s().scene.objects[id];
+    expect(reverted.label).toBeUndefined();
+    expect(reverted.faction).toBeUndefined();
+    expect(reverted.confidence).toBeUndefined();
+
+    // Empty label trims to delete; null confidence clears.
+    s().beginInteraction();
+    s().updateObjectProps(id, { label: 'X', faction: 'blue', confidence: 'probable' });
+    s().endInteraction();
+    s().beginInteraction();
+    s().updateObjectProps(id, { label: '   ', confidence: null });
+    s().endInteraction();
+    const cleared = s().scene.objects[id];
+    expect(cleared.label).toBeUndefined();
+    expect(cleared.confidence).toBeUndefined();
+    expect(cleared.faction).toBe('blue');
+  });
+
   it('setTool toggles the canvas tool (store-root, not undoable)', () => {
     expect(s().activeTool).toBe('select');
     s().setTool('arrow');

@@ -1,4 +1,4 @@
-import type { Transform } from '../scene/types';
+import type { SceneObject, Transform } from '../scene/types';
 import { useSceneStore } from '../scene/store';
 import { selectedObject } from '../scene/selectors';
 import { DEFAULT_ARROW_LENGTH, DEFAULT_ARROW_COLOR } from '../objects/factory';
@@ -92,6 +92,68 @@ export function Inspector() {
           </label>
         </>
       )}
+      {/* Commander annotations (P2): name label + faction ring + confidence
+          badge. Available on any selected object; renderers only paint what's
+          set (PRD §36/§37 — annotation layer, never baked into assets). */}
+      <label className="inspector-field">
+        <span>Commander name</span>
+        <input
+          type="text"
+          spellCheck={false}
+          autoComplete="off"
+          data-testid="inspector-name"
+          value={obj.label ?? ''}
+          onFocus={beginInteraction}
+          onBlur={endInteraction}
+          onChange={(e) => {
+            updateObjectProps(obj.id, { label: e.target.value });
+          }}
+        />
+      </label>
+      <label className="inspector-field">
+        <span>Faction</span>
+        <select
+          data-testid="inspector-faction"
+          value={obj.faction ?? ''}
+          onFocus={beginInteraction}
+          onBlur={endInteraction}
+          onChange={(e) => {
+            const v = e.target.value;
+            updateObjectProps(obj.id, {
+              faction: v === '' ? undefined : (v as SceneObject['faction']),
+            });
+          }}
+        >
+          <option value="">None</option>
+          <option value="red">Red</option>
+          <option value="blue">Blue</option>
+          <option value="neutral">Neutral</option>
+        </select>
+      </label>
+      <label className="inspector-field">
+        <span>Confidence</span>
+        <select
+          data-testid="inspector-confidence"
+          value={obj.confidence ?? ''}
+          onFocus={beginInteraction}
+          onBlur={endInteraction}
+          onChange={(e) => {
+            const v = e.target.value;
+            updateObjectProps(obj.id, {
+              confidence:
+                v === ''
+                  ? null
+                  : (v as Exclude<SceneObject['confidence'], undefined>),
+            });
+          }}
+        >
+          <option value="">None</option>
+          <option value="confirmed">Confirmed</option>
+          <option value="probable">Probable</option>
+          <option value="disputed">Disputed</option>
+        </select>
+      </label>
+
       {FIELDS.map((f) => (
         <label key={f.key} className="inspector-field">
           <span>{f.label}</span>
