@@ -15,6 +15,7 @@ import { useMapImage } from '../canvas/useMapImage';
 import { effectRings, effectColor } from './effects';
 import { arrowStyleSpec } from './arrowStyles';
 import { resolveFactionColors } from '../scene/branding';
+import { UNIT_PLACEHOLDER } from '../scene/placeholder';
 // Unified selection: canvas clicks must reach BOTH the scene store (canvas
 // highlight + Inspector) and the timeline selection store (KeyframeEditor).
 import { selectObjectUnified } from '../timeline/selection';
@@ -201,25 +202,26 @@ export function ObjectNode({
       </Group>
     );
   } else {
-    // unit placeholder (reserved)
+    // Asset-less unit placeholder — MUST match render/draw.ts (REV-PASS FIX #1).
+    const ph = UNIT_PLACEHOLDER;
     body = (
       <>
         <Rect
-          x={-SHAPE_SIZE / 2}
-          y={-SHAPE_SIZE / 2}
-          width={SHAPE_SIZE}
-          height={SHAPE_SIZE}
-          fill="#9ca3af"
-          cornerRadius={4}
+          x={-ph.size / 2}
+          y={-ph.size / 2}
+          width={ph.size}
+          height={ph.size}
+          fill={ph.color}
+          cornerRadius={ph.cornerRadius}
         />
         <Text
-          text="U"
-          fontSize={28}
-          fill="#111827"
-          width={SHAPE_SIZE}
-          height={SHAPE_SIZE}
-          offsetX={SHAPE_SIZE / 2}
-          offsetY={SHAPE_SIZE / 2}
+          text={ph.label}
+          fontSize={ph.labelFontSize}
+          fill={ph.labelColor}
+          width={ph.size}
+          height={ph.size}
+          offsetX={ph.size / 2}
+          offsetY={ph.size / 2}
           align="center"
           verticalAlign="middle"
         />

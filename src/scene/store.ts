@@ -8,6 +8,7 @@ import type {
   CameraState,
   ControlPoint,
   Easing,
+  Faction,
   Keyframe,
   LayerId,
   ObjId,
@@ -474,6 +475,8 @@ export interface SceneState {
     type: SceneObjectType,
     opts?: {
       assetId?: AssetId;
+      /** §44 unit faction (red/blue/neutral) — metadata only. */
+      faction?: Faction;
       x?: number;
       y?: number;
       /** DEGREES (object-transform convention). */
@@ -672,6 +675,14 @@ export interface SceneState {
     // ---- Asset / map library writes (project-scoped, mirrored to every scene) ----
     /** Insert-only asset registry write (additive, never overwrites). */
     registerAsset: (asset: Asset) => void;
+    /**
+     * Batch asset registry write: registers EVERY asset in ONE undoable
+     * transaction (a single history snapshot for the whole folder import),
+     * mirroring each into the active scene AND every inactive scene exactly
+     * like `registerAsset`. Callers that import many files at once must use
+     * this so the entire batch collapses to a single undo step.
+     */
+    registerAssets: (assets: Asset[]) => void;
     /** Imports a map file, registers it, points mapAssetId + worldSize at it. */
     importMap: (file: File, opts?: ImportMapOptions) => Promise<void>;
     /** Imports a generic image asset (project library) from a File. Undoable. */
@@ -809,6 +820,7 @@ export const useSceneStore = create<SceneState>()(
           id,
           layerId,
           assetId: opts?.assetId,
+          faction: opts?.faction,
           x: opts?.x,
           y: opts?.y,
           rotation: opts?.rotation,
@@ -1490,6 +1502,21 @@ export const useSceneStore = create<SceneState>()(
         state.scene.assets[asset.id] = asset;
         for (const s of Object.values(state.inactiveScenes)) {
           s.assets[asset.id] = asset;
+        }
+      });
+    },
+
+    registerAssets: (assets) => {
+      set((state) => {
+        // ONE undoable snapshot for the whole batch (a folder import should
+        // collapse to a single undo step, not one history entry per file).
+        pushHistory(state);
+        for (const asset of assets) {
+          // Additive insert only (same mirror logic as registerAsset).
+          state.scene.assets[asset.id] = asset;
+          for (const s of Object.values(state.inactiveScenes)) {
+            s.assets[asset.id] = asset;
+          }
         }
       });
     },

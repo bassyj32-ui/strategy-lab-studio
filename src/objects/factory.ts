@@ -1,6 +1,7 @@
 import type {
   AssetId,
   ArrowStyle,
+  Faction,
   SceneObject,
   SceneObjectType,
   Transform,
@@ -11,6 +12,8 @@ export interface CreateObjectOpts {
   id: string;
   layerId: string;
   assetId?: AssetId;
+  /** §44 unit faction (red/blue/neutral) — metadata only, never affects math. */
+  faction?: Faction;
   /** Initial world position (object center). Defaults to (0, 0). */
   x?: number;
   y?: number;
@@ -71,6 +74,7 @@ export function createUnit(opts: CreateObjectOpts): SceneObject {
     id: opts.id,
     type: 'unit',
     assetId: opts.assetId,
+    faction: opts.faction,
     transform: withTransform(opts),
     layerId: opts.layerId,
   };
@@ -118,7 +122,9 @@ export function createSceneObject(
     case 'marker':
       return createMarker(opts);
     case 'unit':
-      return createUnit(opts);
+      // Forward faction explicitly so a unit dropped/placed from a sprite asset
+      // keeps its faction (createSceneObject only passes `opts` through).
+      return createUnit({ ...opts, faction: opts.faction });
     case 'arrow':
       return createArrow(opts);
     case 'group':

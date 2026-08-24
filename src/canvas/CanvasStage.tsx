@@ -40,6 +40,7 @@ import {
   worldPointToLocal,
 } from '../objects/groups';
 import type {
+  Asset,
   Keyframe,
   SceneObject,
   SceneObjectType,
@@ -83,7 +84,16 @@ import {
 const DISPLAY_SCALE = 0.5;
 const GRID_STEP = 120;
 
-function SelectionOutline({ obj, world }: { obj: SceneObject; world: Transform }) {
+function SelectionOutline({
+  obj,
+  world,
+  asset,
+}: {
+  obj: SceneObject;
+  world: Transform;
+  /** Resolved library asset (for asset-backed objects); sizes the box. */
+  asset?: Asset;
+}) {
   const { x, y, rotation, scale } = world;
   // Arrows are TAIL-anchored (tip at local (length, 0)); every other kind is
   // center-anchored. The outline must match each convention.
@@ -106,17 +116,17 @@ function SelectionOutline({ obj, world }: { obj: SceneObject; world: Transform }
       </Group>
     );
   }
-  let w = SHAPE_SIZE;
-  let h = SHAPE_SIZE;
-  if (obj.type === 'marker') {
-    w = MARKER_RADIUS * 2;
-    h = MARKER_RADIUS * 2;
-  }
+  // Size the selection box to the resolved asset (image) when present so the
+  // outline matches what is actually painted on the canvas; fall back to the
+  // vector placeholder size otherwise (keeps the gray "U" box correct).
+  const box = selectionLocalBox(obj, asset);
+  const w = box.maxX - box.minX;
+  const h = box.maxY - box.minY;
   return (
     <Group x={x} y={y} rotation={rotation} scaleX={scale} scaleY={scale}>
       <Rect
-        x={-w / 2}
-        y={-h / 2}
+        x={box.minX}
+        y={box.minY}
         width={w}
         height={h}
         stroke="#f5a83c"
@@ -135,7 +145,7 @@ const CURVE_COLOR = '#38bdf8';
 const HANDLE_RADIUS_SCREEN = 7;
 
 /** Local-unit bounding box of an object around its anchor, for gizmos. */
-function selectionLocalBox(obj: SceneObject): Box {
+function selectionLocalBox(obj: SceneObject, asset?: Asset): Box {
   if (obj.type === 'arrow') {
     const len = obj.length ?? DEFAULT_ARROW_LENGTH;
     const padY = ARROWHEAD_HALF_WIDTH + 4;
@@ -153,6 +163,14 @@ function selectionLocalBox(obj: SceneObject): Box {
       maxX: MARKER_RADIUS,
       maxY: MARKER_RADIUS,
     };
+  }
+  // Asset-backed objects (sprites/images) are painted at the asset's intrinsic
+  // size (centered on the anchor), so the selection box must match it. Without
+  // an asset (the reserved gray "U" placeholder) the vector size applies.
+  if (asset) {
+    const hw = asset.width / 2;
+    const hh = asset.height / 2;
+    return { minX: -hw, minY: -hh, maxX: hw, maxY: hh };
   }
   const half = SHAPE_SIZE / 2;
   return { minX: -half, minY: -half, maxX: half, maxY: half };
@@ -174,12 +192,15 @@ function SelectionGizmos({
   worldT,
   parentFrame,
   pointerWorld,
+  asset,
 }: {
   obj: SceneObject;
   worldT: Transform;
   parentFrame: Transform | null;
   /** Stage pointer → WORLD coords under the displayed camera. */
   pointerWorld: () => Pt | null;
+  /** Resolved library asset (for asset-backed objects); sizes the gizmo box. */
+  asset?: Asset;
 }) {
   const beginInteraction = useSceneStore((s) => s.beginInteraction);
   const endInteraction = useSceneStore((s) => s.endInteraction);
@@ -202,7 +223,7 @@ function SelectionGizmos({
 
   const zoom = useSceneStore((s) => s.scene.camera.zoom);
   const k = 1 / Math.max(zoom, 0.0001); // screen px → world units
-  const box = selectionLocalBox(obj);
+  const box = selectionLocalBox(obj, asset);
   const rotDeg = worldT.rotation;
 
   const scaleDragRef = useRef<{ startDist: number; startScale: number } | null>(
@@ -484,6 +505,11 @@ export function CanvasStage() {
 
   const { worldSize } = scene;
   const selected = selectedObject({ selectedObjId, scene });
+  // Resolved library asset for the selected object (sizes the selection box +
+  // gizmo handles to the painted sprite when the object is asset-backed).
+  const selectedAsset = selected?.assetId
+    ? scene.assets[selected.assetId]
+    : undefined;
 
   // The imported battlefield map (data: URL asset) rendered under everything.
   const mapAssetId = useSceneStore((s) => s.scene.mapAssetId);
@@ -685,13 +711,33 @@ export function CanvasStage() {
     const world = screenToWorld(sp, displayCamera, vp);
 
     if (assetId) {
-      const id = createObjectOfType('marker', { assetId, x: world.x, y: world.y });
+      // A sprite dropped from the library: place it as a UNIT when its card
+      // advertised a unit (text/plain === 'unit'), otherwise as a MARKER.
+      // Either way, carry the asset's faction metadata onto the object so the
+      // editor + render doors agree on the ring colour.
+      const hint = e.dataTransfer.getData('text/plain');
+      const placeAs: SceneObjectType = hint === 'unit' ? 'unit' : 'marker';
+      const asset = scene.assets[assetId];
+      const faction = asset?.metadata?.faction;
+      const id = createObjectOfType(placeAs, {
+        assetId,
+        faction,
+        x: world.x,
+        y: world.y,
+      });
       setSelected(id);
       return;
     }
 
     const type = e.dataTransfer.getData('text/plain') as SceneObjectType;
-    if (type !== 'shape' && type !== 'marker' && type !== 'arrow') return;
+    // Palette allow-list; 'unit' is a valid (sprite) drop target too.
+    if (
+      type !== 'shape' &&
+      type !== 'marker' &&
+      type !== 'arrow' &&
+      type !== 'unit'
+    )
+      return;
     const id = createObjectOfType(type, { x: world.x, y: world.y });
     setSelected(id);
   };
@@ -874,7 +920,7 @@ export function CanvasStage() {
           {/* Selection outline on top (non-interactive). */}
           <Layer listening={false}>
             {selected && selectedWorldT && (
-              <SelectionOutline obj={selected} world={selectedWorldT} />
+              <SelectionOutline obj={selected} world={selectedWorldT} asset={selectedAsset} />
             )}
           </Layer>
 
@@ -902,6 +948,7 @@ export function CanvasStage() {
                   worldT={selectedWorldT}
                   parentFrame={selectedParentFrame}
                   pointerWorld={pointerWorld}
+                  asset={selectedAsset}
                 />
               )}
           </Layer>

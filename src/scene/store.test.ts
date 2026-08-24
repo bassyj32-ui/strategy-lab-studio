@@ -691,6 +691,32 @@ describe('scene store', () => {
       expect(s().scene.assets['lib-1']).toBeDefined();
       expect(s().inactiveScenes.b.assets['lib-1']).toBeDefined();
     });
+
+    it('registerAssets([a,b,c]) is EXACTLY ONE undo step and undoes all in one go', () => {
+      twoScenes();
+      const before = s().past.length;
+      const a1 = { ...asset, id: 'batch-1', name: 'one' };
+      const a2 = { ...asset, id: 'batch-2', name: 'two' };
+      const a3 = { ...asset, id: 'batch-3', name: 'three' };
+      // The whole batch must collapse to a SINGLE history entry (law-relevant:
+      // a folder import should be one undoable transaction, not N).
+      s().registerAssets([a1, a2, a3]);
+      expect(s().past.length).toBe(before + 1);
+
+      // All three were registered and mirrored into the inactive scene.
+      for (const id of ['batch-1', 'batch-2', 'batch-3']) {
+        expect(s().scene.assets[id]).toBeDefined();
+        expect(s().inactiveScenes.b.assets[id]).toBeDefined();
+      }
+
+      // One undo removes ALL three at once (no second undo needed).
+      s().undo();
+      expect(s().past.length).toBe(before);
+      for (const id of ['batch-1', 'batch-2', 'batch-3']) {
+        expect(s().scene.assets[id]).toBeUndefined();
+        expect(s().inactiveScenes.b.assets[id]).toBeUndefined();
+      }
+    });
   });
 
   describe('applyCameraPreset (§27 presets onto the camera track)', () => {

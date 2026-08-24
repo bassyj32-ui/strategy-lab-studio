@@ -26,6 +26,7 @@ import {
   closingCardWindow,
   cardAlpha,
 } from '../scene/branding';
+import { UNIT_PLACEHOLDER } from '../scene/placeholder';
 
 const BACKGROUND = '#0b0e14';
 
@@ -227,7 +228,24 @@ export function drawScene(
         ctx.closePath();
         ctx.fill();
         ctx.restore();
+      } else if (obj.type === 'unit') {
+        // Asset-less UNIT placeholder — MUST match objects/ObjectNode.tsx
+        // (REV-PASS FIX #1 parity). Paints the same gray "U" box the editor
+        // shows, so a no-asset unit no longer drifts to a green square in the
+        // export. Other placeholder types below are intentionally untouched.
+        const size = UNIT_PLACEHOLDER.size * screen.scale;
+        const r = UNIT_PLACEHOLDER.cornerRadius * screen.scale;
+        ctx.fillStyle = UNIT_PLACEHOLDER.color;
+        ctx.beginPath();
+        ctx.roundRect(-size / 2, -size / 2, size, size, r);
+        ctx.fill();
+        ctx.fillStyle = UNIT_PLACEHOLDER.labelColor;
+        ctx.font = `${UNIT_PLACEHOLDER.labelFontSize * screen.scale}px system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(UNIT_PLACEHOLDER.label, 0, 0);
       } else {
+        // shape / marker / group / arrow-less: unchanged 40px placeholder.
         const size = PLACEHOLDER_SIZE * screen.scale;
         ctx.fillStyle = PLACEHOLDER_COLORS[obj.type] ?? '#888888';
         ctx.fillRect(-size / 2, -size / 2, size, size);

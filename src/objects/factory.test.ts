@@ -30,6 +30,41 @@ describe('object factories', () => {
     expect(obj.type).toBe('unit');
   });
 
+  it('createUnit carries an assetId', () => {
+    const obj = createUnit({ id: 'unit-1', layerId: DEFAULT_LAYER_ID, assetId: 'a1' });
+    expect(obj.type).toBe('unit');
+    expect(obj.assetId).toBe('a1');
+  });
+
+  it('createUnit carries a faction when provided', () => {
+    const obj = createUnit({
+      id: 'unit-1',
+      layerId: DEFAULT_LAYER_ID,
+      assetId: 'a1',
+      faction: 'blue',
+    });
+    expect(obj.type).toBe('unit');
+    expect(obj.assetId).toBe('a1');
+    expect(obj.faction).toBe('blue');
+  });
+
+  it('createUnit with no opts still returns a placeholder object', () => {
+    const obj = createUnit({ id: 'unit-1', layerId: DEFAULT_LAYER_ID });
+    expect(obj.type).toBe('unit');
+    expect(obj.faction).toBeUndefined();
+    expect(obj.assetId).toBeUndefined();
+  });
+
+  it('createSceneObject forwards faction into a unit', () => {
+    const obj = createSceneObject('unit', {
+      id: 'unit-1',
+      layerId: DEFAULT_LAYER_ID,
+      faction: 'red',
+    });
+    expect(obj.type).toBe('unit');
+    expect(obj.faction).toBe('red');
+  });
+
   it('createSceneObject routes by type', () => {
     const a = createSceneObject('shape', { id: 'a', layerId: DEFAULT_LAYER_ID });
     const b = createSceneObject('marker', { id: 'b', layerId: DEFAULT_LAYER_ID });

@@ -36,6 +36,7 @@ class MockCtx {
   drawImage = vi.fn();
   beginPath = vi.fn();
   closePath = vi.fn();
+  roundRect = vi.fn();
   get fillStyle(): string {
     return this._fillStyle;
   }
@@ -80,14 +81,34 @@ describe('drawScene', () => {  it('clears and fills the background color', () =>
     expect(raw.fillRect).toHaveBeenCalled();
   });
 
-  it('with no asset, draws a placeholder rect (no drawImage)', () => {
+  it('with no asset, an asset-less UNIT draws the shared gray "U" placeholder (parity with canvas)', () => {
     const { ctx, raw } = makeCtx();
     drawScene(ctx, makeScene(), 0, 30, { w: 1920, h: 1080 }, {});
     expect(raw.drawImage).not.toHaveBeenCalled();
-    const drewPlaceholder = raw.fillRect.mock.calls.some(
+    // Shared UNIT_PLACEHOLDER: gray (#9ca3af) box + centered "U" glyph.
+    expect(raw.fillStyleHistory).toContain('#9ca3af');
+    expect(raw.fillText).toHaveBeenCalledWith('U', 0, 0);
+    // 80 world units at scale 1 => box from (-40,-40) size 80 (REV-PASS FIX #1).
+    expect(raw.roundRect).toHaveBeenCalledWith(
+      -40,
+      -40,
+      80,
+      80,
+      expect.any(Number)
+    );
+  });
+
+  it('shape/marker no-asset placeholders keep their 40px size (other types untouched)', () => {
+    const { ctx, raw } = makeCtx();
+    const scene = makeScene();
+    scene.objects.obj1.type = 'shape';
+    drawScene(ctx, scene, 0, 30, { w: 1920, h: 1080 }, {});
+    const drewShapePlaceholder = raw.fillRect.mock.calls.some(
       (c) => c[0] === -20 && c[1] === -20 && c[2] === 40 && c[3] === 40
     );
-    expect(drewPlaceholder).toBe(true);
+    expect(drewShapePlaceholder).toBe(true);
+    // The unit "U" glyph is NOT painted for a shape.
+    expect(raw.fillText).not.toHaveBeenCalledWith('U', 0, 0);
   });
 
   it('with a loaded asset, draws the image (no placeholder)', () => {
@@ -106,6 +127,39 @@ describe('drawScene', () => {  it('clears and fills the background color', () =>
     const images: AssetImageMap = { a1: img };
     drawScene(ctx, scene, 0, 30, { w: 1920, h: 1080 }, images);
     expect(raw.drawImage).toHaveBeenCalled();
+    const drewPlaceholder = raw.fillRect.mock.calls.some(
+      (c) => c[0] === -20 && c[1] === -20 && c[2] === 40 && c[3] === 40
+    );
+    expect(drewPlaceholder).toBe(false);
+  });
+
+  // ---- Render-door parity: a UNIT with an assetId paints the sprite image,
+  // ---- NOT the gray "U" placeholder, on BOTH the canvas and Remotion. ----
+  it('a UNIT with assetId draws the image (parity with canvas ObjectNode)', () => {
+    const { ctx, raw } = makeCtx();
+    const scene = makeScene();
+    // obj1 is already a unit; point it at a registered sprite asset.
+    scene.objects.obj1.assetId = 'sprite-1';
+    scene.assets['sprite-1'] = {
+      id: 'sprite-1',
+      kind: 'sprite',
+      name: 'infantry',
+      src: 'infantry.png',
+      width: 48,
+      height: 48,
+    };
+    const fakeImage = { width: 48, height: 48 } as unknown as HTMLImageElement;
+    const images: AssetImageMap = { 'sprite-1': fakeImage };
+    drawScene(ctx, scene, 0, 30, { w: 1920, h: 1080 }, images);
+    // The image was painted (drawImage called with the resolved image)…
+    expect(raw.drawImage).toHaveBeenCalledWith(
+      fakeImage,
+      expect.any(Number),
+      expect.any(Number),
+      expect.any(Number),
+      expect.any(Number)
+    );
+    // …and the unit placeholder rect (size 40, the "U" box) was NOT drawn.
     const drewPlaceholder = raw.fillRect.mock.calls.some(
       (c) => c[0] === -20 && c[1] === -20 && c[2] === 40 && c[3] === 40
     );
@@ -264,6 +318,7 @@ describe('drawScene', () => {  it('clears and fills the background color', () =>
     const { ctx, raw } = makeCtx();
     const scene = makeScene();
     scene.mapAssetId = 'map1'; // declared, but NOT loaded -> banner case
+    scene.objects = {}; // isolate the banner assertion from the unit placeholder
     drawScene(
       ctx,
       scene,
@@ -277,7 +332,7 @@ describe('drawScene', () => {  it('clears and fills the background color', () =>
     expect(raw.drawImage).not.toHaveBeenCalled(); // no map
   });
 
-  it('alpha mode still paints objects (placeholder visible)', () => {
+  it('alpha mode still paints the unit placeholder (gray "U" box)', () => {
     const { ctx, raw } = makeCtx();
     drawScene(
       ctx,
@@ -288,10 +343,16 @@ describe('drawScene', () => {  it('clears and fills the background color', () =>
       {},
       { transparentBackground: true }
     );
-    const drewPlaceholder = raw.fillRect.mock.calls.some(
-      (c) => c[0] === -20 && c[1] === -20 && c[2] === 40 && c[3] === 40
+    expect(raw.drawImage).not.toHaveBeenCalled();
+    expect(raw.fillStyleHistory).toContain('#9ca3af');
+    expect(raw.fillText).toHaveBeenCalledWith('U', 0, 0);
+    expect(raw.roundRect).toHaveBeenCalledWith(
+      -40,
+      -40,
+      80,
+      80,
+      expect.any(Number)
     );
-    expect(drewPlaceholder).toBe(true);
   });
 
   it('folds the parent transform so a grouped child renders at its world position', () => {
@@ -732,6 +793,7 @@ describe('title cards in drawScene', () => {
     const { ctx, raw } = makeCtx();
     const scene = makeScene();
     scene.openingCard = {};
+    scene.objects = {}; // isolate the card assertion from the unit placeholder
     drawScene(ctx, scene, 120, 30, { w: 1920, h: 1080 }, {}); // t=4s: past the card
     // Only the background wash — no card veil was layered on top.
     expect(raw.fillStyleHistory.filter((c) => c === '#0b0e14')).toHaveLength(1);
@@ -743,6 +805,7 @@ describe('title cards in drawScene', () => {
     const scene = makeScene();
     scene.openingCard = {};
     scene.closingCard = {};
+    scene.objects = {}; // isolate the card assertion from the unit placeholder
     drawScene(
       ctx,
       scene,
