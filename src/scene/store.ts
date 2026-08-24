@@ -46,7 +46,12 @@ import {
   type CameraPresetFocus,
   type CameraPresetKind,
 } from '../camera/presets';
-import { buildDecisiveMove, type DecisiveMoveOptions } from './macros';
+import {
+  buildDecisiveMove,
+  buildWhyItWorked,
+  type DecisiveMoveOptions,
+  type WhyItWorkedOptions,
+} from './macros';
 
 const MAX_HISTORY = 100;
 
@@ -397,6 +402,13 @@ export interface SceneState {
     applyCameraPreset: (kind: CameraPresetKind, focus?: CameraPresetFocus) => void;
     /** §38 macro: camera push-in + highlight + arrow (+pulse/vignette), one undo step. */
     triggerDecisiveMove: (opts?: DecisiveMoveOptions) => void;
+
+    /**
+     * P2 "WHY IT WORKED" preset (PRD §39): ONE undoable transaction that
+     * replaces the camera track with a calm zoom-out to battlefield overview
+     * and optionally writes gentle opacity pulses for one faction's units.
+     */
+    triggerWhyItWorked: (opts?: WhyItWorkedOptions) => void;
     /** Toggles the scene's cinematic vignette flag. One undo step. */
     setVignette: (on: boolean) => void;
 
@@ -1105,6 +1117,23 @@ export const useSceneStore = create<SceneState>()(
         if (Boolean(state.scene.vignette) === on) return;
         pushHistory(state);
         state.scene.vignette = on || undefined;
+      });
+    },
+
+    /**
+     * P2 "WHY IT WORKED" macro (PRD §39): ONE undoable transaction. Replaces
+     * the camera track with a hold→settle zoom-out to the world centre and
+     * merges gentle pulse keyframes for the chosen faction's units.
+     */
+    triggerWhyItWorked: (opts) => {
+      set((state) => {
+        pushHistory(state);
+        const result = buildWhyItWorked(current(state.scene), opts);
+        state.scene.cameraTrack = result.cameraKeys;
+        for (const [objId, frames] of Object.entries(result.keyframes)) {
+          state.scene.keyframes[objId] = frames;
+        }
+        if (result.vignette) state.scene.vignette = true;
       });
     },
 

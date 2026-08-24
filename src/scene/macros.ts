@@ -6,6 +6,7 @@
 // editable afterwards (PRD §38 "Everything remains editable").
 import type {
   CameraKeyframe,
+  Faction,
   Keyframes,
   Keyframe,
   ObjId,
@@ -134,4 +135,92 @@ export function buildDecisiveMove(
   }
 
   return { cameraKeys, objects, keyframes, vignette: opts.vignette ?? false, highlightId };
+}
+
+export interface WhyItWorkedOptions {
+  /** Faction whose units gently pulse during the reveal (default: none). */
+  faction?: Faction;
+  /** Timeline time the reveal starts (defaults to 0). */
+  startAt?: number;
+  /** Seconds from the current framing to the overview (default 3). */
+  duration?: number;
+  /** Target overview zoom (default 1.2, clamped to editor range). */
+  zoom?: number;
+  /** Gently pulse the winning faction's units (default true). */
+  pulse?: boolean;
+  /** Enable the scene's cinematic edge-darkening flag (default false). */
+  vignette?: boolean;
+}
+
+export interface WhyItWorkedResult {
+  /** REPLACES the scene's camera track (editable afterwards like any keys). */
+  cameraKeys: CameraKeyframe[];
+  /** Per-object opacity pulses for the highlighted faction's units. */
+  keyframes: Keyframes;
+  vignette: boolean;
+  /** Ids that received pulse keyframes (for tests / post-apply selection). */
+  pulsedIds: ObjId[];
+}
+
+const WIW_PULSES = 2;
+/** Gentle pulse floor — a calm "look here", not an alarm. */
+const WIW_OPACITY_FLOOR = 0.55;
+
+/**
+ * P2 "WHY IT WORKED" visual preset (PRD §39): ONE deterministic payload that
+ * pulls the camera back from wherever it is to a calm battlefield overview
+ * and optionally breathes the winning faction's units while it does. Pure
+ * computation over EXISTING primitives; narration/text/music stay in
+ * CapCut/DaVinci — the Studio only prepares the picture.
+ */
+export function buildWhyItWorked(
+  scene: Scene,
+  opts: WhyItWorkedOptions = {}
+): WhyItWorkedResult {
+  const startAt = Math.max(0, opts.startAt ?? 0);
+  const duration = Math.max(0.5, opts.duration ?? 3);
+  const endAt = startAt + duration;
+  const centre = { x: scene.worldSize.w / 2, y: scene.worldSize.h / 2 };
+  const zoom = Math.min(
+    MAX_ZOOM,
+    Math.max(MIN_ZOOM, opts.zoom ?? 1.2)
+  );
+
+  // ---- camera: hold the current view briefly, then settle to overview ----
+  const base = scene.cameraTrack?.length
+    ? scene.cameraTrack[scene.cameraTrack.length - 1].cam
+    : scene.camera;
+  const cameraKeys: CameraKeyframe[] = [
+    { time: startAt, cam: { x: base.x, y: base.y, zoom: base.zoom } },
+    {
+      time: startAt + duration * 0.25,
+      cam: { x: base.x, y: base.y, zoom: base.zoom },
+    },
+    { time: endAt, cam: { x: centre.x, y: centre.y, zoom } },
+  ];
+
+  // ---- gentle pulse of the winning faction's units ----
+  const keyframes: Keyframes = {};
+  const pulsedIds: ObjId[] = [];
+  if ((opts.pulse ?? true) && opts.faction) {
+    const steps = WIW_PULSES * 2;
+    for (const obj of Object.values(scene.objects)) {
+      if (obj.faction !== opts.faction) continue;
+      const frames: Keyframe[] = [];
+      for (let i = 0; i <= steps; i++) {
+        frames.push({
+          time: startAt + (duration * i) / steps,
+          transform: {
+            ...obj.transform,
+            opacity:
+              i % 2 === 0 ? obj.transform.opacity : WIW_OPACITY_FLOOR,
+          },
+        });
+      }
+      keyframes[obj.id] = frames;
+      pulsedIds.push(obj.id);
+    }
+  }
+
+  return { cameraKeys, keyframes, vignette: opts.vignette ?? false, pulsedIds };
 }

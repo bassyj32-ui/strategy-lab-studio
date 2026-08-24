@@ -83,6 +83,7 @@ export function TimelinePanel() {
   const syncTimeline = usePlaybackStore((s) => s.syncTimeline);
   const applyCameraPreset = useSceneStore((s) => s.applyCameraPreset);
   const triggerDecisiveMove = useSceneStore((s) => s.triggerDecisiveMove);
+  const triggerWhyItWorked = useSceneStore((s) => s.triggerWhyItWorked);
   const vignette = useSceneStore((s) => s.scene.vignette);
   const setVignette = useSceneStore((s) => s.setVignette);
   const [hintsOpen, setHintsOpen] = useState(false);
@@ -146,6 +147,21 @@ export function TimelinePanel() {
           }}
         >
           ⚡ Decisive Move
+        </button>
+        <button
+          type="button"
+          className="camera-preset"
+          data-testid="why-it-worked"
+          title={'Why It Worked (§39) — calm zoom-out to overview; pulses the selected object’s faction, one undo step'}
+          onClick={() => {
+            const sel = useSceneStore.getState();
+            const obj = sel.selectedObjId
+              ? sel.scene.objects[sel.selectedObjId]
+              : undefined;
+            triggerWhyItWorked(obj?.faction ? { faction: obj.faction } : {});
+          }}
+        >
+          🧠 Why It Worked
         </button>
         <label
           className="vignette-toggle"

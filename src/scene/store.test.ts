@@ -721,6 +721,39 @@ describe('scene store', () => {
       expect(s().scene.vignette).toBeUndefined();
     });
   });
+
+  describe('triggerWhyItWorked (§39 preset)', () => {
+    beforeEach(reset);
+
+    it('replaces the camera track with a zoom-out and pulses the faction', () => {
+      const id = s().createObjectOfType('unit');
+      s().updateObjectProps(id, { faction: 'red' });
+      s().triggerWhyItWorked({ faction: 'red' });
+      const scene = s().scene;
+      expect(scene.cameraTrack![scene.cameraTrack!.length - 1].cam).toEqual({
+        x: 960,
+        y: 540,
+        zoom: 1.2,
+      });
+      expect(scene.keyframes[id]!.length).toBeGreaterThan(1);
+    });
+
+    it('is ONE undo step: undo restores the prior track and drops the pulses + vignette', () => {
+      const id = s().createObjectOfType('unit');
+      s().updateObjectProps(id, { faction: 'red' });
+      s().setCameraKeyframe(3);
+      const seededTrack = s().scene.cameraTrack;
+
+      s().triggerWhyItWorked({ faction: 'red', vignette: true });
+      expect(s().scene.vignette).toBe(true);
+      expect(s().scene.keyframes[id]).toBeDefined();
+
+      s().undo();
+      expect(s().scene.cameraTrack).toEqual(seededTrack);
+      expect(s().scene.keyframes[id]).toBeUndefined();
+      expect(s().scene.vignette).toBeUndefined();
+    });
+  });
 });
 
 describe('z-depth (§48 adjustable ordering)', () => {
