@@ -34,10 +34,21 @@ describe('applyCamera', () => {
     expect(s.y).toBe(540);
   });
 
-  it('adds camera rotation onto the object rotation', () => {
-    const cam: CameraState = { x: 0, y: 0, zoom: 1, rotation: 45 };
+  it('adds camera rotation (RADIANS in, DEGREES out) onto the object rotation', () => {
+    // Camera rotation is radians-canonical; the screen rotation must come
+    // out in degrees (Konva/canvas convention): 45° = π/4 rad.
+    const cam: CameraState = { x: 0, y: 0, zoom: 1, rotation: Math.PI / 4 };
     const s = applyCamera({ ...at(0, 0), rotation: 10 }, cam, worldSize, video);
-    expect(s.rotation).toBe(55);
+    expect(s.rotation).toBeCloseTo(55);
+  });
+
+  it('rotates the view offset by -camera.rotation', () => {
+    // Object 100 units right of the camera centre under a +90° (π/2 rad)
+    // rotated view appears 100 units BELOW the video centre (y-down screen).
+    const cam: CameraState = { x: 0, y: 0, zoom: 1, rotation: Math.PI / 2 };
+    const s = applyCamera(at(100, 0), cam, worldSize, video);
+    expect(s.x).toBeCloseTo(960);
+    expect(s.y).toBeCloseTo(540 + 100);
   });
 
   it('multiplying scale by zoom', () => {

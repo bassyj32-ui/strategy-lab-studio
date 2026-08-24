@@ -9,9 +9,9 @@ import type { CameraKeyframe, CameraState, Scene } from '../scene/types';
  * - No track / empty track -> a copy of `scene.camera` (the live base view),
  *   so zero-keyframe scenes behave byte-identically to pre-track scenes.
  * - Before first / after last keyframe -> HOLD (clamp to nearest keyframe).
- * - Between two keyframes -> LINEAR lerp of x/y/zoom.
- * - `rotation` is NOT animated (MVP-1 freezes it); it always comes from the
- *   base `scene.camera`.
+ * - Between two keyframes -> LINEAR lerp of x/y/zoom and, when the keyframes
+ *   carry it, `rotation` (RADIANS — canonical unit, scene/types.ts).
+ * - `rotation` absent on a keyframe falls back to the base `scene.camera`.
  * - Pure + deterministic: same inputs -> same outputs, no clocks, no RNG.
  */
 export function getCameraAtTime(scene: Scene, time: number): CameraState {
@@ -44,11 +44,17 @@ export function getCameraAtTime(scene: Scene, time: number): CameraState {
 
   const t = (time - a.time) / (b.time - a.time);
   const lerp = (p: number, q: number): number => p + (q - p) * t;
+  // Rotation is animated only when the keyframes carry it; otherwise the
+  // pre-rotation behaviour (base rotation throughout) is preserved exactly.
+  const rot =
+    a.cam.rotation !== undefined && b.cam.rotation !== undefined
+      ? lerp(a.cam.rotation, b.cam.rotation)
+      : base.rotation;
   return {
     x: lerp(a.cam.x, b.cam.x),
     y: lerp(a.cam.y, b.cam.y),
     zoom: lerp(a.cam.zoom, b.cam.zoom),
-    rotation: base.rotation,
+    rotation: rot,
   };
 }
 

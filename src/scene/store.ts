@@ -941,7 +941,15 @@ export const useSceneStore = create<SceneState>()(
       set((state) => {
         pushHistory(state);
         const cam = current(state.scene.camera);
-        const kf = { time, cam: { x: cam.x, y: cam.y, zoom: cam.zoom } };
+        const kf = {
+          time,
+          cam: {
+            x: cam.x,
+            y: cam.y,
+            zoom: cam.zoom,
+            rotation: cam.rotation ?? 0,
+          },
+        };
         const track = state.scene.cameraTrack ?? (state.scene.cameraTrack = []);
         const idx = track.findIndex((k) => k.time === time);
         if (idx >= 0) track[idx] = kf;

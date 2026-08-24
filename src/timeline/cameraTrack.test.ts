@@ -79,12 +79,35 @@ describe('getCameraAtTime', () => {
     expect(getCameraAtTime(scene, 3)).toEqual({ x: 200, y: 300, zoom: 3 });
   });
 
-  it('always takes rotation from the base camera (frozen in MVP-1)', () => {
+  it('falls back to the base camera rotation when keyframes carry none', () => {
     const scene = makeScene({
       camera: { x: 960, y: 540, zoom: 1, rotation: 0.25 },
       cameraTrack: [{ time: 1, cam: { x: 50, y: 60, zoom: 3 } }],
     });
     expect(getCameraAtTime(scene, 5)).toMatchObject({ rotation: 0.25 });
+  });
+
+  it('animates rotation LINEARLY when both keyframes carry it', () => {
+    const scene = makeScene({
+      cameraTrack: [
+        { time: 0, cam: { x: 0, y: 0, zoom: 1, rotation: 0 } },
+        { time: 4, cam: { x: 0, y: 0, zoom: 1, rotation: Math.PI } },
+      ],
+    });
+    expect(getCameraAtTime(scene, 2).rotation).toBeCloseTo(Math.PI / 2);
+    expect(getCameraAtTime(scene, 4).rotation).toBeCloseTo(Math.PI);
+    expect(getCameraAtTime(scene, -1).rotation).toBeCloseTo(0); // HOLD before
+  });
+
+  it('keeps base rotation when only ONE keyframe carries rotation', () => {
+    const scene = makeScene({
+      camera: { x: 0, y: 0, zoom: 1, rotation: 0.5 },
+      cameraTrack: [
+        { time: 0, cam: { x: 0, y: 0, zoom: 1, rotation: 1 } },
+        { time: 4, cam: { x: 10, y: 10, zoom: 2 } }, // no rotation
+      ],
+    });
+    expect(getCameraAtTime(scene, 2).rotation).toBe(0.5);
   });
 
   it('is deterministic: same inputs produce identical outputs', () => {

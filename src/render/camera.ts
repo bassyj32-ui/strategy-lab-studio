@@ -8,9 +8,12 @@ import type { ScreenTransform } from './types';
  * Conventions (confirmed decisions):
  * - Object `x,y` is its CENTER in world coordinates.
  * - Camera `x,y` is the CENTER of the view in world coordinates.
- * - Camera `rotation` rotates the whole view, so a world offset is rotated by
- *   `-camera.rotation` and the object's screen rotation is
- *   `world.rotation + camera.rotation`.
+ * - Camera `rotation` (RADIANS-canonical) is the DISPLAY rotation of the
+ *   view — IDENTICAL to the editor's Konva <Stage> transform and
+ *   cameraMath.worldToScreen: S = center + R(rot) * (zoom * (P - cam.pos)),
+ *   and the object's screen rotation gains `deg(camera.rotation)`.
+ *   (Historical bug: this function negated the rotation and mixed radians
+ *   into a degrees field; dormant while rotation stayed 0.)
  * - `zoom` scales the projected offset (and the object's drawn size).
  *
  * Pure + deterministic: no mutation, no side effects.
@@ -30,10 +33,9 @@ export function applyCamera(
   const ox = world.x - camera.x;
   const oy = world.y - camera.y;
 
-  // Rotate the offset by -camera.rotation (view rotation). Camera rotation is
-  // RADIANS-canonical (scene/types.ts) — no degree conversion. (Historical
-  // bug: this converted as if degrees; dormant while rotation stays 0.)
-  const rad = -camRot;
+  // Rotate the offset by the view rotation (+camRot — same direction the
+  // editor's Stage applies, see camera/cameraMath.ts).
+  const rad = camRot;
   const cos = Math.cos(rad);
   const sin = Math.sin(rad);
   const rx = ox * cos - oy * sin;
@@ -45,7 +47,10 @@ export function applyCamera(
   return {
     x: vcx + rx * zoom,
     y: vcy + ry * zoom,
-    rotation: world.rotation + camRot,
+    // ScreenTransform.rotation is DEGREES (Konva/canvas convention); camera
+    // rotation is RADIANS-canonical (scene/types.ts) — convert at this
+    // boundary.
+    rotation: world.rotation + (camRot * 180) / Math.PI,
     scale: world.scale * zoom,
     opacity: world.opacity,
   };

@@ -150,14 +150,18 @@ export interface Timeline {
 
 /**
  * One keyframe on the per-scene CAMERA track. `cam` stores the view (world
- * centre + zoom); rotation is intentionally absent — CameraState.rotation is
- * frozen at 0 in MVP-1 and always comes from `Scene.camera` at evaluation
- * time. Like object Keyframes there is NO stored easing field: segments are
- * LINEAR, boundaries HOLD (see timeline/cameraTrack.ts).
+ * centre + zoom + optional rotation). Like object Keyframes there is NO
+ * stored easing field: segments are LINEAR, boundaries HOLD (see
+ * timeline/cameraTrack.ts).
  */
 export interface CameraKeyframe {
   time: number;
-  cam: Pick<CameraState, 'x' | 'y' | 'zoom'>;
+  /**
+   * The view stored at this key. `rotation` (RADIANS, canonical) is OPTIONAL
+   * so pre-rotation tracks stay valid; absent values fall back to the live
+   * base `Scene.camera.rotation` at evaluation time.
+   */
+  cam: Pick<CameraState, 'x' | 'y' | 'zoom'> & { rotation?: number };
 }
 
 export interface Scene {

@@ -418,8 +418,14 @@ describe('scene store', () => {
       s().setCameraKeyframe(1);
       const track = s().scene.cameraTrack!;
       expect(track.map((k) => k.time)).toEqual([1, 4]);
-      expect(track[0].cam).toEqual({ x: 100, y: 200, zoom: 3 });
-      expect(track[1].cam).toEqual({ x: 500, y: 300, zoom: 2 });
+      expect(track[0].cam).toEqual({ x: 100, y: 200, zoom: 3, rotation: 0 });
+      expect(track[1].cam).toEqual({ x: 500, y: 300, zoom: 2, rotation: 0 });
+    });
+
+    it('setCameraKeyframe captures the live rotation (radians)', () => {
+      s().updateCamera((cam) => ({ ...cam, rotation: Math.PI / 6 }));
+      s().setCameraKeyframe(2);
+      expect(s().scene.cameraTrack![0].cam.rotation).toBeCloseTo(Math.PI / 6);
     });
 
     it('re-keying the same time REPLACES instead of duplicating', () => {

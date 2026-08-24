@@ -1,8 +1,9 @@
-import { Group, Rect, Ellipse, Text, Line } from 'react-konva';
+import { Group, Rect, Ellipse, Text, Line, Image as KonvaImage } from 'react-konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import type { ObjId, SceneObject, Transform } from '../scene/types';
 import { useSceneStore } from '../scene/store';
 import { worldPointToLocal } from './groups';
+import { useMapImage } from '../canvas/useMapImage';
 // Unified selection: canvas clicks must reach BOTH the scene store (canvas
 // highlight + Inspector) and the timeline selection store (KeyframeEditor).
 import { selectObjectUnified } from '../timeline/selection';
@@ -61,6 +62,14 @@ export function ObjectNode({
   const endInteraction = useSceneStore((s) => s.endInteraction);
   const updateTransform = useSceneStore((s) => s.updateTransform);
 
+  // Asset-backed objects (Tab F forward item): resolve the library asset and
+  // load its image so the editor paints the SAME pixels the export will
+  // (draw.ts draws the image whenever one resolves, for any object type).
+  const asset = useSceneStore((s) =>
+    obj.assetId ? s.scene.assets[obj.assetId] : undefined
+  );
+  const img = useMapImage(asset?.src);
+
   const { x, y, rotation, scale, opacity } = world;
 
   const handleDragStart = () => {
@@ -115,6 +124,24 @@ export function ObjectNode({
         }
       : {}),
   };
+
+  // Image-backed object: paint the asset image centred on the transform
+  // (same precedence as the Remotion path — the image wins over vector
+  // placeholders). Local units: the Group's scale already applies camera/
+  // display scaling, so width/height stay in world units.
+  if (img && asset) {
+    return (
+      <Group {...common}>
+        <KonvaImage
+          image={img}
+          width={asset.width}
+          height={asset.height}
+          offsetX={asset.width / 2}
+          offsetY={asset.height / 2}
+        />
+      </Group>
+    );
+  }
 
   if (obj.type === 'shape') {
     return (
