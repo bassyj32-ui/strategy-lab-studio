@@ -1,4 +1,5 @@
 import type { Layer, Scene, SceneObject } from './types';
+import { sortForRender } from '../objects/depth';
 
 /** Visible layers sorted by their `order` (ascending). Hidden layers excluded. */
 export function visibleLayersOrdered(scene: Scene): Layer[] {
@@ -7,9 +8,11 @@ export function visibleLayersOrdered(scene: Scene): Layer[] {
     .sort((a, b) => a.order - b.order);
 }
 
-/** All objects assigned to a given layer. */
+/** All objects assigned to a given layer, ordered for painting (§48 z-depth). */
 export function objectsForLayer(scene: Scene, layerId: string): SceneObject[] {
-  return Object.values(scene.objects).filter((obj) => obj.layerId === layerId);
+  return sortForRender(
+    Object.values(scene.objects).filter((obj) => obj.layerId === layerId)
+  );
 }
 
 /**

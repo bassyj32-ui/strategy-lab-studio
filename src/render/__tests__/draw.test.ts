@@ -467,3 +467,40 @@ describe('vignette (§38 decisive move)', () => {
     expect(raw.createRadialGradient).not.toHaveBeenCalled();
   });
 });
+
+describe('z-depth paint order (§48)', () => {
+  const twoObjs = (flip: boolean): Scene => {
+    const scene = makeScene();
+    scene.objects.obj1.type = 'marker';
+    scene.objects.obj2 = {
+      id: 'obj2',
+      type: 'marker',
+      transform: { x: 500, y: 100, rotation: 0, scale: 1, opacity: 1 },
+      layerId: 'layer-root',
+    };
+    if (flip) {
+      scene.objects.obj1.z = 1;
+    } else {
+      scene.objects.obj2.z = 1;
+    }
+    return scene;
+  };
+
+  const xOrder = (raw: MockCtx): number[] =>
+    raw.translate.mock.calls.map((c) => c[0] as number);
+
+  it('higher z paints later', () => {
+    const { ctx, raw } = makeCtx();
+    drawScene(ctx, twoObjs(false), 0, 30, { w: 1920, h: 1080 }, {});
+    const xs = xOrder(raw);
+    // applyCamera centres world origin in the video frame (+960 on x).
+    expect(xs.indexOf(1060)).toBeLessThan(xs.indexOf(1460));
+  });
+
+  it('flipping z flips the paint order (editor parity via sortForRender)', () => {
+    const { ctx, raw } = makeCtx();
+    drawScene(ctx, twoObjs(true), 0, 30, { w: 1920, h: 1080 }, {});
+    const xs = xOrder(raw);
+    expect(xs.indexOf(1060)).toBeGreaterThan(xs.indexOf(1460));
+  });
+});

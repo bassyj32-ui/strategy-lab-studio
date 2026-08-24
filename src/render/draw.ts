@@ -12,6 +12,7 @@ import {
   labelOffsetY,
   badgeOffsetY,
 } from '../objects/annotations';
+import { sortForRender } from '../objects/depth';
 
 const BACKGROUND = '#0b0e14';
 
@@ -135,11 +136,11 @@ export function drawScene(
   const t = frame / fps;
   for (const layer of layers) {
     if (!layer.visible) continue;
-    const objIds = Object.keys(scene.objects)
-      .filter((id) => scene.objects[id].layerId === layer.id)
-      .sort();
-    for (const id of objIds) {
-      const obj = scene.objects[id];
+    const layerObjs = sortForRender(
+      Object.values(scene.objects).filter((o) => o.layerId === layer.id)
+    );
+    for (const obj of layerObjs) {
+      const id = obj.id;
       // Asset resolved ONCE per object: image source + shadow decision both
       // come from the SAME asset record (non-destructive; PRD §43).
       const asset = obj.assetId ? scene.assets[obj.assetId] : undefined;

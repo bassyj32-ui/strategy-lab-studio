@@ -94,6 +94,11 @@ export interface SceneObject {
   /** ARROW-ONLY: explicit stroke color; renderers fall back to their default. */
   color?: string;
   /**
+   * DEPTH (PRD §48): optional z-order within the layer. Higher renders later
+   * (on top); absent behaves as 0 with stable insertion order preserved.
+   */
+  z?: number;
+  /**
    * COMMANDER MARKER (P2 §36): display name painted UNDER the object by both
    * render doors. Purely descriptive — never affects animation math.
    */

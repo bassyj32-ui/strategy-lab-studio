@@ -672,3 +672,24 @@ describe('scene store', () => {
     });
   });
 });
+
+describe('z-depth (§48 adjustable ordering)', () => {
+  beforeEach(reset);
+
+  it('updateObjectProps writes z and explicit null clears it (undoable)', () => {
+    const id = s().createObjectOfType('marker');
+    s().beginInteraction();
+    s().updateObjectProps(id, { z: 7 });
+    s().endInteraction();
+    expect(s().scene.objects[id].z).toBe(7);
+
+    s().beginInteraction();
+    s().updateObjectProps(id, { z: null });
+    s().endInteraction();
+    expect(s().scene.objects[id].z).toBeUndefined();
+
+    // One undo restores the write of 7.
+    s().undo();
+    expect(s().scene.objects[id].z).toBe(7);
+  });
+});

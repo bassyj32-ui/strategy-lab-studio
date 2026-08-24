@@ -2,6 +2,7 @@ import type { SceneObject, Transform } from '../scene/types';
 import { useSceneStore } from '../scene/store';
 import { selectedObject } from '../scene/selectors';
 import { DEFAULT_ARROW_LENGTH, DEFAULT_ARROW_COLOR } from '../objects/factory';
+import { nextZAbove, nextZBelow } from '../objects/depth';
 
 interface FieldDef {
   key: keyof Transform;
@@ -179,6 +180,49 @@ export function Inspector() {
           />
         </label>
       ))}
+
+      {/* §48 depth ordering: direct z write + send-forward/backward chips. */}
+      <div className="preset-row">
+        <span className="preset-label">Depth</span>
+        <input
+          type="number"
+          spellCheck={false}
+          autoComplete="off"
+          data-testid="inspector-z"
+          value={obj.z ?? 0}
+          onFocus={beginInteraction}
+          onBlur={endInteraction}
+          onChange={(e) => {
+            const v = e.target.value === '' ? 0 : Number(e.target.value);
+            if (!Number.isFinite(v)) return;
+            updateObjectProps(obj.id, { z: v });
+          }}
+        />
+        <button
+          type="button"
+          className="chip"
+          data-testid="depth-backward"
+          onClick={() =>
+            updateObjectProps(obj.id, {
+              z: nextZBelow(Object.values(scene.objects), obj.layerId, obj.id),
+            })
+          }
+        >
+          ↓
+        </button>
+        <button
+          type="button"
+          className="chip"
+          data-testid="depth-forward"
+          onClick={() =>
+            updateObjectProps(obj.id, {
+              z: nextZAbove(Object.values(scene.objects), obj.layerId, obj.id),
+            })
+          }
+        >
+          ↑
+        </button>
+      </div>
 
       <div className="preset-row">
         <span className="preset-label">Rotate</span>

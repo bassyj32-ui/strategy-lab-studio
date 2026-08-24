@@ -245,10 +245,13 @@ export interface SceneState {
   updateObjectProps: (
     id: ObjId,
     props: Omit<
-      Partial<Pick<SceneObject, 'length' | 'color' | 'label' | 'faction' | 'confidence'>>,
-      'confidence'
+      Partial<
+        Pick<SceneObject, 'length' | 'color' | 'label' | 'faction' | 'confidence' | 'z'>
+      >,
+      'confidence' | 'z'
     > & {
       confidence?: SceneObject['confidence'] | null;
+      z?: number | null;
     }
   ) => void;
   /** Drag helper: nudge an object by a delta (no extra snapshot). */
@@ -536,6 +539,11 @@ export const useSceneStore = create<SceneState>()(
         if (props.confidence !== undefined) {
           if (props.confidence === null) delete obj.confidence;
           else obj.confidence = props.confidence;
+        }
+        // §48 depth: explicit null clears back to the stable default (absent).
+        if (props.z !== undefined) {
+          if (props.z === null) delete obj.z;
+          else obj.z = props.z;
         }
       });
     },
