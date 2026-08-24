@@ -165,7 +165,7 @@ h3 {
 
 .bottom-row {
   flex-shrink: 0;
-  max-height: 45vh;
+  max-height: 32vh;
   overflow-y: auto;
   overscroll-behavior: contain;
   border-top: 1px solid var(--edge);
@@ -175,7 +175,7 @@ h3 {
 /* --- Canvas -------------------------------------------------- */
 .canvas-wrap {
   position: relative;
-  margin: 16px auto;
+  margin: 8px auto;
   border: 1px solid var(--edge);
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.45);
 }
@@ -517,4 +517,43 @@ h3 {
   font-size: 10px;
   font-family: inherit;
   background: var(--field);
+}
+
+/* ---- Selection HUD (Wave-3 UX): live transform scrubbers next to the object ---- */
+.sel-hud {
+  position: absolute;
+  z-index: 6;
+  display: inline-flex;
+  align-items: stretch;
+  gap: 1px;
+  padding: 3px;
+  background: rgba(11, 16, 32, .92);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+  transform: translate(-50%, -100%);
+  user-select: none;
+}
+.scrub-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  cursor: ew-resize;
+  border-radius: 3px;
+}
+.scrub-field:hover { background: #1e2c47; }
+.scrub-field.editing { cursor: text; }
+.scrub-label { font-size: 10px; color: var(--dim); letter-spacing: .06em; }
+.scrub-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--signal);
+}
+.hud-input {
+  width: 64px;
+  padding: 1px 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: right;
 }

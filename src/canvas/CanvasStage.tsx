@@ -63,6 +63,19 @@ import {
 import { CameraHud } from './CameraHud';
 import { useMapImage } from './useMapImage';
 import { ASSET_DND_MIME } from '../ui/AssetsPanel';
+import { SelectionHud } from '../ui/SelectionHud';
+import {
+  type Box,
+  type Pt,
+  clampScale,
+  cornerWorld,
+  dist,
+  normalizeDeg,
+  rotationFromPointer,
+  scaleFromDrag,
+  snapDeg,
+  stalkWorld,
+} from './gizmo';
 
 // The MVP-1 editor preview is a low-res proxy: show the 1920x1080 world at
 // half scale so it fits typical screens (performance budget: MacBook Air M1).
@@ -119,6 +132,186 @@ function SelectionOutline({ obj, world }: { obj: SceneObject; world: Transform }
 const CURVE_SAMPLES = 24;
 const CURVE_COLOR = '#38bdf8';
 const HANDLE_RADIUS_SCREEN = 7;
+
+/** Local-unit bounding box of an object around its anchor, for gizmos. */
+function selectionLocalBox(obj: SceneObject): Box {
+  if (obj.type === 'arrow') {
+    const len = obj.length ?? DEFAULT_ARROW_LENGTH;
+    const padY = ARROWHEAD_HALF_WIDTH + 4;
+    return {
+      minX: -ARROW_SHAFT_WIDTH,
+      minY: -padY,
+      maxX: len + ARROWHEAD_LENGTH,
+      maxY: padY,
+    };
+  }
+  if (obj.type === 'marker') {
+    return {
+      minX: -MARKER_RADIUS,
+      minY: -MARKER_RADIUS,
+      maxX: MARKER_RADIUS,
+      maxY: MARKER_RADIUS,
+    };
+  }
+  const half = SHAPE_SIZE / 2;
+  return { minX: -half, minY: -half, maxX: half, maxY: half };
+}
+
+const GIZMO_COLOR = '#f5a83c';
+const STALK_LEN_SCREEN = 26;
+
+/**
+ * On-canvas transform gizmos (Wave-3 UX) for the SELECTED object: four corner
+ * handles (drag = multiplicative scale around the anchor) + a rotation stalk
+ * above the box (drag = rotate; Shift snaps to 15°). All math is pure
+ * (canvas/gizmo.ts); writes go through the EXISTING updateTransform action
+ * inside ONE begin/endInteraction session per gesture — no store changes.
+ * Grouped children work: pointer positions are mapped into the parent frame.
+ */
+function SelectionGizmos({
+  obj,
+  worldT,
+  parentFrame,
+  pointerWorld,
+}: {
+  obj: SceneObject;
+  worldT: Transform;
+  parentFrame: Transform | null;
+  /** Stage pointer → WORLD coords under the displayed camera. */
+  pointerWorld: () => Pt | null;
+}) {
+  const beginInteraction = useSceneStore((s) => s.beginInteraction);
+  const endInteraction = useSceneStore((s) => s.endInteraction);
+  const updateTransform = useSceneStore((s) => s.updateTransform);
+
+  const frame = parentFrame ?? {
+    x: 0,
+    y: 0,
+    rotation: 0,
+    scale: 1,
+    opacity: 1,
+  };
+  // Anchor + pointer in PARENT-frame coords (local semantics for children).
+  const anchorLocal: Pt = worldPointToLocal(frame, worldT.x, worldT.y);
+  const pointerInFrame = (): Pt | null => {
+    const w = pointerWorld();
+    if (!w) return null;
+    return worldPointToLocal(frame, w.x, w.y);
+  };
+
+  const zoom = useSceneStore((s) => s.scene.camera.zoom);
+  const k = 1 / Math.max(zoom, 0.0001); // screen px → world units
+  const box = selectionLocalBox(obj);
+  const rotDeg = worldT.rotation;
+
+  const scaleDragRef = useRef<{ startDist: number; startScale: number } | null>(
+    null
+  );
+
+  const cursor = (c: string) => ({
+    onMouseEnter: (e: KonvaEventObject<MouseEvent>) => {
+      const stage = e.target.getStage();
+      if (stage) stage.container().style.cursor = c;
+    },
+    onMouseLeave: (e: KonvaEventObject<MouseEvent>) => {
+      const stage = e.target.getStage();
+      if (stage) stage.container().style.cursor = 'default';
+    },
+  });
+
+  const corners: Array<{
+    key: string;
+    cx: 'min' | 'max';
+    cy: 'min' | 'max';
+    cur: 'nwse-resize' | 'nesw-resize';
+  }> = [
+    { key: 'nw', cx: 'min', cy: 'min', cur: 'nwse-resize' },
+    { key: 'ne', cx: 'max', cy: 'min', cur: 'nesw-resize' },
+    { key: 'se', cx: 'max', cy: 'max', cur: 'nwse-resize' },
+    { key: 'sw', cx: 'min', cy: 'max', cur: 'nesw-resize' },
+  ];
+
+  const stalk = stalkWorld(anchorLocal, box, rotDeg, worldT.scale, STALK_LEN_SCREEN * k);
+  const nwCorner = cornerWorld(anchorLocal, box, rotDeg, worldT.scale, 'min', 'min');
+
+  return (
+    <>
+      {corners.map((c) => {
+        const p = cornerWorld(anchorLocal, box, rotDeg, worldT.scale, c.cx, c.cy);
+        const size = 9 * k;
+        return (
+          <Rect
+            key={c.key}
+            data-testid={`gizmo-corner-${c.key}`}
+            x={p.x - size / 2}
+            y={p.y - size / 2}
+            width={size}
+            height={size}
+            fill={GIZMO_COLOR}
+            stroke="#0b1020"
+            strokeWidth={1.5 * k}
+            draggable
+            {...cursor(c.cur)}
+            onDragStart={() => {
+              const lp = pointerInFrame();
+              scaleDragRef.current = {
+                startDist: lp ? Math.max(dist(lp, anchorLocal), 1) : 1,
+                startScale: obj.transform.scale,
+              };
+              beginInteraction();
+            }}
+            onDragMove={() => {
+              const base = scaleDragRef.current;
+              const lp = pointerInFrame();
+              if (!base || !lp) return;
+              updateTransform(obj.id, {
+                scale: clampScale(
+                  scaleFromDrag(
+                    base.startScale,
+                    base.startDist,
+                    Math.max(dist(lp, anchorLocal), 1)
+                  )
+                ),
+              });
+            }}
+            onDragEnd={() => {
+              scaleDragRef.current = null;
+              endInteraction();
+            }}
+          />
+        );
+      })}
+
+      {/* Rotation stalk: line from top-center up, knob at the tip. */}
+      <Line
+        points={[nwCorner.x, nwCorner.y, stalk.x, stalk.y]}
+        stroke={GIZMO_COLOR}
+        strokeWidth={1.5 * k}
+        listening={false}
+      />
+      <Circle
+        data-testid="gizmo-stalk"
+        x={stalk.x}
+        y={stalk.y}
+        radius={6 * k}
+        fill="#ffffff"
+        stroke={GIZMO_COLOR}
+        strokeWidth={2 * k}
+        draggable
+        {...cursor('grab')}
+        onDragStart={() => beginInteraction()}
+        onDragMove={(e) => {
+          const lp = pointerInFrame();
+          if (!lp) return;
+          let deg = rotationFromPointer(anchorLocal, lp);
+          if (e.evt.shiftKey) deg = snapDeg(deg, 15);
+          updateTransform(obj.id, { rotation: normalizeDeg(deg) });
+        }}
+        onDragEnd={() => endInteraction()}
+      />
+    </>
+  );
+}
 
 interface HandleTarget {
   x: number;
@@ -406,6 +599,15 @@ export function CanvasStage() {
     e: KonvaEventObject<MouseEvent | WheelEvent>
   ): boolean => e.target === e.target.getStage();
 
+  // Selected object's composed transforms — shared by outline, gizmos, HUD.
+  const selectedWorldT = selected
+    ? resolveWorldTransform(scene.objects, selected.id)
+    : null;
+  const selectedParentFrame =
+    selected?.parentId
+      ? resolveWorldTransform(scene.objects, selected.parentId)
+      : null;
+
   // Double-click empty canvas = reset view. Skipped right after a pan so a
   // drag ending in a quick second press can't teleport the view.
   const handleStageDblClick = (e: KonvaEventObject<MouseEvent>): void => {
@@ -654,11 +856,8 @@ export function CanvasStage() {
 
           {/* Selection outline on top (non-interactive). */}
           <Layer listening={false}>
-            {selected && (
-              <SelectionOutline
-                obj={selected}
-                world={resolveWorldTransform(scene.objects, selected.id)}
-              />
+            {selected && selectedWorldT && (
+              <SelectionOutline obj={selected} world={selectedWorldT} />
             )}
           </Layer>
 
@@ -675,6 +874,20 @@ export function CanvasStage() {
               />
             )}
           </Layer>
+
+          {/* Transform gizmos (interactive, topmost): corner-scale + rotate. */}
+          <Layer>
+            {selected &&
+              selectedWorldT &&
+              activeTool !== 'arrow' && (
+                <SelectionGizmos
+                  obj={selected}
+                  worldT={selectedWorldT}
+                  parentFrame={selectedParentFrame}
+                  pointerWorld={pointerWorld}
+                />
+              )}
+          </Layer>
         </Stage>
       </div>
 
@@ -685,6 +898,21 @@ export function CanvasStage() {
         onZoomOut={zoomStepOut}
         onResetView={resetView}
       />
+
+      {/* Selection HUD: live X/Y/SCL/ROT scrubbers next to the object —
+          feedback lands where the user is already looking. Also OUTSIDE the
+          scaled wrapper (natural DOM sizing). */}
+      {selected && selectedWorldT && (
+        <SelectionHud
+          obj={selected}
+          worldT={selectedWorldT}
+          parentFrame={selectedParentFrame}
+          displayCamera={displayCamera}
+          vp={vp}
+          displayScale={DISPLAY_SCALE}
+          wrapWidth={worldSize.w * DISPLAY_SCALE}
+        />
+      )}
     </div>
   );
 }
