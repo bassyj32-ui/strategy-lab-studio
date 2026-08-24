@@ -13,6 +13,7 @@ import {
   labelOffsetY,
   badgeOffsetY,
 } from '../objects/annotations';
+import { effectRings, effectColor } from '../objects/effects';
 import { sortForRender } from '../objects/depth';
 
 const BACKGROUND = '#0b0e14';
@@ -207,6 +208,20 @@ export function drawScene(
         const size = PLACEHOLDER_SIZE * screen.scale;
         ctx.fillStyle = PLACEHOLDER_COLORS[obj.type] ?? '#888888';
         ctx.fillRect(-size / 2, -size / 2, size, size);
+      }
+
+      // §50 effect halo (P2): concentric deterministic rings painted inside
+      // the rotated frame — circles are rotation-invariant, same as the
+      // faction ring. Alpha stacks on the object's own opacity.
+      if (obj.effect) {
+        for (const ring of effectRings(obj.effect, t)) {
+          ctx.beginPath();
+          ctx.arc(0, 0, ringR * ring.radiusFactor, 0, Math.PI * 2);
+          ctx.globalAlpha = screen.opacity * ring.alpha;
+          ctx.fillStyle = effectColor(obj.effect);
+          ctx.fill();
+        }
+        ctx.globalAlpha = screen.opacity;
       }
 
       // Faction ring (P2 §36): a circle is rotation-invariant, so it is safe

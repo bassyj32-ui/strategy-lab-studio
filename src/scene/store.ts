@@ -246,7 +246,16 @@ export interface SceneState {
     id: ObjId,
     props: Omit<
       Partial<
-        Pick<SceneObject, 'length' | 'color' | 'label' | 'faction' | 'confidence' | 'z'>
+        Pick<
+          SceneObject,
+          | 'length'
+          | 'color'
+          | 'label'
+          | 'faction'
+          | 'confidence'
+          | 'z'
+          | 'effect'
+        >
       >,
       'confidence' | 'z'
     > & {
@@ -546,6 +555,12 @@ export const useSceneStore = create<SceneState>()(
         if (props.z !== undefined) {
           if (props.z === null) delete obj.z;
           else obj.z = props.z;
+        }
+        // §50 effect: falsy (empty string / explicit undefined) clears back
+        // to the default (absent) — the Inspector sends undefined for "None".
+        if ('effect' in props) {
+          if (props.effect) obj.effect = props.effect;
+          else delete obj.effect;
         }
       });
     },

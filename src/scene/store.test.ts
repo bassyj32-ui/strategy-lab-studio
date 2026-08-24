@@ -121,6 +121,24 @@ describe('scene store', () => {
     expect(cleared.faction).toBe('blue');
   });
 
+  it('updateObjectProps writes and clears the procedural effect (§50)', () => {
+    const id = s().createObjectOfType('marker');
+    s().beginInteraction();
+    s().updateObjectProps(id, { effect: 'smoke' });
+    s().endInteraction();
+    expect(s().scene.objects[id].effect).toBe('smoke');
+
+    // Empty string clears (Inspector sends undefined; store deletes).
+    s().beginInteraction();
+    s().updateObjectProps(id, { effect: undefined });
+    s().endInteraction();
+    expect(s().scene.objects[id].effect).toBeUndefined();
+
+    // One undo step restores the previous state (smoke again).
+    s().undo();
+    expect(s().scene.objects[id].effect).toBe('smoke');
+  });
+
   it('setTool toggles the canvas tool (store-root, not undoable)', () => {
     expect(s().activeTool).toBe('select');
     s().setTool('arrow');

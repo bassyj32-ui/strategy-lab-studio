@@ -22,6 +22,15 @@ export type AssetCategory =
 
 export type Faction = 'red' | 'blue' | 'neutral';
 
+/**
+ * §50 EFFECT SYSTEM (P2): optional procedural overlays painted around an
+ * object by BOTH render doors. Purely deterministic (functions of time only —
+ * no randomness), tactical-clarity-first per PRD §50. `fade` is already
+ * expressible through opacity keyframes and `blur` needs codec-risky canvas
+ * filters, so neither is a stored effect kind; vignette lives on Scene.
+ */
+export type EffectKind = 'smoke' | 'dust' | 'impact' | 'fire' | 'glow';
+
 export interface AssetMetadata {
   aspectRatio: number;        // width / height, derived at import (immutable)
   defaultScale: number;       // suggested placement scale, 1 = 100%
@@ -93,6 +102,8 @@ export interface SceneObject {
   length?: number;
   /** ARROW-ONLY: explicit stroke color; renderers fall back to their default. */
   color?: string;
+  /** §50 EFFECT SYSTEM: optional procedural overlay (see EffectKind). */
+  effect?: EffectKind;
   /**
    * DEPTH (PRD §48): optional z-order within the layer. Higher renders later
    * (on top); absent behaves as 0 with stable insertion order preserved.

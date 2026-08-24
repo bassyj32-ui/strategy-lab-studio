@@ -154,6 +154,32 @@ export function Inspector() {
           <option value="disputed">Disputed</option>
         </select>
       </label>
+      {/* Procedural effects (P2 §50): animated overlay rings painted by both
+          render doors. fade/blur/vignette/highlight are intentionally NOT
+          stored kinds (opacity keyframes / canvas-filter risk / Scene.vignette
+          / Decisive Move highlight cover them). */}
+      <label className="inspector-field">
+        <span>Effect</span>
+        <select
+          data-testid="inspector-effect"
+          value={obj.effect ?? ''}
+          onFocus={beginInteraction}
+          onBlur={endInteraction}
+          onChange={(e) => {
+            const v = e.target.value;
+            updateObjectProps(obj.id, {
+              effect: v === '' ? undefined : (v as SceneObject['effect']),
+            });
+          }}
+        >
+          <option value="">None</option>
+          <option value="smoke">Smoke</option>
+          <option value="dust">Dust</option>
+          <option value="impact">Impact</option>
+          <option value="fire">Fire</option>
+          <option value="glow">Glow</option>
+        </select>
+      </label>
 
       {FIELDS.map((f) => (
         <label key={f.key} className="inspector-field">

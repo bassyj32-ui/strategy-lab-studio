@@ -26,6 +26,7 @@ class MockCtx {
   lineWidth = 0;
   arc = vi.fn();
   stroke = vi.fn();
+  fill = vi.fn();
   measureText = vi.fn((text: string) => ({ width: text.length * 7 }));
   createRadialGradient = vi.fn(() => ({ addColorStop: vi.fn() }));
   drawImage = vi.fn();
@@ -432,6 +433,45 @@ describe('commander annotations (faction ring / name label / confidence badge)',
     drawScene(ctx, annotated({}), 0, 30, { w: 1920, h: 1080 }, {});
     expect(raw.fillText).not.toHaveBeenCalled();
     expect(raw.arc).not.toHaveBeenCalled();
+  });
+});
+
+describe('procedural effects (§50)', () => {
+  const withEffect = (effect: 'fire' | 'impact' | undefined): Scene => {
+    const scene = makeScene();
+    scene.objects.obj1.type = 'marker';
+    if (effect) scene.objects.obj1.effect = effect;
+    return scene;
+  };
+
+  it('paints expanding rings in the effect colour when obj.effect is set', () => {
+    const { ctx, raw } = makeCtx();
+    drawScene(ctx, withEffect('fire'), 0.2, 30, { w: 1920, h: 1080 }, {});
+    // Fire's halo colour must appear among fills; arcs beyond the base shape
+    // prove the rings were drawn (marker body itself is not arc-based).
+    expect(raw.fillStyleHistory).toContain('#ef6a2a');
+    expect(raw.arc.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('paints NO effect rings when obj.effect is absent', () => {
+    const { ctx, raw } = makeCtx();
+    drawScene(ctx, withEffect(undefined), 0.2, 30, { w: 1920, h: 1080 }, {});
+    expect(raw.fillStyleHistory).not.toContain('#ef6a2a');
+  });
+
+  it('ring radii grow over the cycle (animated, deterministic)', () => {
+    const maxArcRadiusAt = (t: number): number[] => {
+      const { ctx, raw } = makeCtx();
+      drawScene(ctx, withEffect('impact'), t, 30, { w: 1920, h: 1080 }, {});
+      return raw.arc.mock.calls.map((c) => c[2] as number);
+    };
+    const early = Math.max(...maxArcRadiusAt(0.05));
+    const late = Math.max(...maxArcRadiusAt(0.5));
+    expect(late).toBeGreaterThan(early);
+    // Deterministic: same frame → identical radii sequence.
+    expect(JSON.stringify(maxArcRadiusAt(0.05))).toBe(
+      JSON.stringify(maxArcRadiusAt(0.05))
+    );
   });
 });
 

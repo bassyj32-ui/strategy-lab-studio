@@ -1,8 +1,9 @@
-import { Group, Rect, Ellipse, Text, Line, Image as KonvaImage } from 'react-konva';
+import { Group, Rect, Ellipse, Text, Line, Image as KonvaImage, Circle } from 'react-konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import type { ReactNode } from 'react';
 import type { ObjId, SceneObject, Transform } from '../scene/types';
 import { useSceneStore } from '../scene/store';
+import { usePlaybackStore } from '../timeline/playbackStore';
 import { worldPointToLocal } from './groups';
 import {
   FACTION_COLORS,
@@ -12,6 +13,7 @@ import {
   badgeOffsetY,
 } from './annotations';
 import { useMapImage } from '../canvas/useMapImage';
+import { effectRings, effectColor } from './effects';
 // Unified selection: canvas clicks must reach BOTH the scene store (canvas
 // highlight + Inspector) and the timeline selection store (KeyframeEditor).
 import { selectObjectUnified } from '../timeline/selection';
@@ -223,9 +225,22 @@ export function ObjectNode({
   // which paints labels in unrotated screen space.
   const ringR = annotationRingRadius(obj, asset ?? undefined);
   const needsAnnotations = Boolean(obj.faction || obj.label || obj.confidence);
+  // §50 effect halo (P2): same pure ring math as the export door, painted as
+  // non-interactive circles inside the transform group (rotation-invariant).
+  const playbackTime = usePlaybackStore((s) => s.currentTime);
+  const rings = obj.effect ? effectRings(obj.effect, playbackTime) : [];
   return (
     <Group {...common}>
       {body}
+      {rings.map((ring, i) => (
+        <Circle
+          key={`fx-${i}`}
+          listening={false}
+          radius={ringR * ring.radiusFactor}
+          fill={obj.effect ? effectColor(obj.effect) : undefined}
+          opacity={ring.alpha}
+        />
+      ))}
       {needsAnnotations && (
         <Group listening={false} rotation={-world.rotation}>
           {obj.faction && (
