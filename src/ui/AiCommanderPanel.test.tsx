@@ -5,11 +5,11 @@ import { AiCommanderPanel } from './AiCommanderPanel';
 import { useSceneStore } from '../scene/store';
 import { createDefaultScene, DEFAULT_LAYER_ID } from '../scene/factory';
 import type { Scene } from '../scene/types';
-import type { AIProvider, CompletionResult } from '../ai/provider';
+import type { AIProvider, CompletionResult, CompletionRequest } from '../ai/provider';
 
 // The panel builds its provider via the factory — swap in a fake so no
 // network is ever touched. Settings storage stays real (jsdom localStorage).
-const fakeComplete = vi.fn<() => Promise<CompletionResult>>();
+const fakeComplete = vi.fn<(req: CompletionRequest) => Promise<CompletionResult>>();
 vi.mock('../ai/provider', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../ai/provider')>();
   return {
@@ -172,5 +172,70 @@ describe('AiCommanderPanel', () => {
     expect(screen.getByTestId('ai-thread').textContent).toContain(
       'Nothing to do'
     );
+  });
+
+  it('replays prior orders as context on the next send (§A memory)', async () => {
+    fakeComplete.mockImplementation(async (req) => {
+      // Capture the built request to confirm history replay.
+      (fakeComplete as unknown as { lastReq?: unknown }).lastReq = req;
+      return { text: 'done', proposals: [] };
+    });
+    const getReq = () =>
+      (fakeComplete as unknown as { lastReq?: { messages: { role: string; content: string }[] } })
+        .lastReq;
+
+    render(<AiCommanderPanel />);
+    fireEvent.change(screen.getByTestId('ai-prompt-input'), { target: { value: 'first order' } });
+    fireEvent.click(screen.getByTestId('ai-send'));
+    await waitFor(() => expect(screen.getByTestId('ai-thread').textContent).toContain('first order'));
+
+    fireEvent.change(screen.getByTestId('ai-prompt-input'), { target: { value: 'second order' } });
+    fireEvent.click(screen.getByTestId('ai-send'));
+    await waitFor(() => expect(screen.getByTestId('ai-thread').textContent).toContain('second order'));
+
+    const msgs = getReq()!.messages;
+    expect(msgs.map((m) => m.role)).toEqual(['system', 'user', 'assistant', 'user']);
+    expect(msgs[1].content).toContain('Prior order: first order');
+    expect(msgs[2].content).toContain('done'); // prior reply replayed
+  });
+
+  it('respects the remember toggle (off → no replay)', async () => {
+    fakeComplete.mockImplementation(async (req) => {
+      (fakeComplete as unknown as { lastReq?: { messages: { role: string }[] } }).lastReq = req;
+      return { text: 'done', proposals: [] };
+    });
+    const getReq = () =>
+      (fakeComplete as unknown as { lastReq?: { messages: { role: string }[] } }).lastReq;
+
+    render(<AiCommanderPanel />);
+    fireEvent.click(screen.getByTestId('ai-remember-input')); // turn OFF
+    fireEvent.change(screen.getByTestId('ai-prompt-input'), { target: { value: 'first' } });
+    fireEvent.click(screen.getByTestId('ai-send'));
+    await waitFor(() => expect(screen.getByTestId('ai-thread').textContent).toContain('first'));
+    fireEvent.change(screen.getByTestId('ai-prompt-input'), { target: { value: 'second' } });
+    fireEvent.click(screen.getByTestId('ai-send'));
+    await waitFor(() => expect(screen.getByTestId('ai-thread').textContent).toContain('second'));
+
+    const msgs = getReq()!.messages;
+    expect(msgs.map((m) => m.role)).toEqual(['system', 'user']); // no replay
+  });
+
+  it('shows AI Change history with one-click undo', async () => {
+    fakeComplete.mockResolvedValue({
+      text: 'Created.',
+      proposals: [{ tool: 'set_vignette', args: { on: true } }],
+    });
+    render(<AiCommanderPanel />);
+    fireEvent.change(screen.getByTestId('ai-prompt-input'), { target: { value: 'add drama' } });
+    fireEvent.click(screen.getByTestId('ai-send'));
+    await waitFor(() => expect(screen.getByTestId('ai-proposal')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('ai-approve'));
+    expect(s().scene.vignette).toBe(true);
+
+    fireEvent.click(screen.getByTestId('ai-history-toggle'));
+    expect(screen.getByTestId('ai-history')).toBeTruthy();
+    expect(screen.getByTestId('ai-history').textContent).toContain('AI Change #1');
+    fireEvent.click(screen.getByTestId('ai-history-undo'));
+    expect(s().scene.vignette).toBeUndefined(); // undone
   });
 });

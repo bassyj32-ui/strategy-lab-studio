@@ -834,8 +834,70 @@ h3 {
   padding: 5px 6px;
 }
 
-.ai-footnote {
-  margin-top: 4px;
-  font-size: 10px;
-  color: #64748b;
-}
+ .ai-footnote {
+   margin-top: 4px;
+   font-size: 10px;
+   color: #64748b;
+ }
+
+ /* §A: settings checkbox + bounded context input + change history */
+ .ai-remember {
+   display: inline-flex;
+   align-items: center;
+   gap: 4px;
+   font-size: 11px;
+   color: #94a3b8;
+   white-space: nowrap;
+ }
+ .ai-settings input[type='number'] {
+   width: 44px;
+   background: var(--panel-raised, #18233a);
+   color: #e5e7eb;
+   border: 1px solid #243049;
+   border-radius: 4px;
+   padding: 3px 5px;
+   font-size: 11px;
+ }
+ .ai-history-toggle {
+   padding: 4px 8px 0;
+ }
+ .ai-history-toggle button {
+   background: none;
+   border: none;
+   color: var(--accent, #f5a83c);
+   font-size: 11px;
+   cursor: pointer;
+   padding: 0;
+ }
+ .ai-history {
+   margin: 4px 8px;
+   border: 1px solid #243049;
+   border-radius: 6px;
+   padding: 4px;
+   display: flex;
+   flex-direction: column;
+   gap: 3px;
+ }
+ .ai-history-row {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   gap: 8px;
+   font-size: 11px;
+   color: #cbd5e1;
+ }
+ .ai-history-label {
+   color: #94a3b8;
+ }
+ .ai-history-row button {
+   background: #243049;
+   color: #e5e7eb;
+   border: none;
+   border-radius: 4px;
+   padding: 2px 8px;
+   font-size: 11px;
+   cursor: pointer;
+ }
+ .ai-history-row button:hover {
+   background: #2f3d5c;
+ }

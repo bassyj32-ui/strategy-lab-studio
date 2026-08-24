@@ -10,15 +10,25 @@ import type { ProposedOp } from './tools';
 export const API_KEY_STORAGE = 'sls.ai.api-key';
 export const MODEL_STORAGE = 'sls.ai.model';
 export const BASE_URL_STORAGE = 'sls.ai.base-url';
+/** §A multi-turn memory toggle (persisted as '0'/'1'). */
+export const REMEMBER_STORAGE = 'sls.ai.remember';
+/** §A max prior turns replayed to the provider (bounded context). */
+export const MAX_TURNS_STORAGE = 'sls.ai.max-turns';
 
 export const DEFAULT_MODEL = 'deepseek-chat';
 export const DEFAULT_BASE_URL = 'https://api.deepseek.com';
+export const DEFAULT_REMEMBER = true;
+export const DEFAULT_MAX_TURNS = 3;
 
 /** User-controlled settings; persisted locally only (§64 + AGENTS secrets law). */
 export interface AISettings {
   apiKey: string;
   model: string;
   baseUrl: string;
+  /** Replay prior orders/replies so the Commander keeps context (§A). */
+  remember: boolean;
+  /** How many prior turns to replay (0 disables memory). */
+  maxTurns: number;
 }
 
 function storageGet(key: string): string | null {
@@ -46,10 +56,13 @@ function storageRemove(key: string): void {
 }
 
 export function loadAISettings(): AISettings {
+  const rememberRaw = storageGet(REMEMBER_STORAGE);
   return {
     apiKey: storageGet(API_KEY_STORAGE) ?? '',
     model: storageGet(MODEL_STORAGE) ?? DEFAULT_MODEL,
     baseUrl: storageGet(BASE_URL_STORAGE) ?? DEFAULT_BASE_URL,
+    remember: rememberRaw ? rememberRaw !== '0' : DEFAULT_REMEMBER,
+    maxTurns: Number(storageGet(MAX_TURNS_STORAGE)) || DEFAULT_MAX_TURNS,
   };
 }
 
@@ -60,6 +73,12 @@ export function saveAISettings(settings: Partial<AISettings>): void {
   }
   if (settings.model !== undefined) storageSet(MODEL_STORAGE, settings.model);
   if (settings.baseUrl !== undefined) storageSet(BASE_URL_STORAGE, settings.baseUrl);
+  if (settings.remember !== undefined) {
+    storageSet(REMEMBER_STORAGE, settings.remember ? '1' : '0');
+  }
+  if (settings.maxTurns !== undefined) {
+    storageSet(MAX_TURNS_STORAGE, String(settings.maxTurns));
+  }
 }
 
 /** One chat message in the provider-neutral request. */

@@ -16,6 +16,8 @@ const settings = (over: Partial<AISettings> = {}): AISettings => ({
   apiKey: 'sk-test-123',
   model: 'deepseek-chat',
   baseUrl: 'https://api.example.test',
+  remember: true,
+  maxTurns: 3,
   ...over,
 });
 
@@ -35,6 +37,8 @@ describe('AI settings storage (sls.ai.*)', () => {
       apiKey: '',
       model: DEFAULT_MODEL,
       baseUrl: DEFAULT_BASE_URL,
+      remember: true,
+      maxTurns: 3,
     });
   });
 

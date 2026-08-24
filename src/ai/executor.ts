@@ -12,12 +12,24 @@ import {
   type ProposedOp,
   type ResolvedOp,
 } from './tools';
-import type { AIProvider, AISettings } from './provider';
+import type { AIProvider, AISettings, ChatMessage } from './provider';
 
 export interface CommandContext {
   scene: Scene;
   selectedObjId?: string | null;
   selectedIds?: string[];
+  /**
+   * §A multi-turn memory: prior orders/replies to replay so the Commander
+   * keeps context. Bounded by the caller (panel slices to maxTurns). Each
+   * turn is `{role, content}` — NOT scene state (that is recomputed fresh).
+   */
+  history?: ChatTurn[];
+}
+
+/** One replayed exchange turn for multi-turn memory. */
+export interface ChatTurn {
+  role: 'user' | 'assistant';
+  content: string;
 }
 
 /** The result of one command cycle, ready for the approval UI. */
@@ -74,10 +86,18 @@ export async function requestProposal(
     JSON.stringify(summary),
   ].join('\n');
 
+  // §A: replay bounded prior turns (orders + replies) AFTER the system rules
+  // so the Commander can reference "that formation we made earlier" etc.
+  const replay: ChatMessage[] = (ctx.history ?? []).map((t) => ({
+    role: t.role,
+    content: t.role === 'user' ? `Prior order: ${t.content}` : `Prior reply: ${t.content}`,
+  }));
+
   const result = await provider.complete(
     {
       messages: [
         { role: 'system', content: systemPrompt(ctx.scene) },
+        ...replay,
         { role: 'user', content: userContent },
       ],
       tools: TOOL_SPECS,

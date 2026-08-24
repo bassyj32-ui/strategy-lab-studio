@@ -440,6 +440,13 @@ export interface SceneState {
   endInteraction: () => void;
   undo: () => void;
   redo: () => void;
+  /**
+   * §A AI history: discard the most recent AI Commanded change AND everything
+   * applied after it (mirrors the undo stack order — a later edit cannot
+   * survive the removal of an earlier one). No-op if no AI change exists.
+   * Returns the number of undo steps performed.
+   */
+  undoLastAIChange: () => number;
 
   // ---- Object creation / editing ----
   createObjectOfType: (
@@ -752,6 +759,23 @@ export const useSceneStore = create<SceneState>()(
           (id) => state.scene.objects[id]
         );
       });
+    },
+
+    undoLastAIChange: () => {
+      const past = get().past;
+      // Find the most recent AI-labeled entry.
+      let idx = -1;
+      for (let i = past.length - 1; i >= 0; i--) {
+        if (past[i].label?.startsWith('AI Change')) {
+          idx = i;
+          break;
+        }
+      }
+      if (idx === -1) return 0;
+      // Undo everything from that entry forward (inclusive).
+      const steps = past.length - idx;
+      for (let i = 0; i < steps; i++) get().undo();
+      return steps;
     },
 
     createObjectOfType: (type, opts) => {

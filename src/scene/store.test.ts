@@ -992,3 +992,40 @@ describe('applyAIBatch (AI Change history)', () => {
     expect(JSON.stringify(s().scene)).toBe(before);
   });
 });
+
+// ---- AI Commander history (§A label-aware undo) ----
+
+describe('undoLastAIChange', () => {
+  beforeEach(reset);
+
+  it('undoes the most recent AI change and is a no-op without one', () => {
+    s().updateBrand({ battleName: 'Manual' }); // unlabeled manual edit
+    s().applyAIBatch([{ tool: 'set_vignette', on: true }]); // AI Change #1
+    expect(s().scene.vignette).toBe(true);
+    const steps = s().undoLastAIChange();
+    expect(steps).toBe(1);
+    expect(s().scene.vignette).toBeUndefined();
+    // No AI change left → further calls return 0.
+    expect(s().undoLastAIChange()).toBe(0);
+  });
+
+  it('discards later edits made after the targeted AI change', () => {
+    s().applyAIBatch([{ tool: 'set_vignette', on: true }]); // AI Change #1
+    s().updateBrand({ battleName: 'Later' }); // manual edit after
+    expect(s().scene.brand?.battleName).toBe('Later');
+    const steps = s().undoLastAIChange();
+    // Undoes both the manual edit AND the AI change (stack order).
+    expect(steps).toBe(2);
+    expect(s().scene.vignette).toBeUndefined();
+    expect(s().scene.brand).toBeUndefined();
+  });
+
+  it('numbers cascade after undo so a fresh AI change restarts correctly', () => {
+    s().applyAIBatch([{ tool: 'set_vignette', on: true }]); // #1
+    s().applyAIBatch([{ tool: 'toggle_closing_card', on: true }]); // #2
+    s().undoLastAIChange(); // remove #2
+    expect(s().scene.closingCard).toBeUndefined();
+    s().applyAIBatch([{ tool: 'set_vignette', on: false }]); // next is #2 again
+    expect(s().past[s().past.length - 1].label).toBe('AI Change #2');
+  });
+});

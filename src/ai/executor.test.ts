@@ -19,7 +19,7 @@ const scene = (): Scene => {
   return s;
 };
 
-const settings = { apiKey: 'sk-test', model: 'deepseek-chat', baseUrl: 'https://x' };
+const settings = { apiKey: 'sk-test', model: 'deepseek-chat', baseUrl: 'https://x', remember: true, maxTurns: 3 };
 
 function fakeProvider(
   result: Partial<CompletionResult>,
@@ -54,6 +54,35 @@ describe('requestProposal (§53-62 command cycle)', () => {
     // §62 summary travels inline as JSON — compact, not the raw scene.
     expect(req.messages[1].content).toContain('"armies"');
     expect(req.messages[1].content).toContain('Hannibal');
+  });
+
+  it('replays bounded prior turns before the current order (§A memory)', async () => {
+    const capture: { req?: CompletionRequest } = {};
+    await requestProposal(
+      fakeProvider({ text: 'ok', proposals: [] }, capture),
+      settings,
+      'now flank them',
+      {
+        scene: scene(),
+        history: [
+          { role: 'user', content: 'create a left wing' },
+          { role: 'assistant', content: 'Created the left wing.' },
+          { role: 'user', content: 'group it' },
+        ],
+      }
+    );
+    const msgs = capture.req!.messages;
+    // system, 3 replayed turns, final user
+    expect(msgs.map((m) => m.role)).toEqual([
+      'system',
+      'user',
+      'assistant',
+      'user',
+      'user',
+    ]);
+    expect(msgs[1].content).toContain('Prior order: create a left wing');
+    expect(msgs[2].content).toContain('Prior reply: Created the left wing.');
+    expect(msgs[4].content).toContain("Commander's order: now flank them");
   });
 
   it('validates proposals BEFORE anything else; invalid ops become errors', async () => {
