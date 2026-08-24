@@ -5,7 +5,11 @@ export default defineConfig({
     // Default to node so pre-existing logic/render tests are unaffected.
     // DOM (React Testing Library) tests opt in with `@vitest-environment jsdom`.
     environment: 'node',
-    include: ['src/**/*.test.{ts,tsx}'],
+    include: [
+      'src/**/*.test.{ts,tsx}',
+      // Pure Node export-bridge tests (no DOM needed).
+      'scripts/**/*.test.mjs',
+    ],
     setupFiles: ['./src/test/setup.ts'],
   },
 });

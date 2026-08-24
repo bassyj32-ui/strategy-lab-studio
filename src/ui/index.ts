@@ -5,3 +5,4 @@ export { LayersPanel } from './LayersPanel';
 export { ScenesPanel } from './ScenesPanel';
 export { AssetsPanel } from './AssetsPanel';
 export { AiCommanderPanel } from './AiCommanderPanel';
+export { ExportDialog } from './ExportDialog';

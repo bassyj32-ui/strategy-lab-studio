@@ -2,15 +2,19 @@ import { useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { useSceneStore } from '../scene/store';
 import type { SceneObjectType, FormationPattern } from '../scene/types';
+import { ExportDialog } from './ExportDialog';
 // Placing an object must also SELECT it (both stores) so the Inspector and
 // timeline immediately target the new object.
 import { selectObjectUnified } from '../timeline/selection';
 
 // MVP-1 palette: `shape` and `marker`. Arrow (MVP-2): clicking ARMS the
 // canvas draw tool instead of instant-placing; drag-drop places a default.
+// `unit` (sprite) places an asset-less gray placeholder unit (drop a library
+// sprite onto it — or drag a unit-category asset directly — to paint the image).
 const PALETTE: { type: SceneObjectType; label: string }[] = [
   { type: 'shape', label: 'Shape (blue)' },
   { type: 'marker', label: 'Marker (red)' },
+  { type: 'unit', label: 'Unit (sprite)' },
   { type: 'arrow', label: 'Arrow (amber)' },
 ];
 
@@ -27,6 +31,7 @@ export function Toolbar() {
   const objects = useSceneStore((s) => s.scene.objects);
   const mapFileRef = useRef<HTMLInputElement | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [showExport, setShowExport] = useState(false);
   const [pattern, setPattern] = useState<FormationPattern>('line');
   const [count, setCount] = useState(5);
   const [spacing, setSpacing] = useState(50);
@@ -88,23 +93,9 @@ export function Toolbar() {
     setStatus('Saved scene.json');
   };
 
-  // Per-scene export helper (Tab A): persist the active scene to a portable
-  // `scene.json` (headless Remotion export input) AND copy the exact render
-  // command so the commander never hand-writes it. The browser cannot run the
-  // Remotion CLI itself, so we bridge the last mile with clipboard + download.
-  const handleExportVideo = async () => {
-    handleSaveScene();
-    const cmd =
-      'npx remotion render src/render/index.ts BattleScene out/scene.mp4 --props=scene.json';
-    try {
-      await navigator.clipboard.writeText(cmd);
-      setStatus('Saved scene.json + copied export command. Paste it in your terminal.');
-    } catch {
-      // Non-secure context: clipboard unavailable. The status text still
-      // carries the command so the commander can copy it by hand.
-      setStatus(`Export command: ${cmd}`);
-    }
-  };
+  // One-click Export: open the Export dialog, which streams a server-side
+  // Remotion render (never inside the browser) and reports progress over SSE.
+  const openExport = () => setShowExport(true);
 
   // Group the current multi-selection into one parent (one undoable txn).
   const handleGroup = () => {
@@ -199,9 +190,9 @@ export function Toolbar() {
       <button
         type="button"
         data-testid="export-video"
-        onClick={handleExportVideo}
+        onClick={openExport}
       >
-        Export Video (copy command)
+        Export Video…
       </button>
       <input
         ref={mapFileRef}
@@ -291,6 +282,8 @@ export function Toolbar() {
       <p className="hint" aria-live="polite" data-testid="toolbar-status">
         {status}
       </p>
+
+      <ExportDialog open={showExport} onClose={() => setShowExport(false)} />
     </div>
   );
 }

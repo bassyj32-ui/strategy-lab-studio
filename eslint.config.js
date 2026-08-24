@@ -17,6 +17,15 @@ export default [
   },
   js.configs.recommended,
   {
+    // Pure Node ES modules (e.g. scripts/exportBridge.mjs) need Node globals.
+    files: ['**/*.mjs'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
+  {
     files: ['**/*.{ts,tsx}'],
     languageOptions: {
       parser: tsparser,
