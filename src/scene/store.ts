@@ -73,6 +73,8 @@ interface HistoryEntry {
   scene: Scene;
   inactiveScenes: Record<string, Scene>;
   activeSceneId: string;
+  /** §61: optional human-readable label (e.g. 'AI Change #3') for the UI. */
+  label?: string;
 }
 
 function snapshotEntry(state: Draft<SceneState>): HistoryEntry {
@@ -84,8 +86,10 @@ function snapshotEntry(state: Draft<SceneState>): HistoryEntry {
 }
 
 /** Push a deep project snapshot onto `past` and clear `future`. */
-function pushHistory(state: Draft<SceneState>) {
-  state.past.push(snapshotEntry(state));
+function pushHistory(state: Draft<SceneState>, label?: string) {
+  const entry = snapshotEntry(state);
+  if (label) entry.label = label;
+  state.past.push(entry);
   if (state.past.length > MAX_HISTORY) state.past.shift();
   state.future = [];
 }
@@ -196,6 +200,206 @@ function revalidateStoreRoot(state: Draft<SceneState>) {
   }
 }
 
+/**
+ * §60/§61: apply ONE validated AI op to a scene draft. Mirrors the bodies of
+ * the corresponding public store actions (same helpers, same invariants) so
+ * a batch lands as ordinary, independently editable scene data. Returns an
+ * error string when the op could not land; never throws.
+ */
+function applyResolvedOp(
+  state: Draft<SceneState>,
+  op: import('../ai/tools').ResolvedOp
+): string | null {
+  const scene = state.scene;
+  const objects = scene.objects as unknown as Record<ObjId, SceneObject>;
+  const activeLayer = () =>
+    scene.layers.some((l) => l.id === state.activeLayerId)
+      ? state.activeLayerId
+      : DEFAULT_LAYER_ID;
+  try {
+    switch (op.tool) {
+      case 'create_object': {
+        const id = createId(op.type);
+        const obj = createSceneObject(op.type, {
+          id,
+          layerId: activeLayer(),
+          x: op.x,
+          y: op.y,
+        });
+        if (op.faction) obj.faction = op.faction;
+        if (op.label) obj.label = op.label;
+        scene.objects[id] = obj;
+        return null;
+      }
+      case 'move_objects': {
+        const roots = selectionRoots(objects, op.ids);
+        for (const root of roots) {
+          let dx = op.dx ?? 0;
+          let dy = op.dy ?? 0;
+          if (op.x !== undefined || op.y !== undefined) {
+            const world = resolveWorldTransform(objects, root);
+            dx = (op.x ?? world.x) - world.x;
+            dy = (op.y ?? world.y) - world.y;
+          }
+          applyWorldDelta(scene, root, dx, dy);
+        }
+        return null;
+      }
+      case 'update_object_props': {
+        const obj = scene.objects[op.id];
+        if (!obj) return `object ${op.id} not found`;
+        const p = op.props;
+        if (p.length !== undefined) obj.length = p.length;
+        if ('arrowStyle' in p && p.arrowStyle) obj.arrowStyle = p.arrowStyle;
+        if (p.label !== undefined) {
+          const trimmed = p.label.trim();
+          if (trimmed) obj.label = trimmed;
+          else delete obj.label;
+        }
+        if (p.faction !== undefined) obj.faction = p.faction;
+        if (p.confidence !== undefined) {
+          if (p.confidence === null) delete obj.confidence;
+          else obj.confidence = p.confidence;
+        }
+        if (p.effect !== undefined) {
+          if (p.effect === null) delete obj.effect;
+          else obj.effect = p.effect;
+        }
+        if (p.z !== undefined) {
+          if (p.z === null) delete obj.z;
+          else obj.z = p.z;
+        }
+        return null;
+      }
+      case 'group_objects': {
+        if (op.ids.length < 2) return 'grouping needs at least 2 objects';
+        if (op.ids.some((id) => !objects[id])) return 'a target object no longer exists';
+        const parent =
+          op.ids.find(
+            (cand) =>
+              op.ids.every(
+                (other) => other === cand || canReparent(objects, other, cand)
+              )
+          ) ?? null;
+        if (!parent) return 'no valid group parent for this selection';
+        for (const id of op.ids) {
+          if (id !== parent) attachUnderParent(scene, id, parent);
+        }
+        return null;
+      }
+      case 'ungroup_object': {
+        const parent = scene.objects[op.id];
+        if (!parent) return `object ${op.id} not found`;
+        const grandparent = parent.parentId ?? null;
+        for (const child of directChildren(objects, op.id)) {
+          attachUnderParent(scene, child.id, grandparent);
+        }
+        if (parent.type === 'group') {
+          delete scene.objects[op.id];
+          delete scene.keyframes[op.id];
+        }
+        return null;
+      }
+      case 'create_formation': {
+        const count = Math.max(1, Math.floor(op.count ?? 5));
+        const spacing = Math.max(1, op.spacing ?? 50);
+        const groupId = createId('group');
+        const group = createSceneObject('group', {
+          id: groupId,
+          layerId: activeLayer(),
+          x: op.x,
+          y: op.y,
+        });
+        scene.objects[groupId] = group;
+        for (const off of formationOffsets(op.pattern, count, spacing)) {
+          const cid = createId('unit');
+          const child = createSceneObject('unit', {
+            id: cid,
+            layerId: activeLayer(),
+            x: op.x + off.x,
+            y: op.y + off.y,
+          });
+          child.parentId = groupId;
+          if (op.faction) child.faction = op.faction;
+          scene.objects[cid] = child;
+        }
+        return null;
+      }
+      case 'set_camera_keyframe': {
+        const cam = current(scene.camera);
+        const kf = {
+          time: op.time,
+          cam: { x: cam.x, y: cam.y, zoom: cam.zoom, rotation: cam.rotation ?? 0 },
+        };
+        const track = scene.cameraTrack ?? (scene.cameraTrack = []);
+        const idx = track.findIndex((k) => k.time === op.time);
+        if (idx >= 0) track[idx] = kf;
+        else {
+          track.push(kf);
+          track.sort((a, b) => a.time - b.time);
+        }
+        return null;
+      }
+      case 'apply_camera_preset': {
+        scene.cameraTrack = buildCameraPreset(op.kind, current(scene), op.focus);
+        return null;
+      }
+      case 'trigger_decisive_move': {
+        const result = buildDecisiveMove(current(scene), op.opts);
+        scene.cameraTrack = result.cameraKeys;
+        for (const obj of result.objects) scene.objects[obj.id] = obj;
+        for (const [objId, frames] of Object.entries(result.keyframes)) {
+          scene.keyframes[objId] = frames;
+        }
+        if (result.vignette) scene.vignette = true;
+        return null;
+      }
+      case 'trigger_why_it_worked': {
+        const result = buildWhyItWorked(current(scene), op.opts);
+        scene.cameraTrack = result.cameraKeys;
+        for (const [objId, frames] of Object.entries(result.keyframes)) {
+          scene.keyframes[objId] = frames;
+        }
+        if (result.vignette) scene.vignette = true;
+        return null;
+      }
+      case 'trigger_signature_opening': {
+        const result = buildSignatureOpening(current(scene), op.opts);
+        scene.openingCard = result.card;
+        scene.cameraTrack = result.cameraKeys;
+        return null;
+      }
+      case 'toggle_closing_card': {
+        scene.closingCard = op.on ? {} : undefined;
+        return null;
+      }
+      case 'set_vignette': {
+        scene.vignette = op.on || undefined;
+        return null;
+      }
+      case 'update_brand': {
+        const next: BrandConfig = { ...scene.brand };
+        if (op.battleName !== undefined) {
+          const v = op.battleName.trim();
+          if (v) next.battleName = v;
+          else delete next.battleName;
+        }
+        if (op.dateLine !== undefined) {
+          const v = op.dateLine.trim();
+          if (v) next.dateLine = v;
+          else delete next.dateLine;
+        }
+        scene.brand = Object.keys(next).length > 0 ? next : undefined;
+        return null;
+      }
+      default:
+        return 'unsupported op';
+    }
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+}
+
 export interface SceneState {
   /** Single source of truth for editor + (future) render — the ACTIVE scene. */
   scene: Scene;
@@ -220,7 +424,16 @@ export interface SceneState {
 
   // ---- History primitives ----
   /** Apply a discrete mutation as a single undoable transaction. */
-  transaction: <T>(fn: (scene: Scene) => T) => T;
+  transaction: <T>(fn: (scene: Scene) => T, label?: string) => T;
+  /**
+   * §60/§61 AI COMMANDER write path: apply a batch of VALIDATED ops (from
+   * ai/tools.ts) as ONE undoable transaction labeled 'AI Change #N'. Returns
+   * how many ops landed plus per-op errors — never throws for bad ops.
+   */
+  applyAIBatch: (
+    ops: import('../ai/tools').ResolvedOp[],
+    label?: string
+  ) => { applied: number; errors: string[] };
   /** Begin a coalesced gesture (e.g. a drag): snapshot once. */
   beginInteraction: () => void;
   /** End a coalesced gesture: drop the snapshot if nothing changed. */
@@ -453,13 +666,30 @@ export const useSceneStore = create<SceneState>()(
   activeLayerId: DEFAULT_LAYER_ID,
   activeTool: 'select',
 
-    transaction: (fn) => {
+    transaction: (fn, label) => {
       let result: ReturnType<typeof fn>;
       set((state) => {
-        pushHistory(state);
+        pushHistory(state, label);
         result = fn(state.scene);
       });
       return result!;
+    },
+
+    applyAIBatch: (ops, label) => {
+      const errors: string[] = [];
+      let applied = 0;
+      set((state) => {
+        // §61: number the AI changes across the session's history.
+        const n =
+          state.past.filter((e) => e.label?.startsWith('AI Change')).length + 1;
+        pushHistory(state, label ?? `AI Change #${n}`);
+        for (const op of ops) {
+          const err = applyResolvedOp(state, op);
+          if (err) errors.push(err);
+          else applied += 1;
+        }
+      });
+      return { applied, errors };
     },
 
     beginInteraction: () => {

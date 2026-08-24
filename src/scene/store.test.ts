@@ -909,3 +909,86 @@ describe('branding store actions', () => {
     expect(arrow?.arrowStyle).toBe('charge');
   });
 });
+
+// ---- AI Commander write path (§60/§61 approval-gated batches) ----
+
+describe('applyAIBatch (AI Change history)', () => {
+  beforeEach(reset);
+
+  it('applies a batch of resolved ops as ONE undoable step labeled "AI Change #1"', () => {
+    const r = s().applyAIBatch([
+      { tool: 'create_object', type: 'unit', x: 500, y: 400, faction: 'red', label: 'Veterans' },
+      { tool: 'set_vignette', on: true },
+      { tool: 'set_camera_keyframe', time: 2 },
+    ]);
+    expect(r.applied).toBe(3);
+    expect(r.errors).toEqual([]);
+
+    // All three effects landed.
+    const created = Object.values(s().scene.objects).find((o) => o.label === 'Veterans');
+    expect(created?.faction).toBe('red');
+    expect(s().scene.vignette).toBe(true);
+    expect(s().scene.cameraTrack!.map((k) => k.time)).toContain(2);
+
+    // ONE undo removes ALL of it — the whole batch is a single history entry.
+    s().undo();
+    expect(Object.values(s().scene.objects).some((o) => o.label === 'Veterans')).toBe(false);
+    expect(s().scene.vignette).toBeUndefined();
+  });
+
+  it('labels successive AI batches #1, #2, … independent of manual edits between', () => {
+    s().applyAIBatch([{ tool: 'set_vignette', on: true }]);
+    s().updateBrand({ battleName: 'Cannae' }); // manual edit in between
+    s().applyAIBatch([{ tool: 'toggle_closing_card', on: true }]);
+    expect(s().past[s().past.length - 1].label).toBe('AI Change #2');
+    // Manual edits between batches don't disturb the AI numbering.
+    expect(s().past[s().past.length - 2].label).toBeUndefined();
+  });
+
+  it('reports per-op failures without aborting the rest of the batch', () => {
+    const before = JSON.stringify(s().scene);
+    const r = s().applyAIBatch([
+      { tool: 'ungroup_object', id: 'does-not-exist' }, // fails at store level
+      { tool: 'create_object', type: 'marker', x: 100, y: 100 },
+    ]);
+    expect(r.applied).toBe(1);
+    expect(r.errors).toHaveLength(1);
+    expect(
+      Object.values(s().scene.objects).some((o) => o.type === 'marker')
+    ).toBe(true);
+    void before;
+  });
+
+  it('move_objects resolves ids and shifts world positions', () => {
+    const id = s().createObjectOfType('unit', { x: 100, y: 100 });
+    s().beginInteraction();
+    s().updateObjectProps(id, { label: 'Skirmishers' });
+    s().endInteraction();
+    const r = s().applyAIBatch([
+      // NOTE: ids arrive PRE-RESOLVED from ai/tools.ts validation — labels
+      // never reach the store.
+      { tool: 'move_objects', ids: [id], dx: 40, dy: -10 },
+    ]);
+    expect(r.applied).toBe(1);
+    expect(s().scene.objects[id].transform.x).toBe(140);
+    expect(s().scene.objects[id].transform.y).toBe(90);
+  });
+
+  it('macro ops mirror their store twins (signature opening writes card + track)', () => {
+    const r = s().applyAIBatch([
+      { tool: 'trigger_signature_opening', opts: { duration: 2.5 } },
+    ]);
+    expect(r.applied).toBe(1);
+    expect(s().scene.openingCard).toEqual({ startAt: 0, duration: 2.5 });
+    expect(s().scene.cameraTrack!.map((k) => k.time)).toEqual([0, 2.5]);
+    s().undo();
+    expect(s().scene.openingCard).toBeUndefined();
+  });
+
+  it('an empty batch is a harmless no-op that still records one labeled entry', () => {
+    const before = JSON.stringify(s().scene);
+    const r = s().applyAIBatch([], undefined);
+    expect(r.applied).toBe(0);
+    expect(JSON.stringify(s().scene)).toBe(before);
+  });
+});

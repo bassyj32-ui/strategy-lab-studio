@@ -737,3 +737,105 @@ h3 {
   text-align: right;
   font-family: ui-monospace, monospace;
 }
+
+/* ---- AI Commander (PRD §51–64): chat + approval-gated proposals ---- */
+.ai-settings {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.ai-settings input {
+  min-width: 0;
+  flex: 1;
+  background: var(--panel-raised);
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  color: #e2e8f0;
+  font-size: 11px;
+  padding: 4px 6px;
+}
+
+.ai-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.ai-entry {
+  font-size: 11px;
+  line-height: 1.45;
+  padding: 5px 7px;
+  border-radius: 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ai-order {
+  background: #1e293b;
+  color: #e2e8f0;
+  align-self: flex-end;
+}
+
+.ai-reply {
+  background: var(--panel-raised);
+  color: #cbd5e1;
+}
+
+.ai-system {
+  background: transparent;
+  color: #94a3b8;
+  font-size: 10px;
+}
+
+.ai-proposal {
+  background: rgba(245, 168, 60, 0.08);
+  border: 1px solid #f5a83c;
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+
+.ai-proposal-title {
+  color: #f5a83c;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.ai-proposal ul {
+  margin: 0 0 6px 16px;
+  padding: 0;
+  color: #e2e8f0;
+}
+
+.ai-proposal-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.ai-compose {
+  display: flex;
+  gap: 4px;
+  align-items: flex-end;
+}
+
+.ai-compose textarea {
+  flex: 1;
+  min-width: 0;
+  resize: vertical;
+  background: var(--panel-raised);
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  color: #e2e8f0;
+  font-size: 11px;
+  font-family: inherit;
+  padding: 5px 6px;
+}
+
+.ai-footnote {
+  margin-top: 4px;
+  font-size: 10px;
+  color: #64748b;
+}

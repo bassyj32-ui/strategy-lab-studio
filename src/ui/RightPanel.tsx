@@ -2,13 +2,15 @@ import { useState } from 'react';
 import { Inspector } from './Inspector';
 import { LayersPanel } from './LayersPanel';
 import { AssetsPanel } from './AssetsPanel';
+import { AiCommanderPanel } from './AiCommanderPanel';
 
-type TabKey = 'properties' | 'layers' | 'assets';
+type TabKey = 'properties' | 'layers' | 'assets' | 'ai';
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'properties', label: 'Properties' },
   { key: 'layers', label: 'Layers' },
   { key: 'assets', label: 'Assets' },
+  { key: 'ai', label: 'AI' },
 ];
 
 /**
@@ -40,6 +42,7 @@ export function RightPanel() {
         {tab === 'properties' && <Inspector />}
         {tab === 'layers' && <LayersPanel />}
         {tab === 'assets' && <AssetsPanel />}
+        {tab === 'ai' && <AiCommanderPanel />}
       </div>
     </div>
   );

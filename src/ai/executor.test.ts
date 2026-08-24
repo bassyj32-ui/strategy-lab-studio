@@ -1,0 +1,111 @@
+import { describe, it, expect } from 'vitest';
+import { requestProposal, describeOp } from './executor';
+import type { AIProvider, CompletionRequest, CompletionResult } from './provider';
+import { TOOL_SPECS } from './tools';
+import { createDefaultScene } from '../scene/factory';
+import type { Scene } from '../scene/types';
+
+const scene = (): Scene => {
+  const s = createDefaultScene();
+  s.objects = {};
+  s.objects['u1'] = {
+    id: 'u1',
+    type: 'unit',
+    faction: 'red',
+    label: 'Hannibal',
+    transform: { x: 400, y: 300, rotation: 0, scale: 1, opacity: 1 },
+    layerId: s.layers[0].id,
+  };
+  return s;
+};
+
+const settings = { apiKey: 'sk-test', model: 'deepseek-chat', baseUrl: 'https://x' };
+
+function fakeProvider(
+  result: Partial<CompletionResult>,
+  capture?: { req?: CompletionRequest }
+): AIProvider {
+  return {
+    name: 'fake',
+    async complete(req) {
+      if (capture) capture.req = req;
+      return {
+        text: result.text ?? '',
+        proposals: result.proposals ?? [],
+      };
+    },
+  };
+}
+
+describe('requestProposal (§53-62 command cycle)', () => {
+  it('sends the system rules + order + summarized scene to the provider', async () => {
+    const capture: { req?: CompletionRequest } = {};
+    await requestProposal(fakeProvider({}, capture), settings, 'deploy the left wing', {
+      scene: scene(),
+      selectedObjId: 'u1',
+    });
+    const req = capture.req!;
+    expect(req.tools).toBe(TOOL_SPECS); // the §54 surface, unmodified
+    expect(req.messages[0].role).toBe('system');
+    expect(req.messages[0].content).toContain('never invent tool names');
+    expect(req.messages[0].content).toContain('10s'); // timeline fact
+    expect(req.messages[1].role).toBe('user');
+    expect(req.messages[1].content).toContain("Commander's order: deploy the left wing");
+    // §62 summary travels inline as JSON — compact, not the raw scene.
+    expect(req.messages[1].content).toContain('"armies"');
+    expect(req.messages[1].content).toContain('Hannibal');
+  });
+
+  it('validates proposals BEFORE anything else; invalid ops become errors', async () => {
+    const proposal = await requestProposal(
+      fakeProvider({
+        text: 'Moving him right.',
+        proposals: [
+          { tool: 'move_objects', args: { targets: ['Hannibal'], dx: 100, dy: 0 } },
+          { tool: 'create_object', args: { type: 'unit', x: 99999, y: 0 } }, // out of bounds
+          { tool: 'launch_nukes' }, // unknown tool
+        ],
+      }),
+      settings,
+      'shift Hannibal east',
+      { scene: scene() }
+    );
+    expect(proposal.resolved.map((r) => r.tool)).toEqual(['move_objects']);
+    expect(proposal.summaries).toEqual(['Move 1 object(s) by (100, 0)']);
+    expect(proposal.errors).toHaveLength(2);
+    expect(proposal.errors.some((e) => e.includes('outside the map'))).toBe(true);
+    expect(proposal.errors.some((e) => e.includes('unknown tool'))).toBe(true);
+  });
+
+  it('is purely read-side: the scene object is never mutated', async () => {
+    const s = scene();
+    const before = JSON.stringify(s);
+    await requestProposal(
+      fakeProvider({
+        proposals: [{ tool: 'set_vignette', args: { on: true } }],
+      }),
+      settings,
+      'add drama',
+      { scene: s }
+    );
+    expect(JSON.stringify(s)).toBe(before);
+  });
+});
+
+describe('describeOp (proposal card copy)', () => {
+  it('renders one human line per op kind', () => {
+    expect(describeOp({ tool: 'create_object', type: 'unit', x: 800, y: 400, label: 'Skirmishers' })).toBe(
+      'Create unit "Skirmishers" at (800, 400)'
+    );
+    expect(describeOp({ tool: 'move_objects', ids: ['a'], dx: 5, dy: -5 })).toBe(
+      'Move 1 object(s) by (5, -5)'
+    );
+    expect(describeOp({ tool: 'move_objects', ids: ['a'], x: 12.6, y: 7.4 })).toBe(
+      'Move object to (13, 7)'
+    );
+    expect(describeOp({ tool: 'set_camera_keyframe', time: 4 })).toBe('Camera keyframe @ 4s');
+    expect(describeOp({ tool: 'toggle_closing_card', on: true })).toBe('Enable closing card');
+    expect(describeOp({ tool: 'trigger_decisive_move', opts: {} })).toBe('Decisive move macro');
+    expect(describeOp({ tool: 'update_brand' })).toBe('Brand metadata update');
+  });
+});
