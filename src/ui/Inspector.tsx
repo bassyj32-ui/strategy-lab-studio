@@ -25,6 +25,15 @@ export function Inspector() {
   const updateTransform = useSceneStore((s) => s.updateTransform);
   const updateObjectProps = useSceneStore((s) => s.updateObjectProps);
 
+  // Quick-set preset chips (Wave-3 UX pass): one click = one undo step.
+  const applyPreset = (partial: Partial<Transform>) => {
+    const target = selectedObject({ selectedObjId, scene });
+    if (!target) return;
+    beginInteraction();
+    updateTransform(target.id, partial);
+    endInteraction();
+  };
+
   const obj = selectedObject({ selectedObjId, scene });
 
   if (!obj) {
@@ -108,6 +117,44 @@ export function Inspector() {
           />
         </label>
       ))}
+
+      <div className="preset-row">
+        <span className="preset-label">Rotate</span>
+        {[-90, -45, 45, 90].map((deg) => (
+          <button
+            key={deg}
+            type="button"
+            className="chip"
+            data-testid={`preset-rot-${deg}`}
+            onClick={() => applyPreset({ rotation: deg })}
+          >
+            {deg > 0 ? `+${deg}°` : `${deg}°`}
+          </button>
+        ))}
+        <button
+          type="button"
+          className="chip"
+          data-testid="preset-rot-0"
+          onClick={() => applyPreset({ rotation: 0 })}
+        >
+          0°
+        </button>
+      </div>
+
+      <div className="preset-row">
+        <span className="preset-label">Opacity</span>
+        {[25, 50, 75, 100].map((pct) => (
+          <button
+            key={pct}
+            type="button"
+            className="chip"
+            data-testid={`preset-op-${pct}`}
+            onClick={() => applyPreset({ opacity: pct / 100 })}
+          >
+            {pct}%
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

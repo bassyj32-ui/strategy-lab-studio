@@ -138,7 +138,7 @@ h3 {
 }
 
 .app-right {
-  width: 260px;
+  width: 300px;
   flex-shrink: 0;
   border-left: 1px solid var(--edge);
   background: var(--panel);
@@ -165,11 +165,25 @@ h3 {
 
 .bottom-row {
   flex-shrink: 0;
-  max-height: 32vh;
-  overflow-y: auto;
+  /* Timeline-only footer (preview moved to the right dock): no scroll needed. */
+  max-height: 30vh;
+  overflow: hidden;
   overscroll-behavior: contain;
   border-top: 1px solid var(--edge);
   background: var(--panel);
+}
+
+/* Program monitor dock at the top of the right column (Premiere-style).
+   PreviewPlayer already self-sizes to width:100% + 16/9 aspect. */
+.preview-dock {
+  flex-shrink: 0;
+  padding: 8px;
+  border-bottom: 1px solid var(--edge);
+  background: var(--panel);
+}
+
+.preview-dock .preview-panel {
+  padding: 0;
 }
 
 /* --- Canvas -------------------------------------------------- */
@@ -556,4 +570,72 @@ h3 {
   font-family: var(--font-mono);
   font-size: 12px;
   text-align: right;
+}
+
+/* ---- Wave-3 UX: tabbed right panel + preset chips ---- */
+.right-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.right-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid #1e293b;
+}
+
+.right-tab {
+  flex: 1;
+  background: transparent;
+  color: #94a3b8;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 6px 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.right-tab:hover {
+  color: #e2e8f0;
+}
+
+.right-tab.active {
+  color: #f5a83c;
+  border-bottom-color: #f5a83c;
+}
+
+.right-tab-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.preset-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.preset-label {
+  font-size: 11px;
+  color: #94a3b8;
+  width: 52px;
+}
+
+.chip {
+  background: #1e293b;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  font-size: 11px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.chip:hover {
+  border-color: #f5a83c;
+  color: #f5a83c;
 }

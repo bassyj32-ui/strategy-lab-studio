@@ -1,17 +1,15 @@
 import { useEffect } from 'react';
 import { CanvasStage } from './canvas/CanvasStage';
 import { Toolbar } from './ui/Toolbar';
-import { Inspector } from './ui/Inspector';
-import { LayersPanel } from './ui/LayersPanel';
 import { ScenesPanel } from './ui/ScenesPanel';
-import { AssetsPanel } from './ui/AssetsPanel';
+import { RightPanel } from './ui/RightPanel';
 import { PreviewPanel } from './ui/PreviewPanel';
 import { TimelinePanel } from './timeline';
 import { useSceneStore } from './scene/store';
 
-// MVP-1 editor shell:
-//   [ Toolbar | CanvasStage | Inspector + LayersPanel ]  top row
-//   [        PreviewPanel + TimelinePanel           ]    bottom row
+// MVP-1 editor shell (Wave-3 UX layout):
+//   [ Toolbar+Scenes | CanvasStage | Preview dock + tabbed panel ]  top row
+//   [              TimelinePanel (full width)                   ]  bottom row
 export function App() {
   // The scene lives only in memory — warn before losing unsaved work.
   useEffect(() => {
@@ -36,19 +34,15 @@ export function App() {
           <CanvasStage />
         </div>
         <div className="app-right">
-          <div className="right-section">
-            <Inspector />
+          {/* Program monitor pinned at eye level (Premiere-style): the
+              playing window is visible at first sight, never buried. */}
+          <div className="preview-dock">
+            <PreviewPanel />
           </div>
-          <div className="right-section">
-            <LayersPanel />
-          </div>
-          <div className="right-section">
-            <AssetsPanel />
-          </div>
+          <RightPanel />
         </div>
       </div>
       <div className="bottom-row">
-        <PreviewPanel />
         <TimelinePanel />
       </div>
     </div>

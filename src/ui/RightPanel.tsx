@@ -1,0 +1,46 @@
+import { useState } from 'react';
+import { Inspector } from './Inspector';
+import { LayersPanel } from './LayersPanel';
+import { AssetsPanel } from './AssetsPanel';
+
+type TabKey = 'properties' | 'layers' | 'assets';
+
+const TABS: { key: TabKey; label: string }[] = [
+  { key: 'properties', label: 'Properties' },
+  { key: 'layers', label: 'Layers' },
+  { key: 'assets', label: 'Assets' },
+];
+
+/**
+ * Tabbed right column (Wave-3 UX pass): one dock instead of three stacked
+ * panels, so nothing scrolls off-screen. Pure view composition — every tab
+ * renders its existing panel unchanged.
+ */
+export function RightPanel() {
+  const [tab, setTab] = useState<TabKey>('properties');
+
+  return (
+    <div className="right-panel" data-testid="right-panel">
+      <div className="right-tabs" role="tablist">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.key}
+            data-testid={`tab-${t.key}`}
+            className={tab === t.key ? 'right-tab active' : 'right-tab'}
+            onClick={() => setTab(t.key)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div className="right-tab-body">
+        {tab === 'properties' && <Inspector />}
+        {tab === 'layers' && <LayersPanel />}
+        {tab === 'assets' && <AssetsPanel />}
+      </div>
+    </div>
+  );
+}

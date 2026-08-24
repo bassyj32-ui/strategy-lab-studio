@@ -112,4 +112,40 @@ describe('Inspector', () => {
     expect(useSceneStore.getState().scene.objects[id!].color).toBe('#00ff88');
     fireEvent.blur(colorInput);
   });
+
+  it('rotation preset chips set the rotation as ONE undo step', () => {
+    let id: string;
+    act(() => {
+      id = useSceneStore.getState().createObjectOfType('shape');
+      useSceneStore.getState().setSelected(id);
+    });
+    render(<Inspector />);
+    fireEvent.click(screen.getByTestId('preset-rot-90'));
+    expect(useSceneStore.getState().scene.objects[id!].transform.rotation).toBe(90);
+    fireEvent.click(screen.getByTestId('preset-rot--45'));
+    expect(useSceneStore.getState().scene.objects[id!].transform.rotation).toBe(-45);
+    // Two chips → exactly two undo steps.
+    act(() => useSceneStore.getState().undo());
+    expect(useSceneStore.getState().scene.objects[id!].transform.rotation).toBe(90);
+  });
+
+  it('opacity preset chips write fractions and the reset chip zeroes rotation', () => {
+    let id: string;
+    act(() => {
+      id = useSceneStore.getState().createObjectOfType('shape');
+      useSceneStore.getState().setSelected(id);
+    });
+    render(<Inspector />);
+    fireEvent.click(screen.getByTestId('preset-op-25'));
+    expect(useSceneStore.getState().scene.objects[id!].transform.opacity).toBe(0.25);
+    fireEvent.click(screen.getByTestId('preset-op-100'));
+    expect(useSceneStore.getState().scene.objects[id!].transform.opacity).toBe(1);
+    act(() => {
+      useSceneStore
+        .getState()
+        .updateTransform(id!, { rotation: 30 });
+    });
+    fireEvent.click(screen.getByTestId('preset-rot-0'));
+    expect(useSceneStore.getState().scene.objects[id!].transform.rotation).toBe(0);
+  });
 });
