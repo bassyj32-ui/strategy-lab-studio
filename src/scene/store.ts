@@ -392,6 +392,26 @@ function applyResolvedOp(
         scene.brand = Object.keys(next).length > 0 ? next : undefined;
         return null;
       }
+      case 'set_keyframe': {
+        const obj = scene.objects[op.id];
+        if (!obj) return `object ${op.id} not found`;
+        const kfs = (scene.keyframes[op.id] ??= []);
+        const idx = kfs.findIndex((k) => Math.abs(k.time - op.time) < 1e-6);
+        if (op.remove) {
+          if (idx >= 0) kfs.splice(idx, 1);
+          if (kfs.length === 0) delete scene.keyframes[op.id];
+          return null;
+        }
+        const base = idx >= 0 ? kfs[idx].transform : current(obj.transform);
+        const transform: Transform = { ...base, ...op.transform };
+        const kf: Keyframe = { time: op.time, transform };
+        if (idx >= 0) kfs[idx] = kf;
+        else {
+          kfs.push(kf);
+          kfs.sort((a, b) => a.time - b.time);
+        }
+        return null;
+      }
       default:
         return 'unsupported op';
     }

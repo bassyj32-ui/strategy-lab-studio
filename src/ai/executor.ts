@@ -5,7 +5,7 @@
 // The executor NEVER applies anything itself and NEVER touches rendering —
 // the only write path is the store's approval-gated applyAIBatch.
 import { summarizeScene } from '../scene/selectors';
-import type { Scene } from '../scene/types';
+import type { Scene, Transform } from '../scene/types';
 import {
   resolveOps,
   TOOL_SPECS,
@@ -40,8 +40,33 @@ export interface Proposal {
   resolved: ResolvedOp[];
   /** Human-readable one-liners for the proposal cards. */
   summaries: string[];
+  /**
+   * Per-op change preview (§104 APPLY / MODIFY / REMOVE diff cards). Parallel
+   * to `resolved`. Keyframe ops carry before→after transforms so the
+   * commander approves the EXACT animation change, not a blind summary.
+   */
+  diffs: OpDiff[];
   /** Rejected proposals with reasons (schema/bounds violations). */
   errors: string[];
+}
+
+/** A structured before→after for a keyframe op. */
+export interface KeyframeChange {
+  time: number;
+  mode: 'apply' | 'modify';
+  before?: Transform;
+  after: Transform;
+}
+
+/** One op's change preview for the diff-card UI. */
+export interface OpDiff {
+  tool: string;
+  /** How this op lands against current state. */
+  mode: 'apply' | 'modify' | 'remove';
+  /** Short human title (reuses the op description). */
+  title: string;
+  /** Present only for set_keyframe ops. */
+  keyframe?: KeyframeChange;
 }
 
 function systemPrompt(scene: Scene): string {
@@ -113,8 +138,44 @@ export async function requestProposal(
     text: result.text,
     resolved,
     summaries: resolved.map((op) => describeOp(op)),
+    diffs: resolved.map((op) => computeOpDiff(op, ctx.scene)),
     errors,
   };
+}
+
+/**
+ * Build a per-op change preview against the CURRENT scene (read-only). This is
+ * the §104 diff the commander inspects before approving. Never mutates.
+ */
+export function computeOpDiff(op: ResolvedOp, scene: Scene): OpDiff {
+  if (op.tool === 'set_keyframe') {
+    const existing = scene.keyframes[op.id]?.find(
+      (k) => Math.abs(k.time - op.time) < 1e-6
+    );
+    const label = scene.objects[op.id]?.label ?? op.id;
+    if (op.remove) {
+      return {
+        tool: op.tool,
+        mode: 'remove',
+        title: `Remove keyframe @ ${op.time}s for ${label}`,
+      };
+    }
+    const base = (existing?.transform ??
+      scene.objects[op.id]?.transform) as Transform;
+    const after: Transform = { ...base, ...op.transform };
+    return {
+      tool: op.tool,
+      mode: existing ? 'modify' : 'apply',
+      title: `Keyframe @ ${op.time}s for ${label}`,
+      keyframe: {
+        time: op.time,
+        mode: existing ? 'modify' : 'apply',
+        before: existing?.transform,
+        after,
+      },
+    };
+  }
+  return { tool: op.tool, mode: 'apply', title: describeOp(op) };
 }
 
 /** Short human-readable description used by the proposal cards. */
@@ -150,5 +211,9 @@ export function describeOp(op: ResolvedOp): string {
       return `${op.on ? 'Enable' : 'Disable'} vignette`;
     case 'update_brand':
       return 'Brand metadata update';
+    case 'set_keyframe':
+      return op.remove
+        ? `Remove keyframe @ ${op.time}s`
+        : `Keyframe @ ${op.time}s for ${op.id}`;
   }
 }

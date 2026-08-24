@@ -991,6 +991,39 @@ describe('applyAIBatch (AI Change history)', () => {
     expect(r.applied).toBe(0);
     expect(JSON.stringify(s().scene)).toBe(before);
   });
+
+  it('set_keyframe APPLIES a new keyframe and is one undoable step', () => {
+    const id = s().createObjectOfType('unit', { x: 100, y: 100 });
+    const r = s().applyAIBatch([
+      { tool: 'set_keyframe', id, time: 3, transform: { x: 600, opacity: 0.2 } },
+    ]);
+    expect(r.applied).toBe(1);
+    const kfs = s().scene.keyframes[id]!;
+    expect(kfs).toHaveLength(1);
+    expect(kfs[0].transform.x).toBe(600);
+    expect(kfs[0].transform.opacity).toBe(0.2);
+    s().undo();
+    expect(s().scene.keyframes[id]).toBeUndefined();
+  });
+
+  it('set_keyframe MODIFIES an existing keyframe in place', () => {
+    const id = s().createObjectOfType('unit', { x: 100, y: 100 });
+    s().applyAIBatch([{ tool: 'set_keyframe', id, time: 3, transform: { x: 600 } }]);
+    s().applyAIBatch([{ tool: 'set_keyframe', id, time: 3, transform: { opacity: 0.1 } }]);
+    const kfs = s().scene.keyframes[id]!;
+    expect(kfs).toHaveLength(1); // replaced, not appended
+    expect(kfs[0].transform.x).toBe(600);
+    expect(kfs[0].transform.opacity).toBe(0.1);
+  });
+
+  it('set_keyframe remove=true deletes the keyframe and prunes an emptied track', () => {
+    const id = s().createObjectOfType('unit', { x: 100, y: 100 });
+    s().applyAIBatch([{ tool: 'set_keyframe', id, time: 3, transform: { x: 600 } }]);
+    expect(s().scene.keyframes[id]).toBeDefined();
+    const r = s().applyAIBatch([{ tool: 'set_keyframe', id, time: 3, transform: {}, remove: true }]);
+    expect(r.applied).toBe(1);
+    expect(s().scene.keyframes[id]).toBeUndefined();
+  });
 });
 
 // ---- AI Commander history (§A label-aware undo) ----

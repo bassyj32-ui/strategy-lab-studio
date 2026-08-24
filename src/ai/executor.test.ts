@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { requestProposal, describeOp } from './executor';
+import { requestProposal, describeOp, computeOpDiff } from './executor';
 import type { AIProvider, CompletionRequest, CompletionResult } from './provider';
 import { TOOL_SPECS } from './tools';
 import { createDefaultScene } from '../scene/factory';
@@ -136,5 +136,53 @@ describe('describeOp (proposal card copy)', () => {
     expect(describeOp({ tool: 'toggle_closing_card', on: true })).toBe('Enable closing card');
     expect(describeOp({ tool: 'trigger_decisive_move', opts: {} })).toBe('Decisive move macro');
     expect(describeOp({ tool: 'update_brand' })).toBe('Brand metadata update');
+  });
+});
+
+describe('computeOpDiff (§104 before→after preview)', () => {
+  const kfScene = (): Scene => {
+    const s = scene();
+    s.keyframes.u1 = [
+      { time: 2, transform: { x: 400, y: 300, rotation: 0, scale: 1, opacity: 1 } },
+    ];
+    return s;
+  };
+
+  it('flags an APPLY when no keyframe exists at that time', () => {
+    const d = computeOpDiff(
+      { tool: 'set_keyframe', id: 'u1', time: 5, transform: { x: 700, opacity: 0.4 } },
+      scene()
+    );
+    expect(d.mode).toBe('apply');
+    expect(d.keyframe?.mode).toBe('apply');
+    expect(d.keyframe?.before).toBeUndefined();
+    expect(d.keyframe?.after).toEqual({ x: 700, y: 300, rotation: 0, scale: 1, opacity: 0.4 });
+  });
+
+  it('flags a MODIFY (with before→after) when a keyframe already exists', () => {
+    const d = computeOpDiff(
+      { tool: 'set_keyframe', id: 'u1', time: 2, transform: { rotation: 90 } },
+      kfScene()
+    );
+    expect(d.mode).toBe('modify');
+    expect(d.keyframe?.before).toEqual({ x: 400, y: 300, rotation: 0, scale: 1, opacity: 1 });
+    expect(d.keyframe?.after?.rotation).toBe(90);
+    expect(d.keyframe?.after?.x).toBe(400); // unchanged fields preserved
+  });
+
+  it('flags REMOVE for a removal op', () => {
+    const d = computeOpDiff(
+      { tool: 'set_keyframe', id: 'u1', time: 2, transform: {}, remove: true },
+      kfScene()
+    );
+    expect(d.mode).toBe('remove');
+    expect(d.keyframe).toBeUndefined();
+  });
+
+  it('non-keyframe ops are plain APPLY entries, read-only guarantee', () => {
+    const s = scene();
+    const before = JSON.stringify(s);
+    computeOpDiff({ tool: 'set_vignette', on: true }, s);
+    expect(JSON.stringify(s)).toBe(before);
   });
 });

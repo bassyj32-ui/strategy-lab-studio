@@ -247,3 +247,55 @@ describe('resolveOps batch gate', () => {
     expect(errors[0]).toContain('outside the map');
   });
 });
+
+describe('set_keyframe (§104 animation proposals)', () => {
+  const withKf = (): Scene => {
+    const s = scene();
+    s.keyframes.u1 = [{ time: 2, transform: { x: 400, y: 300, rotation: 0, scale: 1, opacity: 1 } }];
+    return s;
+  };
+
+  it('APPLIES a new keyframe when none exists at that time', () => {
+    const r = resolveOp({ tool: 'set_keyframe', args: { target: 'u1', time: 4, x: 700, opacity: 0.5 } }, scene());
+    expect(r.ok).toBe(true);
+    if (!r.ok || r.resolved.tool !== 'set_keyframe') return;
+    expect(r.resolved.transform).toEqual({ x: 700, opacity: 0.5 });
+    expect(r.resolved.remove).toBeUndefined();
+  });
+
+  it('resolves by exact label as well as id', () => {
+    const r = resolveOp({ tool: 'set_keyframe', args: { target: 'hannibal', time: 1, y: 50 } }, scene());
+    // case-insensitive label match → id u1
+    expect(r.ok && r.resolved.tool === 'set_keyframe' && r.resolved.id).toBe('u1');
+  });
+
+  it('rejects an out-of-range time', () => {
+    const r = resolveOp({ tool: 'set_keyframe', args: { target: 'u1', time: 999, x: 1 } }, scene());
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toContain('time must be within');
+  });
+
+  it('rejects a keyframe with no transform fields and not remove', () => {
+    const r = resolveOp({ tool: 'set_keyframe', args: { target: 'u1', time: 3 } }, scene());
+    expect(r.ok).toBe(false);
+  });
+
+  it('validates opacity/scale ranges and off-map positions', () => {
+    expect(resolveOp({ tool: 'set_keyframe', args: { target: 'u1', time: 1, opacity: 2 } }, scene()).ok).toBe(false);
+    expect(resolveOp({ tool: 'set_keyframe', args: { target: 'u1', time: 1, scale: -1 } }, scene()).ok).toBe(false);
+    expect(resolveOp({ tool: 'set_keyframe', args: { target: 'u1', time: 1, x: 99999 } }, scene()).ok).toBe(false);
+  });
+
+  it('remove=true yields a removal op without requiring transform fields', () => {
+    const r = resolveOp({ tool: 'set_keyframe', args: { target: 'u1', time: 2, remove: true } }, withKf());
+    expect(r.ok).toBe(true);
+    if (!r.ok || r.resolved.tool !== 'set_keyframe') return;
+    expect(r.resolved.remove).toBe(true);
+  });
+
+  it('never throws on garbage args', () => {
+    expect(() => resolveOp({ tool: 'set_keyframe', args: { target: {}, time: 'x', opacity: 'nope' } } as never, scene())).not.toThrow();
+    expect(resolveOp({ tool: 'set_keyframe', args: {} } as never, scene()).ok).toBe(false);
+  });
+});

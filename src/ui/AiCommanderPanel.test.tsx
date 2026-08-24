@@ -238,4 +238,65 @@ describe('AiCommanderPanel', () => {
     fireEvent.click(screen.getByTestId('ai-history-undo'));
     expect(s().scene.vignette).toBeUndefined(); // undone
   });
+
+  it('renders §104 diff cards with APPLY/MODIFY modes for keyframe ops', async () => {
+    const scene = sceneWithUnit();
+    scene.keyframes.u1 = [
+      { time: 2, transform: { x: 400, y: 300, rotation: 0, scale: 1, opacity: 1 } },
+    ];
+    act(() => useSceneStore.setState({ scene }));
+    fakeComplete.mockResolvedValue({
+      text: 'Animate.',
+      proposals: [
+        { tool: 'set_keyframe', args: { target: 'Hannibal', time: 4, x: 900, opacity: 0.3 } }, // new → APPLY
+        { tool: 'set_keyframe', args: { target: 'Hannibal', time: 2, rotation: 90 } }, // existing → MODIFY
+      ],
+    });
+    render(<AiCommanderPanel />);
+    fireEvent.change(screen.getByTestId('ai-prompt-input'), { target: { value: 'animate the wing' } });
+    fireEvent.click(screen.getByTestId('ai-send'));
+
+    await waitFor(() => expect(screen.getByTestId('ai-proposal')).toBeTruthy());
+    // Card 0 = APPLY (no prior keyframe at t=4).
+    expect(screen.getByTestId('ai-diff-mode-0').textContent).toBe('APPLY');
+    expect(screen.getByTestId('ai-diff-kf-0').textContent).toContain('new');
+    // Card 1 = MODIFY (keyframe at t=2 already exists), shows before→after.
+    expect(screen.getByTestId('ai-diff-mode-1').textContent).toBe('MODIFY');
+    expect(screen.getByTestId('ai-diff-kf-1').textContent).toContain('before');
+    expect(screen.getByTestId('ai-diff-kf-1').textContent).toContain('after');
+
+    fireEvent.click(screen.getByTestId('ai-approve'));
+    const kfs = Object.values(s().scene.keyframes)[0]!;
+    expect(kfs).toHaveLength(2); // both keyframes applied together
+  });
+
+  it('per-op REJECT drops a card but still applies the rest as one batch', async () => {
+    const scene = sceneWithUnit();
+    scene.keyframes.u1 = [
+      { time: 2, transform: { x: 400, y: 300, rotation: 0, scale: 1, opacity: 1 } },
+    ];
+    act(() => useSceneStore.setState({ scene }));
+    fakeComplete.mockResolvedValue({
+      text: 'Animate both.',
+      proposals: [
+        { tool: 'set_keyframe', args: { target: 'Hannibal', time: 4, x: 900 } },
+        { tool: 'set_keyframe', args: { target: 'Hannibal', time: 2, rotation: 90 } },
+      ],
+    });
+    render(<AiCommanderPanel />);
+    fireEvent.change(screen.getByTestId('ai-prompt-input'), { target: { value: 'animate' } });
+    fireEvent.click(screen.getByTestId('ai-send'));
+    await waitFor(() => expect(screen.getByTestId('ai-proposal')).toBeTruthy());
+
+    // Reject the first op (APPLY at t=4).
+    fireEvent.click(screen.getByTestId('ai-diff-reject-0'));
+    expect(screen.queryByTestId('ai-diff-0')).toBeNull();
+    expect(screen.getByTestId('ai-diff-1')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('ai-approve'));
+    // Only the MODIFY keyframe landed; the rejected APPLY did not.
+    const kfs = Object.values(s().scene.keyframes)[0]!;
+    expect(kfs).toHaveLength(1);
+    expect(kfs[0].transform.rotation).toBe(90);
+  });
 });

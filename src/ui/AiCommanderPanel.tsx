@@ -13,6 +13,12 @@ interface ThreadEntry {
   text: string;
 }
 
+/** Compact transform readout for the diff cards (x,y · rot° · scale× · opa). */
+function fmt(t: { x: number; y: number; rotation: number; scale: number; opacity: number }): string {
+  const r = (n: number) => Math.round(n * 100) / 100;
+  return `x${r(t.x)},y${r(t.y)} · ${r(t.rotation)}° · ${r(t.scale)}× · ${r(t.opacity)}`;
+}
+
 /**
  * AI COMMANDER PANEL (P3 v1, owner-approved). One command cycle per send:
  * order → provider → VALIDATED proposals → human Approve/Reject gate →
@@ -61,6 +67,8 @@ export function AiCommanderPanel() {
   const [error, setError] = useState<string | null>(null);
   const [thread, setThread] = useState<ThreadEntry[]>([]);
   const [proposal, setProposal] = useState<Proposal | null>(null);
+  /** §104 per-op REJECT: indices dropped from the pending batch. */
+  const [dropped, setDropped] = useState<number[]>([]);
   /** §A multi-turn memory: replayed orders + replies. */
   const [history, setHistory] = useState<ChatTurn[]>([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -99,7 +107,10 @@ export function AiCommanderPanel() {
         ...(result.text ? [{ kind: 'reply' as const, text: result.text }] : []),
         ...result.errors.map((e) => ({ kind: 'system' as const, text: `Rejected: ${e}` })),
       ]);
-      if (result.resolved.length > 0) setProposal(result);
+      if (result.resolved.length > 0) {
+        setProposal(result);
+        setDropped([]);
+      }
       // Append to memory (bounded) so the next order keeps context.
       if (settings.remember && cap > 0) {
         setHistory((h) => [
@@ -117,15 +128,27 @@ export function AiCommanderPanel() {
 
   const approve = () => {
     if (!proposal) return;
+    const pending = proposal.resolved.filter((_, i) => !dropped.includes(i));
+    if (pending.length === 0) {
+      setThread((t) => [...t, { kind: 'system', text: 'All ops rejected.' }]);
+      setProposal(null);
+      setDropped([]);
+      return;
+    }
     const { applied, errors } = useSceneStore
       .getState()
-      .applyAIBatch(proposal.resolved);
+      .applyAIBatch(pending);
     setThread((t) => [
       ...t,
       { kind: 'system', text: `Applied ${applied} op(s) as one undoable AI change.` },
       ...errors.map((e) => ({ kind: 'system' as const, text: `Failed: ${e}` })),
     ]);
     setProposal(null);
+    setDropped([]);
+  };
+
+  const rejectOp = (i: number) => {
+    setDropped((d) => (d.includes(i) ? d : [...d, i]));
   };
 
   const reject = () => {
@@ -202,20 +225,47 @@ export function AiCommanderPanel() {
       {proposal && (
         <div className="ai-proposal" data-testid="ai-proposal">
           <div className="ai-proposal-title">
-            Proposed ({proposal.summaries.length} op
-            {proposal.summaries.length === 1 ? '' : 's'}):
+            {(() => {
+              const pending = proposal.resolved.length - dropped.length;
+              return `Proposed ${pending} op${pending === 1 ? '' : 's'} (§104 diff):`;
+            })()}
           </div>
-          <ul>
-            {proposal.summaries.map((s, i) => (
-              <li key={i}>{s}</li>
-            ))}
-          </ul>
+          {proposal.resolved.map((_, i) => {
+            if (dropped.includes(i)) return null;
+            const diff = proposal.diffs[i];
+            return (
+              <div key={i} className="ai-diff" data-testid={`ai-diff-${i}`}>
+                <span
+                  className={`ai-diff-mode ai-diff-${diff.mode}`}
+                  data-testid={`ai-diff-mode-${i}`}
+                >
+                  {diff.mode.toUpperCase()}
+                </span>
+                <span className="ai-diff-title">{diff.title}</span>
+                {diff.keyframe && (
+                  <span className="ai-diff-kf" data-testid={`ai-diff-kf-${i}`}>
+                    {diff.keyframe.before
+                      ? `before (${fmt(diff.keyframe.before)}) → after (${fmt(diff.keyframe.after)})`
+                      : `new (${fmt(diff.keyframe.after)})`}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  className="ai-diff-reject"
+                  data-testid={`ai-diff-reject-${i}`}
+                  onClick={() => rejectOp(i)}
+                >
+                  ✕
+                </button>
+              </div>
+            );
+          })}
           <div className="ai-proposal-actions">
             <button type="button" data-testid="ai-approve" onClick={approve}>
               Approve
             </button>
             <button type="button" data-testid="ai-reject" onClick={reject}>
-              Reject
+              Reject all
             </button>
           </div>
         </div>

@@ -815,6 +815,65 @@ h3 {
   gap: 6px;
 }
 
+.ai-diff {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 5px;
+  padding: 5px 7px;
+  margin-bottom: 5px;
+}
+
+.ai-diff-mode {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: #0b0e14;
+}
+
+.ai-diff-apply {
+  background: #22c55e;
+}
+
+.ai-diff-modify {
+  background: #f5a83c;
+}
+
+.ai-diff-remove {
+  background: #ef4444;
+}
+
+.ai-diff-title {
+  color: #e2e8f0;
+}
+
+.ai-diff-kf {
+  grid-column: 1 / -1;
+  color: #94a3b8;
+  font-size: 10px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+.ai-diff-reject {
+  background: transparent;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  color: #94a3b8;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0 6px;
+  line-height: 1.4;
+}
+
+.ai-diff-reject:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
 .ai-compose {
   display: flex;
   gap: 4px;

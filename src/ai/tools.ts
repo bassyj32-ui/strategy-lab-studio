@@ -12,6 +12,7 @@ import type {
   ObjId,
   Scene,
   SceneObjectType,
+  Transform,
 } from '../scene/types';
 
 /** A raw op proposed by the AI provider (unvalidated). */
@@ -195,6 +196,26 @@ export const TOOL_SPECS: ToolSpec[] = [
     description: 'Set per-scene brand metadata (battle name / date line) for title cards.',
     parameters: obj({ battleName: str, dateLine: str }),
   },
+  {
+    name: 'set_keyframe',
+    description:
+      'Set or replace an animation keyframe for one object at an explicit timeline time ' +
+      '(x/y/rotation/scale/opacity). A keyframe already at that time is MODIFIED; otherwise ' +
+      'a new one is APPLIED. Set remove=true to delete a keyframe. Explicit times only.',
+    parameters: obj(
+      {
+        target: { ...str, description: 'Object id OR exact display label.' },
+        time: num,
+        x: num,
+        y: num,
+        rotation: num,
+        scale: num,
+        opacity: { ...num, description: '0..1' },
+        remove: { ...bool, description: 'Delete the keyframe at `time` instead of writing one.' },
+      },
+      ['target', 'time']
+    ),
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -269,7 +290,14 @@ export type ResolvedOp =
   | { tool: 'trigger_signature_opening'; opts: { duration?: number } }
   | { tool: 'toggle_closing_card'; on: boolean }
   | { tool: 'set_vignette'; on: boolean }
-  | { tool: 'update_brand'; battleName?: string; dateLine?: string };
+  | { tool: 'update_brand'; battleName?: string; dateLine?: string }
+  | {
+      tool: 'set_keyframe';
+      id: ObjId;
+      time: number;
+      transform: Partial<Transform>;
+      remove?: boolean;
+    };
 
 const isFiniteNum = (v: unknown): v is number =>
   typeof v === 'number' && Number.isFinite(v);
@@ -665,6 +693,54 @@ export function resolveOp(op: ProposedOp, scene: Scene): ResolveResult {
         ok: true,
         resolved: { tool: 'update_brand', battleName, dateLine },
         summary: 'brand metadata update',
+      };
+    }
+    case 'set_keyframe': {
+      const t = resolveTarget(scene, args.target);
+      if (t.error) return fail(t.error);
+      const time = optNum(args, 'time');
+      if ('error' in time) return fail(time.error);
+      if (time.value === undefined) return fail('time is required');
+      if (time.value < 0 || time.value > scene.timeline.duration) {
+        return fail(`time must be within [0, ${scene.timeline.duration}]`);
+      }
+      const remove = optBool(args, 'remove');
+      if ('error' in remove) return fail(remove.error);
+      const transform: Partial<Transform> = {};
+      for (const key of ['x', 'y', 'rotation', 'scale', 'opacity'] as const) {
+        const v = optNum(args, key);
+        if ('error' in v) return fail(v.error);
+        if (v.value !== undefined) transform[key] = v.value;
+      }
+      if (remove.value) {
+        return {
+          ok: true,
+          resolved: { tool: 'set_keyframe', id: t.id!, time: time.value, transform: {}, remove: true },
+          summary: `remove keyframe @ ${time.value}s`,
+        };
+      }
+      if (Object.keys(transform).length === 0) return fail('nothing to set on the keyframe');
+      if (transform.opacity !== undefined && (transform.opacity < 0 || transform.opacity > 1)) {
+        return fail('opacity must be within [0, 1]');
+      }
+      if (transform.scale !== undefined && transform.scale <= 0) {
+        return fail('scale must be greater than 0');
+      }
+      if (
+        (transform.x !== undefined && !inBounds(scene, transform.x, 0)) ||
+        (transform.y !== undefined && !inBounds(scene, transform.y, 0))
+      ) {
+        return fail('keyframe position is outside the map');
+      }
+      return {
+        ok: true,
+        resolved: {
+          tool: 'set_keyframe',
+          id: t.id!,
+          time: time.value,
+          transform,
+        },
+        summary: `keyframe @ ${time.value}s for ${scene.objects[t.id!]?.label ?? t.id}`,
       };
     }
     default:
