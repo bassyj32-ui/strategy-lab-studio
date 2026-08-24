@@ -138,7 +138,7 @@ h3 {
 }
 
 .app-right {
-  width: 300px;
+  width: 340px;
   flex-shrink: 0;
   border-left: 1px solid var(--edge);
   background: var(--panel);
@@ -165,8 +165,9 @@ h3 {
 
 .bottom-row {
   flex-shrink: 0;
-  /* Timeline-only footer (preview moved to the right dock): no scroll needed. */
-  max-height: 30vh;
+  /* Timeline-only footer (preview lives in the right dock): stable height so
+     track rows get consistent breathing room, CapCut-style. */
+  height: 34vh;
   overflow: hidden;
   overscroll-behavior: contain;
   border-top: 1px solid var(--edge);
@@ -638,4 +639,39 @@ h3 {
 .chip:hover {
   border-color: #f5a83c;
   color: #f5a83c;
+}
+
+/* ---- Wave-3 UX: CapCut-style timeline top row ---- */
+.timeline-top-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.timeline-top-row .transport-controls {
+  flex: 1;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.hints-toggle {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--edge);
+  background: transparent;
+  color: var(--dim);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.hints-toggle:hover {
+  color: #f5a83c;
+  border-color: #f5a83c;
+}
+
+.timeline-panel {
+  padding: 8px 12px;
 }

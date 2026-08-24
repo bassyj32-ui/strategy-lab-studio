@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useSceneStore } from '../../scene/store';
 import { usePlaybackStore } from '../playbackStore';
@@ -67,8 +67,9 @@ function onPanelKeyDown(e: ReactKeyboardEvent<HTMLDivElement>): void {
 
 /**
  * Timeline container (React DOM — never the battlefield itself):
- * transport controls, ruler/playhead, one track per object, keyframe editor,
- * keyboard hints, and first-run coaching when the scene is empty.
+ * transport + ruler share ONE row (CapCut-style), one track per object,
+ * keyframe editor, collapsible keyboard hints, and first-run coaching when
+ * the scene is empty.
  * Keeps the transient playback bounds in sync with the scene timeline.
  */
 export function TimelinePanel() {
@@ -76,6 +77,7 @@ export function TimelinePanel() {
   const duration = useSceneStore((s) => s.scene.timeline.duration);
   const fps = useSceneStore((s) => s.scene.timeline.fps);
   const syncTimeline = usePlaybackStore((s) => s.syncTimeline);
+  const [hintsOpen, setHintsOpen] = useState(false);
 
   useEffect(() => {
     syncTimeline(duration, fps);
@@ -87,7 +89,19 @@ export function TimelinePanel() {
 
   return (
     <div className="timeline-panel" data-testid="timeline-panel" onKeyDown={onPanelKeyDown}>
-      <TransportControls />
+      <div className="timeline-top-row">
+        <TransportControls />
+        <button
+          type="button"
+          className="hints-toggle"
+          data-testid="hints-toggle"
+          title="Keyboard shortcuts"
+          aria-expanded={hintsOpen}
+          onClick={() => setHintsOpen((v) => !v)}
+        >
+          ?
+        </button>
+      </div>
       <Ruler />
       {ids.map((id) => (
         <KeyframeTrack key={id} objId={id} />
@@ -98,11 +112,13 @@ export function TimelinePanel() {
           Place a unit, select it, then Add keyframe at playhead.
         </div>
       ) : null}
+      {hintsOpen ? (
+        <div className="timeline-hints" data-testid="timeline-keyboard-hints">
+          <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> step frame ·{' '}
+          <kbd>Home</kbd> start · <kbd>End</kbd> end
+        </div>
+      ) : null}
       <KeyframeEditor />
-      <div className="timeline-hints" data-testid="timeline-keyboard-hints">
-        <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> step frame ·{' '}
-        <kbd>Home</kbd> start · <kbd>End</kbd> end
-      </div>
     </div>
   );
 }

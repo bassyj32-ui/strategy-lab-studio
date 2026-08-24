@@ -94,13 +94,19 @@ describe('TimelinePanel keyboard transport', () => {
     expect(st.currentTime).toBe(0); // ←/→ must not step
   });
 
-  it('shows the keyboard hint row', () => {
+  it('shows the keyboard hint row behind the ? toggle', () => {
     render(<TimelinePanel />);
+    // Hidden by default (de-cluttered timeline).
+    expect(screen.queryByTestId('timeline-keyboard-hints')).toBeNull();
+    fireEvent.click(screen.getByTestId('hints-toggle'));
     const hints = screen.getByTestId('timeline-keyboard-hints');
     expect(hints.textContent).toContain('Space');
     expect(hints.textContent).toContain('step frame');
     expect(hints.textContent).toContain('Home');
     expect(hints.textContent).toContain('End');
+    // Toggle closes it again.
+    fireEvent.click(screen.getByTestId('hints-toggle'));
+    expect(screen.queryByTestId('timeline-keyboard-hints')).toBeNull();
   });
 
   it('shows coaching line when the scene has zero objects', () => {
