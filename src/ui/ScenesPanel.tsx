@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useSceneStore } from '../scene/store';
+import { clearAutosave } from '../persistence/autosave';
 
 /**
  * Read a picked file as text. `Blob.text()` is the modern path; the
@@ -67,6 +68,11 @@ export function ScenesPanel() {
     // Defer the revoke: revoking in the same tick as click() can cancel the
     // download in some browsers (Safari notably).
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+    // A deliberate file save clears the continuous autosave, so the recovery
+    // prompt won't appear next launch. New edits afterwards re-create it.
+    // Best-effort fire-and-forget: swallow IndexedDB failures so a missing
+    // IDB (e.g. test/jsdom) never becomes an unhandled rejection.
+    void clearAutosave().catch(() => {});
   };
 
   const onPickFile = async (file: File | undefined) => {
