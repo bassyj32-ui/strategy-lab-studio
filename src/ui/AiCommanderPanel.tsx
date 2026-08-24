@@ -79,12 +79,16 @@ export function AiCommanderPanel() {
     saveAISettings(patch);
   };
 
-  const send = async () => {
-    const order = prompt.trim();
-    if (!order || busy) return;
+  const send = async (intent: 'command' | 'suggest' = 'command') => {
+    const order = intent === 'suggest' ? '' : prompt.trim();
+    if (intent !== 'suggest' && (!order || busy)) return;
+    if (busy) return;
     setError(null);
-    setPrompt('');
-    setThread((t) => [...t, { kind: 'order', text: order }]);
+    if (intent !== 'suggest') setPrompt('');
+    setThread((t) => [
+      ...t,
+      { kind: 'order', text: intent === 'suggest' ? '✨ Suggest improvements' : order },
+    ]);
     setBusy(true);
     // Bound the replayed context to the configured turn window.
     const cap = Math.max(0, settings.maxTurns) * 2;
@@ -100,7 +104,8 @@ export function AiCommanderPanel() {
           selectedObjId: state.selectedObjId,
           selectedIds: state.selectedIds,
           history: replay,
-        }
+        },
+        intent
       );
       setThread((t) => [
         ...t,
@@ -111,11 +116,12 @@ export function AiCommanderPanel() {
         setProposal(result);
         setDropped([]);
       }
+      const memoryOrder = intent === 'suggest' ? '✨ Suggest improvements' : order;
       // Append to memory (bounded) so the next order keeps context.
       if (settings.remember && cap > 0) {
         setHistory((h) => [
           ...h,
-          { role: 'user' as const, content: order },
+          { role: 'user' as const, content: memoryOrder },
           ...(result.text ? [{ role: 'assistant' as const, content: result.text }] : []),
         ].slice(-cap));
       }
@@ -291,14 +297,26 @@ export function AiCommanderPanel() {
             }
           }}
         />
-        <button
-          type="button"
-          data-testid="ai-send"
-          disabled={busy || !prompt.trim()}
-          onClick={() => void send()}
-        >
-          {busy ? '…' : 'Send'}
-        </button>
+        <div className="ai-compose-buttons">
+          <button
+            type="button"
+            data-testid="ai-send"
+            disabled={busy || !prompt.trim()}
+            onClick={() => void send()}
+          >
+            {busy ? '…' : 'Send'}
+          </button>
+          <button
+            type="button"
+            className="ai-suggest"
+            data-testid="ai-suggest"
+            disabled={busy}
+            title="Ask the Commander to propose improvements for this scene"
+            onClick={() => void send('suggest')}
+          >
+            ✨ Suggest
+          </button>
+        </div>
       </div>
       <div className="ai-footnote">Every approved batch is ONE undo step.</div>
     </div>

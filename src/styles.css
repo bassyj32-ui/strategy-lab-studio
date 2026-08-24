@@ -899,6 +899,32 @@ h3 {
    color: #64748b;
  }
 
+.ai-compose-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ai-suggest {
+  background: rgba(245, 168, 60, 0.12);
+  border: 1px solid var(--accent, #f5a83c);
+  color: #f5a83c;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.ai-suggest:hover:not(:disabled) {
+  background: rgba(245, 168, 60, 0.22);
+}
+
+.ai-suggest:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
  /* §A: settings checkbox + bounded context input + change history */
  .ai-remember {
    display: inline-flex;

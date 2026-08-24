@@ -69,8 +69,8 @@ export interface OpDiff {
   keyframe?: KeyframeChange;
 }
 
-function systemPrompt(scene: Scene): string {
-  return [
+function systemPrompt(scene: Scene, suggest = false): string {
+  const base = [
     'You are the AI Commander of Strategy Lab, a deterministic battlefield',
     'animation editor. You assist a human commander who holds final authority.',
     'Rules you MUST follow:',
@@ -85,8 +85,21 @@ function systemPrompt(scene: Scene): string {
     '',
     `Scene timeline: ${scene.timeline.duration}s at ${scene.timeline.fps}fps.`,
     `World size: ${scene.worldSize.w} x ${scene.worldSize.h} units.`,
-  ].join('\n');
+  ];
+  if (suggest) {
+    base.push(
+      '',
+      'SUGGESTION MODE: the commander asked you to propose concrete improvements',
+      'to the CURRENT scene. Do not wait for a detailed order — proactively',
+      'suggest high-value stagings using the tools, e.g. an opening title card,',
+      'grouping nearby allies, a decisive-move highlight on the largest army,',
+      'or a closing card. Keep it to a few crisp ops and a one-line rationale.'
+    );
+  }
+  return base.join('\n');
 }
+
+export type CommandIntent = 'command' | 'suggest';
 
 /**
  * Run one command cycle: summarize → ask provider → validate proposals.
@@ -97,7 +110,8 @@ export async function requestProposal(
   provider: AIProvider,
   settings: AISettings,
   prompt: string,
-  ctx: CommandContext
+  ctx: CommandContext,
+  intent: CommandIntent = 'command'
 ): Promise<Proposal> {
   const summary = summarizeScene(ctx.scene, {
     selectedObjId: ctx.selectedObjId,
@@ -105,7 +119,7 @@ export async function requestProposal(
   });
 
   const userContent = [
-    `Commander's order: ${prompt}`,
+    `Commander's order: ${prompt || (intent === 'suggest' ? '(suggest improvements for this scene)' : '')}`,
     '',
     'Current summarized scene state (JSON):',
     JSON.stringify(summary),
@@ -121,7 +135,7 @@ export async function requestProposal(
   const result = await provider.complete(
     {
       messages: [
-        { role: 'system', content: systemPrompt(ctx.scene) },
+        { role: 'system', content: systemPrompt(ctx.scene, intent === 'suggest') },
         ...replay,
         { role: 'user', content: userContent },
       ],

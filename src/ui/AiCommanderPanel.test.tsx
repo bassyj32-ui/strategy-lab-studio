@@ -299,4 +299,28 @@ describe('AiCommanderPanel', () => {
     expect(kfs).toHaveLength(1);
     expect(kfs[0].transform.rotation).toBe(90);
   });
+
+  it('Suggest button proposes scene improvements without typing an order', async () => {
+    fakeComplete.mockImplementation(async (req) => {
+      (fakeComplete as unknown as { lastReq?: CompletionRequest }).lastReq = req;
+      return {
+        text: 'Add an opening card and group the wings.',
+        proposals: [{ tool: 'trigger_signature_opening', args: { duration: 3 } }],
+      };
+    });
+    render(<AiCommanderPanel />);
+    fireEvent.click(screen.getByTestId('ai-suggest'));
+
+    await waitFor(() => expect(screen.getByTestId('ai-proposal')).toBeTruthy());
+    // A suggestion order was logged in the thread.
+    expect(screen.getByTestId('ai-thread').textContent).toContain('✨ Suggest');
+    // The model was instructed in suggestion mode.
+    const req = (fakeComplete as unknown as { lastReq?: { messages: { role: string; content: string }[] } })
+      .lastReq!;
+    expect(req.messages[0].content).toContain('SUGGESTION MODE');
+    // Applies like any other proposal, as one undoable step.
+    fireEvent.click(screen.getByTestId('ai-approve'));
+    expect(s().scene.openingCard).toEqual({ startAt: 0, duration: 3 });
+    expect(s().past[s().past.length - 1].label).toBe('AI Change #1');
+  });
 });

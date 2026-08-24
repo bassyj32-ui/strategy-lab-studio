@@ -186,3 +186,35 @@ describe('computeOpDiff (§104 before→after preview)', () => {
     expect(JSON.stringify(s)).toBe(before);
   });
 });
+
+describe('requestProposal suggestion mode (Slice C)', () => {
+  it('instructs the model to propose improvements and tolerates an empty order', async () => {
+    const capture: { req?: CompletionRequest } = {};
+    await requestProposal(
+      fakeProvider({ text: 'ok', proposals: [] }, capture),
+      settings,
+      '',
+      { scene: scene() },
+      'suggest'
+    );
+    expect(capture.req!.messages[0].content).toContain('SUGGESTION MODE');
+    expect(capture.req!.messages[capture.req!.messages.length - 1].content).toContain(
+      'suggest improvements'
+    );
+  });
+
+  it('still validates proposals in suggestion mode (no free pass)', async () => {
+    const proposal = await requestProposal(
+      fakeProvider({
+        text: '',
+        proposals: [{ tool: 'create_object', args: { type: 'unit', x: 99999, y: 0 } }],
+      }),
+      settings,
+      '',
+      { scene: scene() },
+      'suggest'
+    );
+    expect(proposal.resolved).toHaveLength(0);
+    expect(proposal.errors.length).toBeGreaterThan(0);
+  });
+});
