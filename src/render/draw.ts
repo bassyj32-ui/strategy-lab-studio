@@ -1,5 +1,6 @@
-import type { Scene, Transform } from '../scene/types';
+import type { Scene, TitleCardConfig, Transform } from '../scene/types';
 import type { AssetImageMap, ScreenTransform } from './types';
+import type { CardWindow } from '../scene/branding';
 // Single consumption path (architecture §6.2): the SAME pure selector the
 // timeline uses. Never duplicate interpolation math here.
 import { getObjectWorldTransformAtTime } from '../timeline/selectors';
@@ -7,7 +8,6 @@ import { getCameraAtTime } from '../timeline/cameraTrack';
 import { applyCamera } from './camera';
 import { layerCamera } from '../camera/parallax';
 import {
-  FACTION_COLORS,
   CONFIDENCE_META,
   annotationRingRadius,
   labelOffsetY,
@@ -15,6 +15,17 @@ import {
 } from '../objects/annotations';
 import { effectRings, effectColor } from '../objects/effects';
 import { sortForRender } from '../objects/depth';
+import { arrowStyleSpec } from '../objects/arrowStyles';
+import {
+  TYPOGRAPHY,
+  BRAND_ACCENT,
+  DEFAULT_CARD_KICKER,
+  DEFAULT_CLOSING_TITLE,
+  resolveFactionColors,
+  openingCardWindow,
+  closingCardWindow,
+  cardAlpha,
+} from '../scene/branding';
 
 const BACKGROUND = '#0b0e14';
 
@@ -61,6 +72,8 @@ const PLACEHOLDER_SIZE = 40;
  *      (asc by ObjId): interpolate -> project -> draw image or placeholder,
  *      with a fixed soft offset shadow when the object's asset metadata says
  *      `defaultShadow: true` (owner-approved P1 pull-forward).
+ *   4. cinematic vignette (§38) when flagged
+ *   5. §95/§96 title-card overlays (opening / ending), alpha-mode excluded
  *
  * READ-ONLY: this function never mutates `scene`, its keyframes, assets, or the
  * camera. The same scene + frame always paints identically.
@@ -185,25 +198,35 @@ export function drawScene(
         const h = (asset?.height ?? img.height) * screen.scale;
         ctx.drawImage(img, -w / 2, -h / 2, w, h);
       } else if (obj.type === 'arrow') {
-        // MVP-2 arrow (owner-approved). Tail at local origin, tip along +X —
-        // same local geometry as the Konva door. Sizes scale with the camera
-        // so world-space thickness stays consistent at any zoom.
+        // MVP-2 arrow (owner-approved) + §32 signature styles. Tail at local
+        // origin, tip along +X — same local geometry as the Konva door, with
+        // thickness/head/opacity/dash fixed by the SHARED spec table so both
+        // doors agree pixel-for-pixel. Sizes scale with the camera so
+        // world-space geometry stays consistent at any zoom.
         const len = (obj.length ?? 120) * screen.scale;
         const s = screen.scale;
+        const spec = arrowStyleSpec(obj.arrowStyle);
+        ctx.save();
+        ctx.globalAlpha = screen.opacity * spec.opacity;
+        if (spec.dash) {
+          ctx.setLineDash(spec.dash.map((d) => d * s));
+        }
         ctx.strokeStyle = obj.color ?? '#f5a83c';
         ctx.fillStyle = obj.color ?? '#f5a83c';
-        ctx.lineWidth = 6 * s;
+        ctx.lineWidth = spec.shaftWidth * s;
         ctx.lineCap = 'round';
         ctx.beginPath();
         ctx.moveTo(0, 0);
         ctx.lineTo(len, 0);
         ctx.stroke();
+        ctx.setLineDash([]); // head is always solid, even on dashed styles
         ctx.beginPath();
         ctx.moveTo(len, 0);
-        ctx.lineTo(len - 18 * s, -11 * s);
-        ctx.lineTo(len - 18 * s, 11 * s);
+        ctx.lineTo(len - spec.headLength * s, -spec.headHalfWidth * s);
+        ctx.lineTo(len - spec.headLength * s, spec.headHalfWidth * s);
         ctx.closePath();
         ctx.fill();
+        ctx.restore();
       } else {
         const size = PLACEHOLDER_SIZE * screen.scale;
         ctx.fillStyle = PLACEHOLDER_COLORS[obj.type] ?? '#888888';
@@ -230,7 +253,8 @@ export function drawScene(
       if (obj.faction) {
         ctx.beginPath();
         ctx.arc(0, 0, ringR, 0, Math.PI * 2);
-        ctx.strokeStyle = FACTION_COLORS[obj.faction];
+        // §93: per-scene brand overrides merged over the §31 defaults.
+        ctx.strokeStyle = resolveFactionColors(scene.brand)[obj.faction];
         ctx.lineWidth = 3 * screen.scale;
         ctx.stroke();
       }
@@ -295,5 +319,80 @@ export function drawScene(
     grad.addColorStop(1, 'rgba(0,0,0,0.5)');
     ctx.fillStyle = grad as unknown as string;
     ctx.fillRect(0, 0, w, h);
+  }
+
+  // 6. §95/§96 TITLE CARDS (signature opening / ending). One deterministic
+  // overlay pass per enabled card: full-frame dark veil + kicker / title /
+  // subtitle in brand typography. Alpha comes from the shared fade envelope
+  // (pure function of time), so a given frame always paints identically.
+  // Skipped in alpha mode like the vignette (objects-only output).
+  if (!transparentBackground) {
+    const { w, h } = videoSize;
+    const drawCard = (
+      cfg: TitleCardConfig | undefined,
+      win: CardWindow,
+      fallbackTitle: string
+    ): void => {
+      if (!cfg) return;
+      const alpha = cardAlpha(t, win);
+      if (alpha <= 0) return;
+      const base = Math.min(w, h);
+      ctx.save();
+      // Veil: near-opaque dark wash so the card always reads over the map.
+      ctx.globalAlpha = alpha * 0.92;
+      ctx.fillStyle = BACKGROUND;
+      ctx.fillRect(0, 0, w, h);
+      ctx.globalAlpha = alpha;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      const kicker = cfg.kicker ?? scene.brand?.battleName ?? DEFAULT_CARD_KICKER;
+      const title =
+        cfg.title ?? scene.brand?.battleName ?? fallbackTitle;
+      const subtitle = cfg.subtitle ?? scene.brand?.dateLine ?? '';
+
+      const kickY = h * 0.42;
+      const titleY = h * 0.5;
+      const ruleW = base * 0.06;
+
+      // Kicker (small caps feel via uppercase + letterspacing approximation).
+      const kfs = Math.max(12, base * 0.018);
+      ctx.font = `700 ${kfs}px ${TYPOGRAPHY.primary}`;
+      ctx.fillStyle = BRAND_ACCENT;
+      ctx.fillText(kicker.toUpperCase(), w / 2, kickY);
+
+      // Amber accent rule between kicker and title.
+      ctx.fillRect(w / 2 - ruleW / 2, kickY + kfs * 1.2, ruleW, Math.max(1, base * 0.002));
+
+      // Main display title.
+      const tfs = Math.max(24, base * 0.07);
+      ctx.font = `700 ${tfs}px ${TYPOGRAPHY.display}`;
+      ctx.fillStyle = '#f3f4f6';
+      ctx.fillText(title, w / 2, titleY);
+
+      // Optional subtitle/date line.
+      if (subtitle) {
+        const sfs = Math.max(12, base * 0.022);
+        ctx.font = `400 ${sfs}px ${TYPOGRAPHY.primary}`;
+        ctx.fillStyle = '#9ca3af';
+        ctx.fillText(subtitle.toUpperCase(), w / 2, titleY + tfs * 0.9);
+      }
+      ctx.restore();
+    };
+
+    if (scene.openingCard) {
+      drawCard(
+        scene.openingCard,
+        openingCardWindow(scene.openingCard),
+        scene.name
+      );
+    }
+    if (scene.closingCard) {
+      drawCard(
+        scene.closingCard,
+        closingCardWindow(scene.closingCard, scene.timeline.duration),
+        DEFAULT_CLOSING_TITLE
+      );
+    }
   }
 }

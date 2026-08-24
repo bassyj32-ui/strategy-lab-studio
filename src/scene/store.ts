@@ -4,6 +4,7 @@ import { current, type Draft } from 'immer';
 import type {
   Asset,
   AssetId,
+  BrandConfig,
   CameraState,
   ControlPoint,
   Keyframe,
@@ -49,8 +50,10 @@ import {
 import {
   buildDecisiveMove,
   buildWhyItWorked,
+  buildSignatureOpening,
   type DecisiveMoveOptions,
   type WhyItWorkedOptions,
+  type SignatureOpeningOptions,
 } from './macros';
 
 const MAX_HISTORY = 100;
@@ -255,6 +258,7 @@ export interface SceneState {
           SceneObject,
           | 'length'
           | 'color'
+          | 'arrowStyle'
           | 'label'
           | 'faction'
           | 'confidence'
@@ -412,6 +416,18 @@ export interface SceneState {
     /** Toggles the scene's cinematic vignette flag. One undo step. */
     setVignette: (on: boolean) => void;
 
+    // ---- §93–§96 Branding / signature cards ----
+    /**
+     * §95 signature OPENING macro (ONE undoable transaction): writes
+     * Scene.openingCard and replaces the camera track with the hold-wide →
+     * settle move. Card text resolves from Scene.brand at render time.
+     */
+    triggerSignatureOpening: (opts?: SignatureOpeningOptions) => void;
+    /** §96 toggles the closing 'THE LESSON' card. One undo step. */
+    toggleClosingCard: (on: boolean) => void;
+    /** Patches per-scene brand metadata (name/date/faction colors). One undo step. */
+    updateBrand: (patch: Partial<BrandConfig>) => void;
+
     // ---- Asset / map library writes (project-scoped, mirrored to every scene) ----
     /** Insert-only asset registry write (additive, never overwrites). */
     registerAsset: (asset: Asset) => void;
@@ -551,6 +567,12 @@ export const useSceneStore = create<SceneState>()(
         if (!obj) return;
         if (props.length !== undefined) obj.length = props.length;
         if (props.color !== undefined) obj.color = props.color;
+        // §32 arrow style: falsy (empty select value / undefined) clears back
+        // to the default 'attack' look (absent field).
+        if ('arrowStyle' in props) {
+          if (props.arrowStyle) obj.arrowStyle = props.arrowStyle;
+          else delete obj.arrowStyle;
+        }
         // Commander annotations: empty string clears the label; confidence
         // accepts undefined (badge removed) via an explicit null in props.
         if (props.label !== undefined) {
@@ -1117,6 +1139,53 @@ export const useSceneStore = create<SceneState>()(
         if (Boolean(state.scene.vignette) === on) return;
         pushHistory(state);
         state.scene.vignette = on || undefined;
+      });
+    },
+
+    /**
+     * §95 SIGNATURE OPENING macro: ONE undoable transaction that writes the
+     * opening-card config and replaces the camera track with the hold-wide →
+     * settle move. Text resolves from brand/scene name at render time.
+     */
+    triggerSignatureOpening: (opts) => {
+      set((state) => {
+        pushHistory(state);
+        const result = buildSignatureOpening(current(state.scene), opts);
+        state.scene.openingCard = result.card;
+        state.scene.cameraTrack = result.cameraKeys;
+      });
+    },
+
+    /** §96 toggles the closing 'THE LESSON' card. One undo step. */
+    toggleClosingCard: (on) => {
+      set((state) => {
+        if (Boolean(state.scene.closingCard) === on) return;
+        pushHistory(state);
+        // Presence = enabled; text/window defaults resolve at render time.
+        state.scene.closingCard = on ? {} : undefined;
+      });
+    },
+
+    /** §93 patches per-scene brand metadata. One undo step. Empty strings clear. */
+    updateBrand: (patch) => {
+      set((state) => {
+        pushHistory(state);
+        const next: BrandConfig = { ...state.scene.brand };
+        if (patch.battleName !== undefined) {
+          const v = patch.battleName.trim();
+          if (v) next.battleName = v;
+          else delete next.battleName;
+        }
+        if (patch.dateLine !== undefined) {
+          const v = patch.dateLine.trim();
+          if (v) next.dateLine = v;
+          else delete next.dateLine;
+        }
+        if (patch.factionColors !== undefined) {
+          next.factionColors = { ...next.factionColors, ...patch.factionColors };
+        }
+        state.scene.brand =
+          Object.keys(next).length > 0 ? next : undefined;
       });
     },
 

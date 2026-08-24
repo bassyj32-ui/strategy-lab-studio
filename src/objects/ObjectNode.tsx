@@ -6,7 +6,6 @@ import { useSceneStore } from '../scene/store';
 import { usePlaybackStore } from '../timeline/playbackStore';
 import { worldPointToLocal } from './groups';
 import {
-  FACTION_COLORS,
   CONFIDENCE_META,
   annotationRingRadius,
   labelOffsetY,
@@ -14,6 +13,8 @@ import {
 } from './annotations';
 import { useMapImage } from '../canvas/useMapImage';
 import { effectRings, effectColor } from './effects';
+import { arrowStyleSpec } from './arrowStyles';
+import { resolveFactionColors } from '../scene/branding';
 // Unified selection: canvas clicks must reach BOTH the scene store (canvas
 // highlight + Inspector) and the timeline selection store (KeyframeEditor).
 import { selectObjectUnified } from '../timeline/selection';
@@ -71,6 +72,8 @@ export function ObjectNode({
   const beginInteraction = useSceneStore((s) => s.beginInteraction);
   const endInteraction = useSceneStore((s) => s.endInteraction);
   const updateTransform = useSceneStore((s) => s.updateTransform);
+  // §93 branding: per-scene faction color overrides (falls back to §31).
+  const brand = useSceneStore((s) => s.scene.brand);
 
   // Asset-backed objects (Tab F forward item): resolve the library asset and
   // load its image so the editor paints the SAME pixels the export will
@@ -163,26 +166,31 @@ export function ObjectNode({
   } else if (obj.type === 'marker') {
     body = <Ellipse radiusX={MARKER_RADIUS} radiusY={MARKER_RADIUS} fill="#ef4444" />;
   } else if (obj.type === 'arrow') {
-    // Attack/movement arrow (MVP-2). Tail at local origin, tip along +X.
+    // Attack/movement arrow (MVP-2) + §32 signature styles. Tail at local
+    // origin, tip along +X; the style spec fixes thickness/head/opacity/dash
+    // so both render doors share one visual language. Spec opacity stacks on
+    // the object's own transform opacity.
     const len = obj.length ?? 120;
     const color = obj.color ?? '#f5a83c';
+    const spec = arrowStyleSpec(obj.arrowStyle);
     body = (
-      <>
+      <Group opacity={spec.opacity}>
         <Line
           points={[0, 0, len, 0]}
           stroke={color}
-          strokeWidth={ARROW_SHAFT_WIDTH}
+          strokeWidth={spec.shaftWidth}
           lineCap="round"
+          dash={spec.dash}
           hitStrokeWidth={24}
         />
         <Line
           points={[
             len,
             0,
-            len - ARROWHEAD_LENGTH,
-            -ARROWHEAD_HALF_WIDTH,
-            len - ARROWHEAD_LENGTH,
-            ARROWHEAD_HALF_WIDTH,
+            len - spec.headLength,
+            -spec.headHalfWidth,
+            len - spec.headLength,
+            spec.headHalfWidth,
           ]}
           closed
           fill={color}
@@ -190,7 +198,7 @@ export function ObjectNode({
           strokeWidth={1}
           hitStrokeWidth={24}
         />
-      </>
+      </Group>
     );
   } else {
     // unit placeholder (reserved)
@@ -247,7 +255,7 @@ export function ObjectNode({
             <Ellipse
               radiusX={ringR}
               radiusY={ringR}
-              stroke={FACTION_COLORS[obj.faction]}
+              stroke={resolveFactionColors(brand)[obj.faction]}
               strokeWidth={3}
               fillEnabled={false}
             />

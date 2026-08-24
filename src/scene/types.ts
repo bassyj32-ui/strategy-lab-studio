@@ -58,6 +58,53 @@ export interface Transform {
 }
 
 /**
+ * §32 SIGNATURE ARROWS (P2 branding): reusable tactical arrow styles. Each
+ * style fixes thickness / arrowhead / opacity / dash so the visual language
+ * stays consistent across a project (see objects/arrowStyles.ts for specs).
+ * Absent = the default 'attack' look (byte-identical to pre-branding arrows).
+ */
+export type ArrowStyle =
+  | 'attack'
+  | 'flank'
+  | 'retreat'
+  | 'encirclement'
+  | 'movement'
+  | 'charge';
+
+/**
+ * §93 BRANDING SYSTEM: per-scene brand metadata. Purely descriptive — text
+ * feeds the §95 signature opening card and factionColors overrides let
+ * historical accuracy demand non-default army colors (§31).
+ */
+export interface BrandConfig {
+  /** Battle display name, e.g. 'CANNAE'. Falls back to Scene.name. */
+  battleName?: string;
+  /** Date line, e.g. '216 BC'. */
+  dateLine?: string;
+  /** Faction color overrides merged over the §31 defaults. */
+  factionColors?: Partial<Record<Faction, string>>;
+}
+
+/**
+ * §95/§96 TITLE CARD config (signature opening / ending). Presence on Scene =
+ * enabled. Rendered as a deterministic full-frame overlay pass by BOTH render
+ * consumers of drawScene (Remotion preview + export); skipped in alpha mode.
+ * Text defaults flow from BrandConfig; per-card fields override.
+ */
+export interface TitleCardConfig {
+  /** Small top line, e.g. 'STRATEGY LAB'. */
+  kicker?: string;
+  /** Main display-font line, e.g. battle name or 'THE LESSON'. */
+  title?: string;
+  /** Secondary line under the title, e.g. '216 BC'. */
+  subtitle?: string;
+  /** Window START (seconds). Opening default 0; closing defaults to end-of-timeline. */
+  startAt?: number;
+  /** Full window length (seconds) including fades. Default 3. */
+  duration?: number;
+}
+
+/**
  * 'group' is an ORGANIZATIONAL node (P1 pull-forward, owner-approved): it has
  * a transform and can be keyframed like any object, but it is never painted
  * itself — its children render relative to it. It is not in the palette.
@@ -102,6 +149,11 @@ export interface SceneObject {
   length?: number;
   /** ARROW-ONLY: explicit stroke color; renderers fall back to their default. */
   color?: string;
+  /**
+   * ARROW-ONLY (§32 branding): signature style fixing thickness/head/opacity/
+   * dash. Absent = 'attack' (the original geometry).
+   */
+  arrowStyle?: ArrowStyle;
   /** §50 EFFECT SYSTEM: optional procedural overlay (see EffectKind). */
   effect?: EffectKind;
   /**
@@ -226,6 +278,19 @@ export interface Scene {
    * overlay in the editor. Skipped in alpha mode (objects-only output).
    */
   vignette?: boolean;
+  /**
+   * §93 BRANDING: per-scene brand metadata (battle name / date line / faction
+   * color overrides). Purely descriptive; feeds the title cards and both
+   * render doors' faction ring colors.
+   */
+  brand?: BrandConfig;
+  /**
+   * §95 SIGNATURE OPENING card. Absent = disabled. Rendered by the shared
+   * drawScene overlay pass (preview + export); skipped in alpha mode.
+   */
+  openingCard?: TitleCardConfig;
+  /** §96 SIGNATURE ENDING space ('THE LESSON'). Same mechanism as openingCard. */
+  closingCard?: TitleCardConfig;
   timeline: Timeline;
 }
 

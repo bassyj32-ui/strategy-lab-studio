@@ -1,5 +1,6 @@
 import type {
   AssetId,
+  ArrowStyle,
   SceneObject,
   SceneObjectType,
   Transform,
@@ -22,6 +23,8 @@ export interface CreateObjectOpts {
   length?: number;
   /** ARROW-ONLY: explicit stroke color override. */
   color?: string;
+  /** ARROW-ONLY (§32 branding): signature style tag. Absent = 'attack'. */
+  arrowStyle?: ArrowStyle;
 }
 
 /** Default arrow shaft length in world units (tail → tip). */
@@ -87,6 +90,7 @@ export function createArrow(opts: CreateObjectOpts): SceneObject {
     layerId: opts.layerId,
     length: opts.length ?? DEFAULT_ARROW_LENGTH,
     color: opts.color ?? DEFAULT_ARROW_COLOR,
+    arrowStyle: opts.arrowStyle,
   };
 }
 

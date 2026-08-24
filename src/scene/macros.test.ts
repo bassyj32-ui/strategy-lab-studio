@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { buildDecisiveMove, buildWhyItWorked } from './macros';
+import {
+  buildDecisiveMove,
+  buildWhyItWorked,
+  buildSignatureOpening,
+} from './macros';
 import { createDefaultScene } from './factory';
 import type { Scene } from './types';
 import { MAX_ZOOM, MIN_ZOOM } from '../camera/cameraMath';
@@ -152,5 +156,59 @@ describe('buildWhyItWorked (PRD §39)', () => {
     const b = buildWhyItWorked(factionScene(), { faction: 'red', vignette: true });
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
     expect(a.vignette).toBe(true);
+  });
+});
+
+describe('buildSignatureOpening (PRD §95)', () => {
+  it('writes a card window starting at 0 and a two-key hold→settle camera move', () => {
+    const scene = createDefaultScene();
+    scene.camera = { x: 700, y: 420, zoom: 1.6 };
+    const r = buildSignatureOpening(scene, {});
+    expect(r.card).toEqual({ startAt: 0, duration: 3 }); // default duration
+    expect(r.cameraKeys.map((k) => k.time)).toEqual([0, 3]);
+    // Hold-wide key: 85% of the current zoom, same centre.
+    expect(r.cameraKeys[0].cam).toEqual({ x: 700, y: 420, zoom: 1.6 * 0.85 });
+    // Settle key lands EXACTLY on the scene's current view.
+    expect(r.cameraKeys[1].cam).toEqual({ x: 700, y: 420, zoom: 1.6 });
+  });
+
+  it('bases the move on the LAST camera-track key when a track exists', () => {
+    const scene = createDefaultScene();
+    scene.camera = { x: 0, y: 0, zoom: 1 };
+    scene.cameraTrack = [
+      { time: 0, cam: { x: 10, y: 10, zoom: 1 } },
+      { time: 4, cam: { x: 500, y: 300, zoom: 2 } },
+    ];
+    const r = buildSignatureOpening(scene, {});
+    expect(r.cameraKeys[1].cam).toEqual({ x: 500, y: 300, zoom: 2 });
+    expect(r.cameraKeys[0].cam.zoom).toBeCloseTo(1.7); // 2 * 0.85
+  });
+
+  it('honours duration/zoom and clamps zoom to the editor range', () => {
+    const r = buildSignatureOpening(createDefaultScene(), {
+      duration: 5,
+      zoom: 99,
+    });
+    expect(r.card.duration).toBe(5);
+    expect(r.cameraKeys.map((k) => k.time)).toEqual([0, 5]);
+    expect(r.cameraKeys[0].cam.zoom).toBe(MAX_ZOOM);
+    expect(buildSignatureOpening(createDefaultScene(), { zoom: -1 }).cameraKeys[0].cam.zoom).toBe(
+      MIN_ZOOM
+    );
+  });
+
+  it('clamps sub-half-second durations to 0.5s (card must be readable)', () => {
+    expect(buildSignatureOpening(createDefaultScene(), { duration: 0 }).card.duration).toBe(0.5);
+  });
+
+  it('is fully deterministic apart from nothing at all (no ids created)', () => {
+    const mk = (): Scene => {
+      const s = createDefaultScene();
+      s.camera = { x: 123, y: 45, zoom: 1.3 };
+      return s;
+    };
+    expect(JSON.stringify(buildSignatureOpening(mk(), {}))).toBe(
+      JSON.stringify(buildSignatureOpening(mk(), {}))
+    );
   });
 });

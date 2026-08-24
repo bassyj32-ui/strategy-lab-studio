@@ -31,6 +31,8 @@ export function ScenesPanel() {
   const renameScene = useSceneStore((s) => s.renameScene);
   const getProject = useSceneStore((s) => s.getProject);
   const loadProjectFromJson = useSceneStore((s) => s.loadProjectFromJson);
+  const brand = useSceneStore((s) => s.scene.brand);
+  const updateBrand = useSceneStore((s) => s.updateBrand);
 
   const [newName, setNewName] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -171,6 +173,38 @@ export function ScenesPanel() {
         >
           Add
         </button>
+      </div>
+      {/* §93 branding: feeds the §95/§96 signature cards + faction colors.
+          One undo step per committed edit (blur / Enter). */}
+      <div className="layer-add" title="Battle name — used by the opening card (§95)">
+        <input
+          data-testid="brand-battle-name"
+          placeholder="Battle name (e.g. CANNAE)"
+          defaultValue={brand?.battleName ?? ''}
+          key={`bn-${scene.id}-${brand?.battleName ?? ''}`}
+          onFocus={useSceneStore.getState().beginInteraction}
+          onBlur={(e) => {
+            useSceneStore.getState().endInteraction();
+            if (e.target.value !== (brand?.battleName ?? '')) {
+              updateBrand({ battleName: e.target.value });
+            }
+          }}
+        />
+      </div>
+      <div className="layer-add" title="Date line — shown under the card title">
+        <input
+          data-testid="brand-date-line"
+          placeholder="Date line (e.g. 216 BC)"
+          defaultValue={brand?.dateLine ?? ''}
+          key={`dl-${scene.id}-${brand?.dateLine ?? ''}`}
+          onFocus={useSceneStore.getState().beginInteraction}
+          onBlur={(e) => {
+            useSceneStore.getState().endInteraction();
+            if (e.target.value !== (brand?.dateLine ?? '')) {
+              updateBrand({ dateLine: e.target.value });
+            }
+          }}
+        />
       </div>
       <div className="layer-add">
         <button type="button" data-testid="scene-save-project" onClick={saveProject}>

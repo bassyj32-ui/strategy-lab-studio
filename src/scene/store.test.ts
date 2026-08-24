@@ -776,3 +776,136 @@ describe('z-depth (§48 adjustable ordering)', () => {
     expect(s().scene.objects[id].z).toBe(7);
   });
 });
+
+// ---- §32/§93/§95/§96 branding (arrow styles, brand tokens, title cards) ----
+
+describe('branding store actions', () => {
+  beforeEach(reset);
+
+  it('updateObjectProps writes and clears arrowStyle (undoable)', () => {
+    const id = s().createObjectOfType('arrow');
+    expect(s().scene.objects[id].arrowStyle).toBeUndefined();
+
+    s().beginInteraction();
+    s().updateObjectProps(id, { arrowStyle: 'encirclement' });
+    s().endInteraction();
+    expect(s().scene.objects[id].arrowStyle).toBe('encirclement');
+
+    s().beginInteraction();
+    s().updateObjectProps(id, { arrowStyle: '' as never });
+    s().endInteraction();
+    // Empty string is a CLEAR, and the field is deleted entirely so saves
+    // stay byte-stable with pre-branding files.
+    expect(s().scene.objects[id].arrowStyle).toBeUndefined();
+    expect('arrowStyle' in s().scene.objects[id]).toBe(false);
+
+    s().undo(); // undo the clear
+    expect(s().scene.objects[id].arrowStyle).toBe('encirclement');
+    s().undo(); // undo the write
+    expect(s().scene.objects[id].arrowStyle).toBeUndefined();
+  });
+
+  describe('triggerSignatureOpening (§95)', () => {
+    it('writes the opening card AND replaces the camera track', () => {
+      s().updateCamera((cam) => ({ ...cam, x: 42 }));
+      s().triggerSignatureOpening({});
+      expect(s().scene.openingCard).toEqual({ startAt: 0, duration: 3 });
+      const track = s().scene.cameraTrack!;
+      expect(track.map((k) => k.time)).toEqual([0, 3]);
+      expect(track[1].cam.x).toBe(42); // settles into the current view
+    });
+
+    it('is ONE undo step restoring both the card and the prior camera state', () => {
+      s().setCameraKeyframe(2);
+      const seededTrack = s().scene.cameraTrack;
+      s().triggerSignatureOpening({ duration: 2 });
+      expect(s().scene.openingCard).toBeDefined();
+      expect(s().scene.cameraTrack).not.toEqual(seededTrack);
+      s().undo();
+      expect(s().scene.openingCard).toBeUndefined();
+      expect(s().scene.cameraTrack).toEqual(seededTrack);
+    });
+  });
+
+  describe('toggleClosingCard (§96)', () => {
+    it('toggles presence on/off; text defaults resolve at render time', () => {
+      s().toggleClosingCard(true);
+      expect(s().scene.closingCard).toEqual({});
+      s().toggleClosingCard(true); // idempotent — no extra history entry
+      s().undo();
+      expect(s().scene.closingCard).toBeUndefined();
+      s().redo();
+      expect(s().scene.closingCard).toEqual({});
+      s().toggleClosingCard(false);
+      expect(s().scene.closingCard).toBeUndefined();
+    });
+
+    it('is one undo step per actual toggle', () => {
+      s().toggleClosingCard(true);
+      s().undo();
+      expect(s().scene.closingCard).toBeUndefined();
+    });
+  });
+
+  describe('updateBrand (§93)', () => {
+    it('patches battleName/dateLine; whitespace-only values clear the field', () => {
+      s().updateBrand({ battleName: ' Gaugamela ', dateLine: '331 BC' });
+      expect(s().scene.brand).toEqual({
+        battleName: 'Gaugamela',
+        dateLine: '331 BC',
+      });
+      s().updateBrand({ battleName: '   ' });
+      expect(s().scene.brand!.battleName).toBeUndefined();
+      expect(s().scene.brand!.dateLine).toBe('331 BC');
+    });
+
+    it('merges factionColors without dropping sibling overrides', () => {
+      s().updateBrand({ factionColors: { red: '#111111' } });
+      s().updateBrand({ factionColors: { blue: '#222222' } });
+      expect(s().scene.brand!.factionColors).toEqual({
+        red: '#111111',
+        blue: '#222222',
+      });
+    });
+
+    it('deletes the whole brand object when nothing remains', () => {
+      s().updateBrand({ battleName: 'X' });
+      expect(s().scene.brand).toBeDefined();
+      s().updateBrand({ battleName: '' });
+      expect(s().scene.brand).toBeUndefined();
+    });
+
+    it('each patch is one undoable step', () => {
+      s().updateBrand({ battleName: 'A' });
+      s().updateBrand({ battleName: 'B' });
+      expect(s().scene.brand!.battleName).toBe('B');
+      s().undo();
+      expect(s().scene.brand!.battleName).toBe('A');
+      s().undo();
+      expect(s().scene.brand).toBeUndefined();
+    });
+  });
+
+  it('brand + cards survive a project save/load roundtrip (per-scene fields)', () => {
+    s().updateBrand({ battleName: 'Cannae', dateLine: '216 BC' });
+    s().triggerSignatureOpening({ duration: 2.5 });
+    s().toggleClosingCard(true);
+    const id = s().createObjectOfType('arrow');
+    s().beginInteraction();
+    s().updateObjectProps(id, { arrowStyle: 'charge' });
+    s().endInteraction();
+
+    const json = JSON.stringify(s().getProject());
+    useSceneStore.setState({ scene: createDefaultScene(), past: [], future: [] });
+    s().loadProjectFromJson(json);
+
+    expect(s().scene.brand).toEqual({
+      battleName: 'Cannae',
+      dateLine: '216 BC',
+    });
+    expect(s().scene.openingCard).toEqual({ startAt: 0, duration: 2.5 });
+    expect(s().scene.closingCard).toEqual({});
+    const arrow = Object.values(s().scene.objects).find((o) => o.type === 'arrow');
+    expect(arrow?.arrowStyle).toBe('charge');
+  });
+});

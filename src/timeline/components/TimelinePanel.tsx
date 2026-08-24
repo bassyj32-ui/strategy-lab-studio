@@ -86,6 +86,10 @@ export function TimelinePanel() {
   const triggerWhyItWorked = useSceneStore((s) => s.triggerWhyItWorked);
   const vignette = useSceneStore((s) => s.scene.vignette);
   const setVignette = useSceneStore((s) => s.setVignette);
+  const hasOpeningCard = useSceneStore((s) => Boolean(s.scene.openingCard));
+  const hasClosingCard = useSceneStore((s) => Boolean(s.scene.closingCard));
+  const triggerSignatureOpening = useSceneStore((s) => s.triggerSignatureOpening);
+  const toggleClosingCard = useSceneStore((s) => s.toggleClosingCard);
   const [hintsOpen, setHintsOpen] = useState(false);
 
   /** Apply a §27 preset; Commander Focus targets the selected object. */
@@ -163,6 +167,27 @@ export function TimelinePanel() {
         >
           🧠 Why It Worked
         </button>
+        <button
+          type="button"
+          className="camera-preset"
+          data-testid="signature-opening"
+          title="Signature Opening (§95) — title card over a hold-wide camera move, one undo step"
+          onClick={() => triggerSignatureOpening()}
+        >
+          📜 Opening Card{hasOpeningCard ? ' ✓' : ''}
+        </button>
+        <label
+          className="vignette-toggle"
+          data-testid="closing-card-toggle"
+          title="Signature Ending (§96) — 'THE LESSON' card over the final seconds"
+        >
+          <input
+            type="checkbox"
+            checked={hasClosingCard}
+            onChange={(e) => toggleClosingCard(e.target.checked)}
+          />
+          Lesson End
+        </label>
         <label
           className="vignette-toggle"
           data-testid="vignette-toggle"

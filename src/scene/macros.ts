@@ -12,6 +12,7 @@ import type {
   ObjId,
   Scene,
   SceneObject,
+  TitleCardConfig,
 } from './types';
 import { createSceneObject } from '../objects/factory';
 import { DEFAULT_LAYER_ID } from './factory';
@@ -223,4 +224,53 @@ export function buildWhyItWorked(
   }
 
   return { cameraKeys, keyframes, vignette: opts.vignette ?? false, pulsedIds };
+}
+
+export interface SignatureOpeningOptions {
+  /** Card window length in seconds (default 3). */
+  duration?: number;
+  /** Zoom held during the card (default slightly wider than base, clamped). */
+  zoom?: number;
+}
+
+export interface SignatureOpeningResult {
+  /** Card config to write to Scene.openingCard. */
+  card: TitleCardConfig;
+  /** REPLACES the camera track: hold wide during the card, settle into view. */
+  cameraKeys: CameraKeyframe[];
+}
+
+/**
+ * §95 SIGNATURE OPENING macro: title-card config + a two-key camera move that
+ * holds a slightly wider framing while the card plays, then settles into the
+ * scene's current view — the "then transition into the battlefield" beat.
+ * Pure + deterministic; the store applies it as ONE undoable transaction.
+ */
+export function buildSignatureOpening(
+  scene: Scene,
+  opts: SignatureOpeningOptions = {}
+): SignatureOpeningResult {
+  const duration = Math.max(0.5, opts.duration ?? 3);
+  const base = scene.cameraTrack?.length
+    ? scene.cameraTrack[scene.cameraTrack.length - 1].cam
+    : scene.camera;
+  const zoom = Math.min(
+    MAX_ZOOM,
+    Math.max(MIN_ZOOM, opts.zoom ?? base.zoom * 0.85)
+  );
+  return {
+    card: {
+      // Text defaults resolve at RENDER time from brand/scene name; store the
+      // window explicitly so the card is editable like any other config.
+      startAt: 0,
+      duration,
+    },
+    cameraKeys: [
+      { time: 0, cam: { x: base.x, y: base.y, zoom } },
+      {
+        time: duration,
+        cam: { x: base.x, y: base.y, zoom: base.zoom },
+      },
+    ],
+  };
 }

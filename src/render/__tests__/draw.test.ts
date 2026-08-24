@@ -29,6 +29,10 @@ class MockCtx {
   fill = vi.fn();
   measureText = vi.fn((text: string) => ({ width: text.length * 7 }));
   createRadialGradient = vi.fn(() => ({ addColorStop: vi.fn() }));
+  moveTo = vi.fn();
+  lineTo = vi.fn();
+  setLineDash = vi.fn();
+  lineCap = 'butt';
   drawImage = vi.fn();
   beginPath = vi.fn();
   closePath = vi.fn();
@@ -583,5 +587,190 @@ describe('layer parallax via depthFactor (§46)', () => {
       return JSON.stringify(raw.translate.mock.calls);
     };
     expect(run(undefined)).toBe(run(1));
+  });
+});
+
+// ---- §32 signature arrow styles (shared spec table, canvas door) ----
+
+describe('signature arrow styles in drawScene', () => {
+  const arrowScene = (arrowStyle?: string, length = 200): Scene => {
+    const scene = makeScene();
+    scene.objects.obj1.type = 'arrow';
+    scene.objects.obj1.length = length;
+    if (arrowStyle) scene.objects.obj1.arrowStyle = arrowStyle as never;
+    return scene;
+  };
+
+  it('no style renders the LEGACY geometry (attack spec, solid, opaque)', () => {
+    const { ctx, raw } = makeCtx();
+    drawScene(ctx, arrowScene(), 0, 30, { w: 1920, h: 1080 }, {});
+    // zoom 1 → scale 1 → legacy shaft width 6.
+    expect(raw.lineWidth).toBe(6);
+    // Solid shaft: the only setLineDash call is the head's reset to [].
+    for (const call of raw.setLineDash.mock.calls) {
+      expect(call[0]).toEqual([]);
+    }
+    expect(raw.globalAlpha).toBe(1); // restored after the object
+  });
+
+  it("explicit 'charge' scales the stroke with the shared spec", () => {
+    const { ctx, raw } = makeCtx();
+    drawScene(ctx, arrowScene('charge'), 0, 30, { w: 1920, h: 1080 }, {});
+    expect(raw.lineWidth).toBe(8); // charge.shaftWidth
+  });
+
+  it("'movement' strokes a world-scaled dash rhythm and keeps the head solid", () => {
+    const { ctx, raw } = makeCtx();
+    drawScene(ctx, arrowScene('movement'), 0, 30, { w: 1920, h: 1080 }, {});
+    const dashCalls = raw.setLineDash.mock.calls.map((c) => c[0]);
+    expect(dashCalls).toContainEqual([12, 8]); // [12,8] * scale(=1)
+    expect(dashCalls[dashCalls.length - 1]).toEqual([]); // head solid
+  });
+
+  it('style opacity multiplies into globalAlpha while painting (retreat 0.7)', () => {
+    const { ctx, raw } = makeCtx();
+    const scene = arrowScene('retreat');
+    // Sample alpha DURING the paint by intercepting stroke().
+    let seen = 1;
+    const origStroke = ctx.stroke.bind(ctx);
+    ctx.stroke = (() => {
+      seen = (ctx as unknown as { globalAlpha: number }).globalAlpha;
+      origStroke();
+    }) as typeof ctx.stroke;
+    drawScene(ctx, scene, 0, 30, { w: 1920, h: 1080 }, {});
+    expect(seen).toBeCloseTo(0.7);
+    // The arrow branch wraps its alpha in save/restore.
+    expect(raw.save).toHaveBeenCalled();
+    expect(raw.restore).toHaveBeenCalled();
+  });
+
+  it('both doors read the SAME spec: zoomed camera scales width + dash together', () => {
+    const scene = arrowScene('movement');
+    scene.camera = { x: 0, y: 0, zoom: 2 };
+    const { ctx, raw } = makeCtx();
+    drawScene(ctx, scene, 0, 30, { w: 1920, h: 1080 }, {});
+    expect(raw.lineWidth).toBeCloseTo(8); // movement.shaftWidth(4) * 2
+    expect(raw.setLineDash.mock.calls[0][0]).toEqual([24, 16]); // dash * 2
+  });
+
+  it("brand faction overrides flow into the annotation ring stroke", () => {
+    const { ctx, raw } = makeCtx();
+    const scene = makeScene();
+    scene.objects.obj1.faction = 'red';
+    scene.brand = { factionColors: { red: '#00ff88' } };
+    drawScene(ctx, scene, 0, 30, { w: 1920, h: 1080 }, {});
+    expect(raw.strokeStyle).toBe('#00ff88');
+  });
+});
+
+// ---- §95/§96 title cards (signature opening / ending overlay pass) ----
+
+describe('title cards in drawScene', () => {
+  it('opening card paints the veil + kicker + title inside its window', () => {
+    const { ctx, raw } = makeCtx();
+    const scene = makeScene();
+    scene.openingCard = {};
+    drawScene(ctx, scene, 30, 30, { w: 1920, h: 1080 }, {}); // t=1s < 3s window
+    // Veil = a SECOND #0b0e14 fill on top of the background wash.
+    const darkFills = raw.fillStyleHistory.filter((c) => c === '#0b0e14');
+    expect(darkFills.length).toBeGreaterThanOrEqual(2);
+    const texts = raw.fillText.mock.calls.map((c) => c[0]);
+    expect(texts).toContain('STRATEGY LAB'); // default kicker
+    expect(texts).toContain('t'); // title falls back to scene.name
+  });
+
+  it('card text resolves brand battleName/dateLine at render time', () => {
+    const { ctx, raw } = makeCtx();
+    const scene = makeScene();
+    scene.name = 'Untitled';
+    scene.brand = { battleName: 'Gaugamela', dateLine: '331 BC' };
+    scene.openingCard = {};
+    drawScene(ctx, scene, 45, 30, { w: 1920, h: 1080 }, {}); // t=1.5s
+    const texts = raw.fillText.mock.calls.map((c) => String(c[0]));
+    expect(texts).toContain('GAUGAMELA'); // kicker from battleName (uppercased)
+    expect(texts).toContain('Gaugamela'); // display title is verbatim
+    expect(texts).toContain('331 BC'); // dateLine uppercased (already caps)
+  });
+
+  it('card text prefers explicit card config over brand tokens', () => {
+    const { ctx, raw } = makeCtx();
+    const scene = makeScene();
+    scene.name = 'Fallback';
+    scene.brand = { battleName: 'Brand Title', dateLine: 'Brand Date' };
+    scene.openingCard = {
+      kicker: 'Custom Kick',
+      title: 'Custom Title',
+      subtitle: 'Custom Sub',
+    };
+    drawScene(ctx, scene, 45, 30, { w: 1920, h: 1080 }, {}); // t=1.5s
+    const texts = raw.fillText.mock.calls.map((c) => String(c[0]));
+    expect(texts).toContain('CUSTOM KICK'); // kicker uppercased
+    expect(texts).toContain('Custom Title');
+    expect(texts).toContain('CUSTOM SUB'); // subtitle uppercased
+    expect(texts).not.toContain('Brand Title');
+  });
+
+  it('closing card hugs the timeline END (visible late, absent early)', () => {
+    const mk = (): Scene => {
+      const scene = makeScene(); // duration 10
+      scene.closingCard = {};
+      return scene;
+    };
+    const late = makeCtx();
+    drawScene(late.ctx, mk(), 285, 30, { w: 1920, h: 1080 }, {}); // t=9.5s: in [7,10]
+    expect(
+      late.raw.fillText.mock.calls.some((c) => c[0] === 'THE LESSON')
+    ).toBe(true);
+    const early = makeCtx();
+    drawScene(early.ctx, mk(), 150, 30, { w: 1920, h: 1080 }, {}); // t=5s: outside
+    expect(early.raw.fillText.mock.calls.some((c) => c[0] === 'THE LESSON')).toBe(
+      false
+    );
+  });
+
+  it('cards are skipped OUTSIDE their fade windows (no veil)', () => {
+    const { ctx, raw } = makeCtx();
+    const scene = makeScene();
+    scene.openingCard = {};
+    drawScene(ctx, scene, 120, 30, { w: 1920, h: 1080 }, {}); // t=4s: past the card
+    // Only the background wash — no card veil was layered on top.
+    expect(raw.fillStyleHistory.filter((c) => c === '#0b0e14')).toHaveLength(1);
+    expect(raw.fillText).not.toHaveBeenCalled();
+  });
+
+  it('alpha mode skips BOTH cards even when configured (objects-only output)', () => {
+    const { ctx, raw } = makeCtx();
+    const scene = makeScene();
+    scene.openingCard = {};
+    scene.closingCard = {};
+    drawScene(
+      ctx,
+      scene,
+      1,
+      30,
+      { w: 1920, h: 1080 },
+      {},
+      { transparentBackground: true }
+    );
+    expect(raw.fillText).not.toHaveBeenCalled();
+    const veil = raw.fillRect.mock.calls.find(
+      (c) => c[0] === 0 && c[1] === 0 && c[2] === 1920 && c[3] === 1080
+    );
+    expect(veil).toBeUndefined();
+  });
+
+  it('card painting is deterministic per frame', () => {
+    const run = (): string => {
+      const scene = makeScene();
+      scene.openingCard = {};
+      const c = makeCtx();
+      drawScene(c.ctx, scene, 1, 30, { w: 1920, h: 1080 }, {});
+      return JSON.stringify([
+        c.raw.fillStyleHistory,
+        (c.raw.fillText as ReturnType<typeof vi.fn>).mock.calls,
+        (c.raw.fillRect as ReturnType<typeof vi.fn>).mock.calls,
+      ]);
+    };
+    expect(run()).toBe(run());
   });
 });

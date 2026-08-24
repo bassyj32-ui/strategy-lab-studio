@@ -91,6 +91,30 @@ export function Inspector() {
               }}
             />
           </label>
+          {/* §32 signature styles: thickness/head/opacity/dash fixed by the
+              shared spec table so canvas and export stay pixel-identical. */}
+          <label className="inspector-field">
+            <span>Arrow style</span>
+            <select
+              data-testid="inspector-arrow-style"
+              value={obj.arrowStyle ?? ''}
+              onFocus={beginInteraction}
+              onBlur={endInteraction}
+              onChange={(e) => {
+                const v = e.target.value;
+                updateObjectProps(obj.id, {
+                  arrowStyle: v === '' ? undefined : (v as SceneObject['arrowStyle']),
+                });
+              }}
+            >
+              <option value="">Attack (default)</option>
+              <option value="flank">Flank</option>
+              <option value="retreat">Retreat</option>
+              <option value="encirclement">Encirclement</option>
+              <option value="movement">Movement</option>
+              <option value="charge">Charge</option>
+            </select>
+          </label>
         </>
       )}
       {/* Commander annotations (P2): name label + faction ring + confidence
