@@ -689,3 +689,31 @@ h3 {
 .camera-preset:hover {
   color: #f5a83c;
 }
+
+/* Vignette (PRD §38): editor mirror of the export's radial gradient. */
+.vignette-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0) 45%,
+    rgba(0, 0, 0, 0.5) 100%
+  );
+}
+
+.vignette-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--edge);
+  background: rgba(11, 14, 20, 0.75);
+  color: var(--dim);
+  font-size: 11px;
+  cursor: pointer;
+  user-select: none;
+}

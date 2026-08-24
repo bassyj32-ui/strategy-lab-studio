@@ -46,6 +46,7 @@ import {
   type CameraPresetFocus,
   type CameraPresetKind,
 } from '../camera/presets';
+import { buildDecisiveMove, type DecisiveMoveOptions } from './macros';
 
 const MAX_HISTORY = 100;
 
@@ -380,6 +381,10 @@ export interface SceneState {
      * `focus` optionally centres Commander Focus on a world point. One undo step.
      */
     applyCameraPreset: (kind: CameraPresetKind, focus?: CameraPresetFocus) => void;
+    /** §38 macro: camera push-in + highlight + arrow (+pulse/vignette), one undo step. */
+    triggerDecisiveMove: (opts?: DecisiveMoveOptions) => void;
+    /** Toggles the scene's cinematic vignette flag. One undo step. */
+    setVignette: (on: boolean) => void;
 
     // ---- Asset / map library writes (project-scoped, mirrored to every scene) ----
     /** Insert-only asset registry write (additive, never overwrites). */
@@ -1029,6 +1034,40 @@ export const useSceneStore = create<SceneState>()(
           current(state.scene),
           focus
         );
+      });
+    },
+
+    /**
+     * P2 "DECISIVE MOVE" macro (PRD §38): ONE undoable transaction that
+     * replaces the camera track with an establish→push-in move onto the
+     * focus, spawns a highlight marker (+ optional opacity pulse keyframes)
+     * and a tactical arrow pointing at it, and optionally flags the scene's
+     * vignette. Everything it writes is ordinary editable scene data.
+     */
+    triggerDecisiveMove: (opts) => {
+      let highlightId: string | null = null;
+      set((state) => {
+        pushHistory(state);
+        const result = buildDecisiveMove(current(state.scene), opts);
+        state.scene.cameraTrack = result.cameraKeys;
+        for (const obj of result.objects) {
+          state.scene.objects[obj.id] = obj;
+        }
+        for (const [objId, frames] of Object.entries(result.keyframes)) {
+          state.scene.keyframes[objId] = frames;
+        }
+        if (result.vignette) state.scene.vignette = true;
+        highlightId = result.highlightId;
+      });
+      if (highlightId) get().setSelected(highlightId);
+    },
+
+    /** Toggles the cinematic vignette flag (PRD §38). One undo step. */
+    setVignette: (on) => {
+      set((state) => {
+        if (Boolean(state.scene.vignette) === on) return;
+        pushHistory(state);
+        state.scene.vignette = on || undefined;
       });
     },
 

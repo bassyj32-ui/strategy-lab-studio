@@ -82,6 +82,9 @@ export function TimelinePanel() {
   const fps = useSceneStore((s) => s.scene.timeline.fps);
   const syncTimeline = usePlaybackStore((s) => s.syncTimeline);
   const applyCameraPreset = useSceneStore((s) => s.applyCameraPreset);
+  const triggerDecisiveMove = useSceneStore((s) => s.triggerDecisiveMove);
+  const vignette = useSceneStore((s) => s.scene.vignette);
+  const setVignette = useSceneStore((s) => s.setVignette);
   const [hintsOpen, setHintsOpen] = useState(false);
 
   /** Apply a §27 preset; Commander Focus targets the selected object. */
@@ -127,6 +130,35 @@ export function TimelinePanel() {
             </option>
           ))}
         </select>
+        <button
+          type="button"
+          className="camera-preset"
+          data-testid="decisive-move"
+          title='Decisive Move (§38) — zoom onto the selection with highlight + tactical arrow, one undo step'
+          onClick={() => {
+            const sel = useSceneStore.getState();
+            const obj = sel.selectedObjId
+              ? sel.scene.objects[sel.selectedObjId]
+              : undefined;
+            triggerDecisiveMove(
+              obj ? { focus: { x: obj.transform.x, y: obj.transform.y } } : {}
+            );
+          }}
+        >
+          ⚡ Decisive Move
+        </button>
+        <label
+          className="vignette-toggle"
+          data-testid="vignette-toggle"
+          title="Cinematic edge-darkening (§38)"
+        >
+          <input
+            type="checkbox"
+            checked={Boolean(vignette)}
+            onChange={(e) => setVignette(e.target.checked)}
+          />
+          Vignette
+        </label>
         <button
           type="button"
           className="hints-toggle"

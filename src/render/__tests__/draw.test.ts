@@ -27,6 +27,7 @@ class MockCtx {
   arc = vi.fn();
   stroke = vi.fn();
   measureText = vi.fn((text: string) => ({ width: text.length * 7 }));
+  createRadialGradient = vi.fn(() => ({ addColorStop: vi.fn() }));
   drawImage = vi.fn();
   beginPath = vi.fn();
   closePath = vi.fn();
@@ -431,5 +432,38 @@ describe('commander annotations (faction ring / name label / confidence badge)',
     drawScene(ctx, annotated({}), 0, 30, { w: 1920, h: 1080 }, {});
     expect(raw.fillText).not.toHaveBeenCalled();
     expect(raw.arc).not.toHaveBeenCalled();
+  });
+});
+
+describe('vignette (§38 decisive move)', () => {
+  it('paints a full-frame radial gradient when scene.vignette is set', () => {
+    const { ctx, raw } = makeCtx();
+    const scene = makeScene();
+    scene.vignette = true;
+    drawScene(ctx, scene, 0, 30, { w: 1920, h: 1080 }, {});
+    expect(raw.createRadialGradient).toHaveBeenCalledTimes(1);
+    // Full-frame fill drawn with the gradient as the fill style.
+    const gradFill = raw.fillRect.mock.calls.some(
+      (c) => c[0] === 0 && c[1] === 0 && c[2] === 1920 && c[3] === 1080
+    );
+    expect(gradFill).toBe(true);
+    // fillStyle was set to the gradient object createRadialGradient returned.
+    const grad = (raw.createRadialGradient as ReturnType<typeof vi.fn>).mock
+      .results[0].value;
+    expect((raw as unknown as { fillStyle: unknown }).fillStyle).toBe(grad);
+  });
+
+  it('skips the vignette in alpha mode (transparent overlay is objects-only)', () => {
+    const { ctx, raw } = makeCtx();
+    const scene = makeScene();
+    scene.vignette = true;
+    drawScene(ctx, scene, 0, 30, { w: 1920, h: 1080 }, {}, { transparentBackground: true });
+    expect(raw.createRadialGradient).not.toHaveBeenCalled();
+  });
+
+  it('draws nothing extra when the flag is absent', () => {
+    const { ctx, raw } = makeCtx();
+    drawScene(ctx, makeScene(), 0, 30, { w: 1920, h: 1080 }, {});
+    expect(raw.createRadialGradient).not.toHaveBeenCalled();
   });
 });

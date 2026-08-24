@@ -893,6 +893,7 @@ export function CanvasStage() {
 
       {/* Camera affordances float above the canvas. Mounted OUTSIDE the
           scale(0.5) proxy wrapper so they keep natural DOM sizing. */}
+      {scene.vignette && <div className="vignette-overlay" data-testid="vignette-overlay" />}
       <CameraHud
         onZoomIn={zoomStepIn}
         onZoomOut={zoomStepOut}

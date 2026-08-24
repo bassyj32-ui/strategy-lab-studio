@@ -254,4 +254,25 @@ export function drawScene(
       }
     }
   }
+
+  // 5. Cinematic vignette (PRD §38, scene-level flag). Deterministic radial
+  // gradient painted AFTER objects; never baked into assets. Skipped in alpha
+  // mode (objects-only overlay output).
+  if (!transparentBackground && scene.vignette) {
+    const { w, h } = videoSize;
+    const cx = w / 2;
+    const cy = h / 2;
+    const grad = ctx.createRadialGradient(
+      cx,
+      cy,
+      Math.min(w, h) * 0.45,
+      cx,
+      cy,
+      Math.max(w, h) * 0.72
+    );
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.5)');
+    ctx.fillStyle = grad as unknown as string;
+    ctx.fillRect(0, 0, w, h);
+  }
 }

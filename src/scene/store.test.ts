@@ -635,4 +635,40 @@ describe('scene store', () => {
       expect(kf.cam.zoom).toBe(2);
     });
   });
+
+  describe('triggerDecisiveMove (§38 macro)', () => {
+    beforeEach(reset);
+
+    it('creates marker + arrow objects at the focus and writes pulse keyframes', () => {
+      const before = Object.keys(s().scene.objects);
+      s().triggerDecisiveMove({ focus: { x: 800, y: 400 } });
+      const scene = s().scene;
+      const created = Object.keys(scene.objects).filter(
+        (id) => !before.includes(id)
+      );
+      // Highlight marker + tactical arrow.
+      expect(created).toHaveLength(2);
+      const marker = scene.objects[created.find((id) => scene.objects[id].type === 'marker')!];
+      expect(marker.transform.x).toBe(800);
+      expect(marker.transform.y).toBe(400);
+      // Pulse keyframes exist for the highlight.
+      expect(scene.keyframes[marker.id]!.length).toBeGreaterThan(1);
+    });
+
+    it('is ONE undo step: undo removes objects AND restores the prior camera state', () => {
+      s().updateCamera((cam) => ({ ...cam, x: 42 }));
+      s().setCameraKeyframe(3);
+      const seededTrack = s().scene.cameraTrack;
+      const seededIds = Object.keys(s().scene.objects);
+
+      s().triggerDecisiveMove({ vignette: true });
+      expect(Object.keys(s().scene.objects).length).toBeGreaterThan(seededIds.length);
+      expect(s().scene.vignette).toBe(true);
+
+      s().undo();
+      expect(Object.keys(s().scene.objects)).toEqual(seededIds);
+      expect(s().scene.cameraTrack).toEqual(seededTrack);
+      expect(s().scene.vignette).toBeUndefined();
+    });
+  });
 });

@@ -196,6 +196,13 @@ export interface Scene {
    * getCameraAtTime while `camera` remains the live editing base.
    */
   cameraTrack?: CameraKeyframe[];
+  /**
+   * OPTIONAL cinematic edge-darkening (P2 "Decisive Move", PRD §38). Purely
+   * a presentation flag: painted as a deterministic radial gradient in the
+   * export AFTER objects (never baked into assets) and mirrored as a CSS
+   * overlay in the editor. Skipped in alpha mode (objects-only output).
+   */
+  vignette?: boolean;
   timeline: Timeline;
 }
 
