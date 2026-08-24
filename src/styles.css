@@ -675,3 +675,17 @@ h3 {
 .timeline-panel {
   padding: 8px 12px;
 }
+
+/* §27 camera presets: small dark chip select in the timeline top row. */
+.camera-preset {
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid var(--edge);
+  background: rgba(11, 14, 20, 0.75);
+  color: var(--dim);
+  font-size: 11px;
+  padding: 0 6px;
+}
+.camera-preset:hover {
+  color: #f5a83c;
+}

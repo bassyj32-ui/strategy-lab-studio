@@ -41,6 +41,11 @@ import type {
 } from './types';
 import type { ImportAssetOptions, ImportMapOptions } from '../assets/types';
 import { importAssetFromFile, importMapAsset } from '../assets/import';
+import {
+  buildCameraPreset,
+  type CameraPresetFocus,
+  type CameraPresetKind,
+} from '../camera/presets';
 
 const MAX_HISTORY = 100;
 
@@ -369,6 +374,12 @@ export interface SceneState {
      * has no keyframe. One undo step.
      */
     moveCameraKeyframe: (fromTime: number, toTime: number) => void;
+    /**
+     * Applies a named PRD §27 camera preset (overview / tactical / flank
+     * follow / commander focus / decisive), REPLACING the whole camera track.
+     * `focus` optionally centres Commander Focus on a world point. One undo step.
+     */
+    applyCameraPreset: (kind: CameraPresetKind, focus?: CameraPresetFocus) => void;
 
     // ---- Asset / map library writes (project-scoped, mirrored to every scene) ----
     /** Insert-only asset registry write (additive, never overwrites). */
@@ -1005,6 +1016,19 @@ export const useSceneStore = create<SceneState>()(
         if (collision >= 0) track.splice(collision, 1);
         kf.time = toTime;
         track.sort((a, b) => a.time - b.time);
+      });
+    },
+
+    applyCameraPreset: (kind, focus) => {
+      set((state) => {
+        pushHistory(state);
+        // A preset REPLACES the whole track in one shot; every keyframe it
+        // writes is then editable with the normal camera-track tools (§27).
+        state.scene.cameraTrack = buildCameraPreset(
+          kind,
+          current(state.scene),
+          focus
+        );
       });
     },
 

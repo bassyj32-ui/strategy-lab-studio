@@ -598,4 +598,41 @@ describe('scene store', () => {
       expect(s().inactiveScenes.b.assets['lib-1']).toBeDefined();
     });
   });
+
+  describe('applyCameraPreset (§27 presets onto the camera track)', () => {
+    beforeEach(reset);
+
+    it('works when no track existed and replaces the whole track', () => {
+      expect(s().scene.cameraTrack).toBeUndefined();
+      s().applyCameraPreset('tactical');
+      const track = s().scene.cameraTrack!;
+      expect(track).toHaveLength(1);
+      expect(track[0].cam.zoom).toBe(1.8);
+
+      // Applying again REPLACES (not appends).
+      s().applyCameraPreset('decisive');
+      expect(s().scene.cameraTrack!).toHaveLength(2);
+    });
+
+    it('replacing a preset is ONE undo step that restores the prior track', () => {
+      // Seed an existing track.
+      s().updateCamera((cam) => ({ ...cam, x: 42 }));
+      s().setCameraKeyframe(3);
+      const seeded = s().scene.cameraTrack;
+
+      s().applyCameraPreset('overview');
+      expect(s().scene.cameraTrack).not.toEqual(seeded);
+
+      s().undo();
+      expect(s().scene.cameraTrack).toEqual(seeded);
+    });
+
+    it('commander-focus honours the passed focus point', () => {
+      s().applyCameraPreset('commander-focus', { x: 100, y: 200 });
+      const kf = s().scene.cameraTrack![0];
+      expect(kf.cam.x).toBe(100);
+      expect(kf.cam.y).toBe(200);
+      expect(kf.cam.zoom).toBe(2);
+    });
+  });
 });

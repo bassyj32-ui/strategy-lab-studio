@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
+import type {
+  ChangeEvent as ReactChangeEvent,
+  KeyboardEvent as ReactKeyboardEvent,
+} from 'react';
 import { useSceneStore } from '../../scene/store';
 import { usePlaybackStore } from '../playbackStore';
 import { usePlaybackEngine } from '../usePlaybackEngine';
@@ -8,6 +11,7 @@ import { Ruler } from './Ruler';
 import { KeyframeTrack } from './KeyframeTrack';
 import { CameraTrack } from './CameraTrack';
 import { KeyframeEditor } from './KeyframeEditor';
+import { CAMERA_PRESETS, type CameraPresetKind } from '../../camera/presets';
 
 /**
  * True when the keydown target is an element that owns its own keys
@@ -77,7 +81,23 @@ export function TimelinePanel() {
   const duration = useSceneStore((s) => s.scene.timeline.duration);
   const fps = useSceneStore((s) => s.scene.timeline.fps);
   const syncTimeline = usePlaybackStore((s) => s.syncTimeline);
+  const applyCameraPreset = useSceneStore((s) => s.applyCameraPreset);
   const [hintsOpen, setHintsOpen] = useState(false);
+
+  /** Apply a §27 preset; Commander Focus targets the selected object. */
+  const onPresetChange = (e: ReactChangeEvent<HTMLSelectElement>) => {
+    const kind = e.target.value as CameraPresetKind | '';
+    e.target.value = ''; // reset so the same preset can be re-applied
+    if (!kind) return;
+    const sel = useSceneStore.getState();
+    const obj = sel.selectedObjId
+      ? sel.scene.objects[sel.selectedObjId]
+      : undefined;
+    applyCameraPreset(
+      kind,
+      obj ? { x: obj.transform.x, y: obj.transform.y } : undefined
+    );
+  };
 
   useEffect(() => {
     syncTimeline(duration, fps);
@@ -91,6 +111,22 @@ export function TimelinePanel() {
     <div className="timeline-panel" data-testid="timeline-panel" onKeyDown={onPanelKeyDown}>
       <div className="timeline-top-row">
         <TransportControls />
+        <select
+          className="camera-preset"
+          data-testid="camera-preset"
+          value=""
+          title="Camera presets (§27) — applied to the camera track, fully editable after"
+          onChange={onPresetChange}
+        >
+          <option value="" disabled>
+            Camera preset…
+          </option>
+          {CAMERA_PRESETS.map((p) => (
+            <option key={p.kind} value={p.kind}>
+              {p.label}
+            </option>
+          ))}
+        </select>
         <button
           type="button"
           className="hints-toggle"
