@@ -280,6 +280,38 @@ describe('scene store', () => {
       expect(s().scene.objects[id].layerId).toBe(DEFAULT_LAYER_ID);
     });
 
+    it('setLayerDepth writes depthFactor and one undo restores the default', () => {
+      s().addLayer('Par');
+      const layer = s().scene.layers.find((l) => l.name === 'Par')!;
+      s().setLayerDepth(layer.id, 0.5);
+      expect(s().scene.layers.find((l) => l.id === layer.id)!.depthFactor).toBe(0.5);
+      s().undo();
+      expect(
+        s().scene.layers.find((l) => l.id === layer.id)!.depthFactor
+      ).toBeUndefined();
+    });
+
+    it('setLayerDepth clamps out-of-range values; the 1 default removes the field entirely', () => {
+      s().addLayer('Par');
+      const layer = s().scene.layers.find((l) => l.name === 'Par')!;
+      // 3 clamps to 1, which IS the default → stored as absent so saves stay
+      // byte-stable with pre-parallax files.
+      s().setLayerDepth(layer.id, 3);
+      const clamped = s().scene.layers.find((l) => l.id === layer.id)!;
+      expect(clamped.depthFactor).toBeUndefined();
+      expect('depthFactor' in clamped).toBe(false);
+    });
+
+    it('depthFactor survives a project save/load roundtrip', () => {
+      s().addLayer('Par');
+      const layer = s().scene.layers.find((l) => l.name === 'Par')!;
+      s().setLayerDepth(layer.id, 0.25);
+      const json = JSON.stringify(s().getProject());
+      s().loadProjectFromJson(json);
+      const restored = s().scene.layers.find((l) => l.name === 'Par')!;
+      expect(restored.depthFactor).toBe(0.25);
+    });
+
     it('removeLayer(DEFAULT_LAYER_ID) reassigns its objects to a SURVIVING layer (never orphans)', () => {
       s().addLayer('L2');
       const l2 = s().scene.layers.find((l) => l.name === 'L2')!;

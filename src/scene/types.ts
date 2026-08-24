@@ -142,6 +142,13 @@ export interface Layer {
   name: string;
   visible: boolean;
   order: number;
+  /**
+   * PARALLAX DEPTH (PRD §46, P2): 0 = layer pinned to the map plane (does not
+   * move with the camera), 1 = full camera speed (default; absent behaves as
+   * 1, so scenes without this field render byte-identically to before).
+   * In-between values slide proportionally slower — instant 2.5D depth.
+   */
+  depthFactor?: number;
 }
 
 export interface CameraState {

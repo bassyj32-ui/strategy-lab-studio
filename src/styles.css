@@ -717,3 +717,23 @@ h3 {
   cursor: pointer;
   user-select: none;
 }
+
+.layer-depth {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--dim);
+}
+.layer-depth input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  accent-color: #f5a83c;
+}
+.layer-depth-value {
+  min-width: 34px;
+  text-align: right;
+  font-family: ui-monospace, monospace;
+}

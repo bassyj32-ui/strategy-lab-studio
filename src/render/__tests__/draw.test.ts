@@ -504,3 +504,44 @@ describe('z-depth paint order (§48)', () => {
     expect(xs.indexOf(1060)).toBeGreaterThan(xs.indexOf(1460));
   });
 });
+
+describe('layer parallax via depthFactor (§46)', () => {
+  const parallaxScene = (aFactor: number | undefined): Scene => {
+    const scene = makeScene();
+    scene.layers = [
+      { id: 'layer-a', name: 'A', visible: true, order: 0, depthFactor: aFactor },
+      { id: 'layer-b', name: 'B', visible: true, order: 1 },
+    ];
+    scene.objects.obj1.layerId = 'layer-a';
+    scene.objects.obj2 = {
+      id: 'obj2',
+      type: 'marker',
+      transform: { x: 100, y: 100, rotation: 0, scale: 1, opacity: 1 },
+      layerId: 'layer-b',
+    };
+    // Panned camera so a depth-factor difference must show up in screen space.
+    scene.camera = { x: 400, y: 0, zoom: 1 };
+    return scene;
+  };
+
+  it('a pinned layer (depthFactor 0) diverges from a full-speed layer under a panned camera', () => {
+    const { ctx, raw } = makeCtx();
+    drawScene(ctx, parallaxScene(0), 0, 30, { w: 1920, h: 1080 }, {});
+    // Both markers sit at world x=100; their paint-time translate differs
+    // only through the layer's effective camera:
+    //   f=1 → cam.x 400 → (100−400)+960 = 660 (follows the pan)
+    //   f=0 → cam pinned to world centre 960 → (100−960)+960 = 100
+    const xs = new Set(raw.translate.mock.calls.map((c) => c[0] as number));
+    expect(xs).toContain(660);
+    expect(xs).toContain(100);
+  });
+
+  it('depthFactor 1 everywhere is byte-identical to no depthFactor at all', () => {
+    const run = (factor: number | undefined): string => {
+      const { ctx, raw } = makeCtx();
+      drawScene(ctx, parallaxScene(factor), 0, 30, { w: 1920, h: 1080 }, {});
+      return JSON.stringify(raw.translate.mock.calls);
+    };
+    expect(run(undefined)).toBe(run(1));
+  });
+});

@@ -5,6 +5,7 @@ import type { AssetImageMap, ScreenTransform } from './types';
 import { getObjectWorldTransformAtTime } from '../timeline/selectors';
 import { getCameraAtTime } from '../timeline/cameraTrack';
 import { applyCamera } from './camera';
+import { layerCamera } from '../camera/parallax';
 import {
   FACTION_COLORS,
   CONFIDENCE_META,
@@ -134,8 +135,12 @@ export function drawScene(
   // 3. layers -> objects
   const layers = [...scene.layers].sort((a, b) => a.order - b.order);
   const t = frame / fps;
+  // PARALLAX (§46): each layer is viewed through its own depth-scaled camera
+  // (shared pure engine in camera/parallax.ts). factor 1 = identity, so
+  // scenes without depth factors take the exact pre-parallax code path.
   for (const layer of layers) {
     if (!layer.visible) continue;
+    const layerCam = layerCamera(camera, layer, worldSize);
     const layerObjs = sortForRender(
       Object.values(scene.objects).filter((o) => o.layerId === layer.id)
     );
@@ -150,7 +155,7 @@ export function drawScene(
       const world = getObjectWorldTransformAtTime(scene, id, t);
       const screen: ScreenTransform = applyCamera(
         world,
-        camera,
+        layerCam,
         worldSize,
         videoSize
       );

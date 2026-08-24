@@ -60,6 +60,7 @@ import {
   ZOOM_STEP,
   useCameraPan,
 } from '../camera';
+import { layerCamera, parallaxLayerTransform } from '../camera/parallax';
 import { CameraHud } from './CameraHud';
 import { useMapImage } from './useMapImage';
 import { ASSET_DND_MIME } from '../ui/AssetsPanel';
@@ -797,9 +798,24 @@ export function CanvasStage() {
             />
           </Layer>
 
-          {/* One Konva layer per visible scene layer. */}
-          {visibleLayersOrdered(scene).map((layer) => (
-            <Layer key={layer.id}>
+          {/* One Konva layer per visible scene layer. Each gets the PARALLAX
+              transform derived from its depthFactor via the SAME shared pure
+              engine the Remotion render uses (Law 1) — identity when the
+              factor is default. */}
+          {visibleLayersOrdered(scene).map((layer) => {
+            const pT = parallaxLayerTransform(
+              displayCamera,
+              layerCamera(displayCamera, layer, worldSize)
+            );
+            return (
+            <Layer
+              key={layer.id}
+              x={pT.x}
+              y={pT.y}
+              scaleX={pT.scaleX}
+              scaleY={pT.scaleY}
+              rotation={pT.rotation}
+            >
                {objectsForLayer(scene, layer.id).map((obj) => {
                  const worldT = resolveWorldTransform(scene.objects, obj.id);
                  const parentWorldT = obj.parentId
@@ -821,9 +837,10 @@ export function CanvasStage() {
                      onSelect={setSelected}
                    />
                  );
-               })}
-            </Layer>
-          ))}
+                })}
+             </Layer>
+            );
+          })}
 
           {/* Arrow-draw ghost preview (non-interactive, topmost under HUD). */}
           <Layer listening={false}>

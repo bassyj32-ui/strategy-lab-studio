@@ -10,6 +10,7 @@ export function LayersPanel() {
   const reorderLayers = useSceneStore((s) => s.reorderLayers);
   const removeLayer = useSceneStore((s) => s.removeLayer);
   const setActiveLayer = useSceneStore((s) => s.setActiveLayer);
+  const setLayerDepth = useSceneStore((s) => s.setLayerDepth);
 
   const [newName, setNewName] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -109,6 +110,24 @@ export function LayersPanel() {
                 Delete
               </button>
             </div>
+            {/* Parallax depth (§46): 100% = normal camera speed, 0% = pinned
+                to the map plane. Default row value is 1. */}
+            <label className="layer-depth">
+              <span>Depth</span>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                data-testid={`layer-depth-${layer.id}`}
+                aria-label={`${layer.name} parallax depth`}
+                value={layer.depthFactor ?? 1}
+                onChange={(e) => setLayerDepth(layer.id, Number(e.target.value))}
+              />
+              <span className="layer-depth-value">
+                {Math.round((layer.depthFactor ?? 1) * 100)}%
+              </span>
+            </label>
           </li>
         ))}
       </ul>

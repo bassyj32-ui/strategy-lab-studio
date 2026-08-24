@@ -290,6 +290,8 @@ export interface SceneState {
   renameLayer: (id: LayerId, name: string) => void;
   toggleLayerVisible: (id: LayerId) => void;
   reorderLayers: (id: LayerId, direction: 'up' | 'down') => void;
+  /** Sets a layer's parallax depthFactor (0..1). One undo step. */
+  setLayerDepth: (id: LayerId, factor: number) => void;
   removeLayer: (id: LayerId) => void;
 
   // ---- Multi-scene project (Scenes panel) ----
@@ -665,6 +667,18 @@ export const useSceneStore = create<SceneState>()(
         if (!layer) return;
         pushHistory(state);
         layer.visible = !layer.visible;
+      });
+    },
+
+    setLayerDepth: (id, factor) => {
+      // Clamp to the documented 0..1 parallax range (§46).
+      const f = Math.min(1, Math.max(0, factor));
+      set((state) => {
+        const layer = state.scene.layers.find((l) => l.id === id);
+        if (!layer) return;
+        pushHistory(state);
+        if (f === 1) delete layer.depthFactor;
+        else layer.depthFactor = f;
       });
     },
 
