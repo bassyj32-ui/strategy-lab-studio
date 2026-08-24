@@ -1,15 +1,27 @@
 import { useSceneStore } from '../../scene/store';
 import { usePlaybackStore } from '../playbackStore';
 import { useTimelineSelection } from '../selection';
+import type { Easing } from '../../scene/types';
+
+const EASING_OPTIONS: { value: Easing; label: string }[] = [
+  { value: 'linear', label: 'Linear' },
+  { value: 'easeIn', label: 'Ease In' },
+  { value: 'easeOut', label: 'Ease Out' },
+  { value: 'easeInOut', label: 'Ease In-Out' },
+  { value: 'hold', label: 'Hold' },
+];
 
 /**
  * Keyframe editing for the timeline-selected object:
- * add at playhead / stamp current pose / move to playhead / remove.
+ * add at playhead / stamp current pose / move to playhead / set easing /
+ * remove. Easing (PRD §112 P0 "basic easing") governs the segment STARTING
+ * at the selected keyframe.
  */
 export function KeyframeEditor() {
   const selectedObjId = useTimelineSelection((s) => s.selectedObjId);
   const selectedKeyframeTime = useTimelineSelection((s) => s.selectedKeyframeTime);
   const objects = useSceneStore((s) => s.scene.objects);
+  const keyframes = useSceneStore((s) => s.scene.keyframes);
   const currentTime = usePlaybackStore((s) => s.currentTime);
   const setKeyframeAtTime = useSceneStore((s) => s.setKeyframeAtTime);
   const updateKeyframe = useSceneStore((s) => s.updateKeyframe);
@@ -17,6 +29,10 @@ export function KeyframeEditor() {
 
   const obj = selectedObjId ? objects[selectedObjId] : undefined;
   const kfTime = selectedKeyframeTime;
+  const selectedKf =
+    obj && kfTime !== null
+      ? keyframes[obj.id]?.find((k) => k.time === kfTime)
+      : undefined;
 
   return (
     <div className="keyframe-editor" data-testid="keyframe-editor">
@@ -49,6 +65,27 @@ export function KeyframeEditor() {
       >
         Move to playhead
       </button>
+      <label className="kf-easing">
+        Easing
+        <select
+          data-testid="kf-easing"
+          disabled={!selectedKf}
+          value={selectedKf?.easing ?? 'linear'}
+          onChange={(e) => {
+            if (obj && kfTime !== null) {
+              updateKeyframe(obj.id, kfTime, {
+                easing: e.target.value as Easing,
+              });
+            }
+          }}
+        >
+          {EASING_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
       <button
         type="button"
         disabled={!obj || kfTime === null}

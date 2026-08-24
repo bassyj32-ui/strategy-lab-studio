@@ -179,6 +179,14 @@ export interface SceneObject {
 export type ConfidenceLevel = 'confirmed' | 'probable' | 'disputed';
 
 /**
+ * TEMPORAL EASING vocabulary (PRD §112 P0 "basic easing"). Canonical
+ * definition lives HERE (scene model owns its data vocabulary);
+ * render/interpolate.ts re-exports it. `hold` = step (no movement inside the
+ * segment), the others map linear progress through a quadratic ease curve.
+ */
+export type Easing = 'hold' | 'linear' | 'easeIn' | 'easeOut' | 'easeInOut';
+
+/**
  * Bezier control-point OFFSET relative to the owning keyframe's transform
  * position (world units). Stored as deltas so moving a keyframe keeps its
  * handle shape. Absent on BOTH ends of a segment = LINEAR movement
@@ -196,6 +204,12 @@ export interface Keyframe {
   cpOut?: ControlPoint;
   /** IN handle for the segment ENDING at this keyframe (P2 of the cubic). */
   cpIn?: ControlPoint;
+  /**
+   * TEMPORAL EASING (PRD §112 P0 "basic easing") for the segment STARTING at
+   * this keyframe. Absent = 'linear', so pre-easing scenes stay byte-identical.
+   * Applied to ALL channels of the segment (position follows its eased path).
+   */
+  easing?: Easing;
 }
 
 export type Keyframes = Record<ObjId, Keyframe[]>;

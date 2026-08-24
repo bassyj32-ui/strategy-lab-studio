@@ -1,8 +1,14 @@
-import type { ControlPoint, Keyframe, Transform, Vec2 } from '../scene/types';
+import type {
+  ControlPoint,
+  Easing,
+  Keyframe,
+  Transform,
+  Vec2,
+} from '../scene/types';
 
 /**
  * CANONICAL deterministic transform interpolation (MVP-1 + owner-approved
- * P1 curve pull-forward).
+ * P1 curve pull-forward + P0 basic easing).
  *
  * This is the ONE shared implementation consumed by BOTH the editor timeline
  * and the Remotion render path (architecture Law 1 / PRD §65, §99). There must
@@ -10,20 +16,24 @@ import type { ControlPoint, Keyframe, Transform, Vec2 } from '../scene/types';
  *
  * - Zero keyframes -> returns `base` (the object's own transform).
  * - Before first / after last -> HOLD (clamp to nearest keyframe).
- * - Between two keyframes -> LINEAR by default, or HOLD (step) if easing='hold':
- *   clamp to the segment START value until the segment end time.
+ * - Between two keyframes -> LINEAR by default. TEMPORAL EASING (PRD §112 P0):
+ *   `opts.easing` overrides; otherwise the LEFT keyframe's `easing` field
+ *   governs its outgoing segment. 'hold' steps (clamp to segment start until
+ *   segment end); 'easeIn'/'easeOut'/'easeInOut' remap the segment progress t
+ *   through a quadratic ease BEFORE any channel math.
  * - CURVED MOVEMENT (P1): if either keyframe of a segment carries a control
  *   point (`cpOut` on the left, `cpIn` on the right), x/y follow the cubic
- *   bezier P0 -> A+cpOut -> B+cpIn -> P3 at the SAME parameter t. A missing
- *   handle falls back to the collinear 1/3 / 2/3 point so a single dragged
- *   handle still yields a smooth curve. Rotation/scale/opacity ALWAYS keep the
- *   plain lerp — control points shape the PATH only. With no cps anywhere the
- *   output is byte-identical to the original linear engine.
+ *   bezier P0 -> A+cpOut -> B+cpIn -> P3 at the SAME (eased) parameter t. A
+ *   missing handle falls back to the collinear 1/3 / 2/3 point so a single
+ *   dragged handle still yields a smooth curve. Rotation/scale/opacity keep
+ *   their eased lerp — control points shape the PATH only. With no cps and
+ *   no easing anywhere the output is byte-identical to the original linear
+ *   engine.
  * - `rotation` uses shortest-path angular lerp (normalized to [-180, 180]);
  *   clamped boundary results return the exact stored keyframe value.
  * - Pure + deterministic: same inputs -> same outputs, no clocks, no RNG.
  */
-export type Easing = 'hold' | 'linear';
+export type { Easing };
 
 export interface InterpolationOptions {
   easing?: Easing;
@@ -99,14 +109,31 @@ export function cubicBezierPoint(
   };
 }
 
+/**
+ * Map linear segment progress t ∈ [0,1] through the TEMPORAL EASE curve
+ * (PRD §112 P0 "basic easing"). Pure; shared by editor + render.
+ * 'hold' never reaches here (the step is taken before interpolation), and
+ * 'linear' (or unknown) is the identity — so legacy scenes are untouched.
+ */
+export function applyEasing(easing: Easing, t: number): number {
+  switch (easing) {
+    case 'easeIn':
+      return t * t;
+    case 'easeOut':
+      return t * (2 - t);
+    case 'easeInOut':
+      return t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+    default:
+      return t;
+  }
+}
+
 export function interpolateTransform(
   keyframes: Keyframe[],
   time: number,
   base: Transform,
   opts?: InterpolationOptions
 ): Transform {
-  const easing: Easing = opts?.easing ?? 'linear';
-
   if (!keyframes || keyframes.length === 0) {
     return { ...base };
   }
@@ -131,6 +158,10 @@ export function interpolateTransform(
 
   if (a.time === b.time) return { ...a.transform };
 
+  // TEMPORAL EASING (P0): explicit option wins; otherwise the LEFT keyframe's
+  // easing governs its outgoing segment (absent = 'linear' for legacy scenes).
+  const easing: Easing = opts?.easing ?? a.easing ?? 'linear';
+
   // easing='hold': step function — hold the segment start value until the
   // segment end time is reached (no partial movement inside the segment).
   // Control points never apply to held segments.
@@ -138,7 +169,7 @@ export function interpolateTransform(
     return { ...a.transform };
   }
 
-  const t = (time - a.time) / (b.time - a.time);
+  const t = applyEasing(easing, (time - a.time) / (b.time - a.time));
 
   // Curved branch: control points reshape ONLY x/y. Rotation/scale/opacity
   // keep the exact linear behavior of the straight engine.

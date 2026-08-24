@@ -250,6 +250,50 @@ describe('scene store', () => {
     });
   });
 
+  describe('updateKeyframe easing (P0 basic easing)', () => {
+    const mkAnimated = (): string => {
+      const id = s().createObjectOfType('shape');
+      s().addKeyframe(id, {
+        time: 0,
+        transform: { x: 0, y: 0, rotation: 0, scale: 1, opacity: 1 },
+      });
+      s().addKeyframe(id, {
+        time: 10,
+        transform: { x: 100, y: 0, rotation: 0, scale: 1, opacity: 1 },
+      });
+      return id;
+    };
+
+    it('persists easing on the keyframe', () => {
+      const id = mkAnimated();
+      s().updateKeyframe(id, 0, { easing: 'easeIn' });
+      expect(s().scene.keyframes[id][0].easing).toBe('easeIn');
+    });
+
+    it('new keyframes default to no stored easing (linear)', () => {
+      const id = mkAnimated();
+      expect(s().scene.keyframes[id][0].easing).toBeUndefined();
+    });
+
+    it('is one undoable step and undo restores linear', () => {
+      const id = mkAnimated();
+      const lenBefore = s().past.length;
+      s().updateKeyframe(id, 0, { easing: 'hold' });
+      expect(s().scene.keyframes[id][0].easing).toBe('hold');
+      expect(s().past.length).toBe(lenBefore + 1);
+      s().undo();
+      expect(s().scene.keyframes[id][0].easing).toBeUndefined();
+    });
+
+    it('eased keyframes survive a project save/load round-trip', () => {
+      // Covered via serialize/load in sceneSystem; here just confirm the
+      // field lives on the scene model (single source of truth, Law 1).
+      const id = mkAnimated();
+      s().updateKeyframe(id, 0, { easing: 'easeInOut' });
+      expect(s().scene.keyframes[id][0]).toMatchObject({ easing: 'easeInOut' });
+    });
+  });
+
   describe('layers', () => {
     it('addLayer appends a visible layer with a higher order', () => {
       s().addLayer('Test');

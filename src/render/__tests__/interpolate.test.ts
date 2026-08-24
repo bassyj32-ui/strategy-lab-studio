@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  applyEasing,
   interpolateTransform,
   cubicBezierPoint,
   segmentControlPoints,
@@ -41,6 +42,102 @@ describe('render/interpolateTransform (canonical engine)', () => {
     ];
     // Shortest path 350 -> 360/0 -> 10, NOT down through 180.
     expect(interpolateTransform(wrap, 5, base).rotation).toBeCloseTo(0, 5);
+  });
+});
+
+describe('P0 basic easing (temporal)', () => {
+  // Quadratic ease curves: endpoints pinned, midpoints diverge from linear.
+  it('applyEasing pins endpoints and remaps the midpoint per curve', () => {
+    for (const e of ['linear', 'easeIn', 'easeOut', 'easeInOut'] as const) {
+      expect(applyEasing(e, 0)).toBe(0);
+      expect(applyEasing(e, 1)).toBe(1);
+    }
+    expect(applyEasing('linear', 0.25)).toBe(0.25);
+    expect(applyEasing('easeIn', 0.25)).toBeCloseTo(0.0625);
+    expect(applyEasing('easeOut', 0.25)).toBeCloseTo(0.4375);
+    expect(applyEasing('easeInOut', 0.25)).toBeCloseTo(0.125);
+    // Monotonic across the whole range for every curve.
+    for (const e of ['linear', 'easeIn', 'easeOut', 'easeInOut'] as const) {
+      let prev = -Infinity;
+      for (let i = 0; i <= 20; i++) {
+        const v = applyEasing(e, i / 20);
+        expect(v).toBeGreaterThanOrEqual(prev);
+        prev = v;
+      }
+    }
+  });
+
+  const span: Keyframe[] = [
+    {
+      time: 0,
+      transform: { x: 0, y: 0, rotation: 0, scale: 1, opacity: 1 },
+      easing: 'easeIn',
+    },
+    { time: 10, transform: { x: 100, y: 40, rotation: 90, scale: 2, opacity: 0.5 } },
+  ];
+
+  it("the LEFT keyframe's easing governs its outgoing segment", () => {
+    // easeIn at t=0.5 -> progress 0.25 on every channel.
+    const r = interpolateTransform(span, 5, base);
+    expect(r.x).toBeCloseTo(25);
+    expect(r.y).toBeCloseTo(10);
+    expect(r.rotation).toBeCloseTo(22.5);
+    expect(r.scale).toBeCloseTo(1.25);
+    expect(r.opacity).toBeCloseTo(0.875);
+    // Endpoints stay exact.
+    expect(interpolateTransform(span, 0, base)).toEqual(span[0].transform);
+    expect(interpolateTransform(span, 10, base)).toEqual(span[1].transform);
+  });
+
+  it.each(['easeOut', 'easeInOut', 'hold'] as const)(
+    "per-keyframe '%s' behaves like its opts equivalent",
+    (e) => {
+      const kfs = [{ ...span[0], easing: e }, span[1]];
+      const expected = interpolateTransform(
+        span.map((k, i) => (i === 0 ? { ...k, easing: undefined } : k)),
+        5,
+        base,
+        { easing: e }
+      );
+      expect(interpolateTransform(kfs, 5, base)).toEqual(expected);
+    }
+  );
+
+  it('an explicit opts.easing overrides the stored keyframe easing', () => {
+    const linear = interpolateTransform(span, 5, base, { easing: 'linear' });
+    expect(linear.x).toBeCloseTo(50); // NOT the eased 25
+  });
+
+  it('absent easing stays byte-identical linear (legacy scenes)', () => {
+    const legacy: Keyframe[] = [
+      { time: 0, transform: span[0].transform },
+      { time: 10, transform: span[1].transform },
+    ];
+    const r = interpolateTransform(legacy, 2.5, base); // t=0.25
+    expect(r.x).toBe(25);
+    expect(r.y).toBe(10);
+  });
+
+  it('eases the bezier parameter of curved segments too', () => {
+    const curved: Keyframe[] = [
+      {
+        time: 0,
+        transform: { x: 0, y: 0, rotation: 0, scale: 1, opacity: 1 },
+        cpOut: { dx: 50, dy: 60 },
+        easing: 'easeIn',
+      },
+      { time: 10, transform: { x: 100, y: 0, rotation: 0, scale: 1, opacity: 1 } },
+    ];
+    const eased = interpolateTransform(curved, 5, base);
+    const straight = interpolateTransform(curved, 5, base, { easing: 'linear' });
+    // Same curve, different parameter -> different point along it. The linear
+    // case must equal the raw bezier evaluated at t=0.5.
+    const { p0, p1, p2, p3 } = segmentControlPoints(curved[0], curved[1]);
+    expect(straight.x).toBeCloseTo(cubicBezierPoint(p0, p1, p2, p3, 0.5).x);
+    expect(eased.x).toBeLessThan(straight.x); // easeIn lags behind on the path
+    // Endpoints unchanged.
+    expect(interpolateTransform(curved, 0, base).x).toBe(0);
+    expect(interpolateTransform(curved, 10, base).x).toBe(100);
   });
 });
 

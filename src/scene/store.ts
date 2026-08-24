@@ -7,6 +7,7 @@ import type {
   BrandConfig,
   CameraState,
   ControlPoint,
+  Easing,
   Keyframe,
   LayerId,
   ObjId,
@@ -520,11 +521,11 @@ export interface SceneState {
   addKeyframe: (objId: ObjId, keyframe: Keyframe) => void;
   /** Capture the object's CURRENT base transform as a keyframe at `time`. */
   setKeyframeAtTime: (objId: ObjId, time: number) => void;
-  /** Patch an existing keyframe's time and/or transform. */
+  /** Patch an existing keyframe's time, transform and/or easing. */
   updateKeyframe: (
     objId: ObjId,
     time: number,
-    patch: { time?: number; transform?: Partial<Transform> }
+    patch: { time?: number; transform?: Partial<Transform>; easing?: Easing }
   ) => void;
   /** Remove the keyframe at `time` (identity within an object is its time). */
   removeKeyframe: (objId: ObjId, time: number) => void;
@@ -924,6 +925,8 @@ export const useSceneStore = create<SceneState>()(
         pushHistory(state);
         const k = list[idx];
         if (patch.transform) k.transform = mergeTransform(k.transform, patch.transform);
+        // P0 basic easing: governs the segment STARTING at this keyframe.
+        if (patch.easing !== undefined) k.easing = patch.easing;
         if (patch.time !== undefined && patch.time !== k.time) {
           const target = patch.time;
           // Identity invariant: a keyframe's `time` is unique within its object.
