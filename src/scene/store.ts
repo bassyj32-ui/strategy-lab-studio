@@ -5,6 +5,7 @@ import type {
   Asset,
   AssetId,
   BrandConfig,
+  CameraKeyframe,
   CameraState,
   ControlPoint,
   Easing,
@@ -23,6 +24,7 @@ import { mergeTransform } from './transform';
 // Playback clock read for auto-keyframe upserts (playbackStore imports only
 // zustand — no import cycle).
 import { usePlaybackStore } from '../timeline/playbackStore';
+import { getObjectWorldTransformAtTime } from '../timeline/selectors';
 import {
   createScene,
   deleteScene as deleteSceneOp,
@@ -674,6 +676,21 @@ export interface SceneState {
      * OUTGOING segment). No-op when no keyframe sits there. One undo step.
      */
     setCameraKeyframeEasing: (time: number, easing: Easing) => void;
+    /**
+     * BAKED follow (§87 "the creator controls the camera"): samples
+     * `objId`'s WORLD position across [fromTime, toTime] every `stepSec`
+     * seconds and writes PLAIN, fully editable camera keyframes tracking it.
+     * Position-only — zoom stays the live base view. Track keys already
+     * INSIDE the window are replaced (re-bake swaps the segment); keys
+     * outside are untouched. One undo step. No-op when the object is missing
+     * or the range is degenerate.
+     */
+    bakeCameraFollow: (
+      objId: ObjId,
+      fromTime: number,
+      toTime: number,
+      stepSec?: number
+    ) => void;
     /**
      * Applies a named PRD §27 camera preset (overview / tactical / flank
      * follow / commander focus / decisive), REPLACING the whole camera track.
@@ -1528,6 +1545,36 @@ export const useSceneStore = create<SceneState>()(
         if (!kf || kf.easing === easing) return;
         pushHistory(state);
         kf.easing = easing;
+      });
+    },
+
+    bakeCameraFollow: (objId, fromTime, toTime, stepSec = 0.5) => {
+      set((state) => {
+        if (!state.scene.objects[objId]) return;
+        const from = Math.max(0, Math.min(fromTime, toTime));
+        const to = Math.max(0, Math.max(fromTime, toTime));
+        if (!(to - from > 1e-6)) return;
+        const step = Math.max(0.05, stepSec);
+        pushHistory(state);
+        // Drop keys inside the window so a RE-bake replaces the segment.
+        const kept = (state.scene.cameraTrack ?? []).filter(
+          (k) => k.time < from - 1e-6 || k.time > to + 1e-6
+        );
+        // Position-only follow at the live base zoom; linear between samples
+        // keeps the tracking motion continuous.
+        const zoom = state.scene.camera.zoom;
+        const baked: CameraKeyframe[] = [];
+        let t = from;
+        while (t < to - 1e-6) {
+          const w = getObjectWorldTransformAtTime(state.scene, objId, t);
+          baked.push({ time: t, cam: { x: w.x, y: w.y, zoom } });
+          t += step;
+        }
+        const endW = getObjectWorldTransformAtTime(state.scene, objId, to);
+        baked.push({ time: to, cam: { x: endW.x, y: endW.y, zoom } });
+        state.scene.cameraTrack = [...kept, ...baked].sort(
+          (a, b) => a.time - b.time
+        );
       });
     },
 

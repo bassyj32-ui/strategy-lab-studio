@@ -4,7 +4,7 @@ import { usePlaybackStore } from '../timeline/playbackStore';
 import { createDefaultScene, DEFAULT_LAYER_ID } from './factory';
 import { getObjectWorldTransformAtTime } from '../timeline/selectors';
 import { getCameraAtTime } from '../timeline/cameraTrack';
-import type { Transform } from './types';
+import type { Transform, ObjId } from './types';
 
 const s = () => useSceneStore.getState();
 
@@ -879,6 +879,74 @@ describe('scene store', () => {
       const pastLen = useSceneStore.getState().past.length;
       s().setCameraKeyframeEasing(1, 'linear');
       expect(useSceneStore.getState().past.length).toBe(pastLen);
+    });
+
+    it('bakeCameraFollow writes plain keys tracking a moving unit (world pos)', () => {
+      const id = s().createObjectOfType('unit', { x: 0, y: 50 });
+      // March x: 0 → 100 between t=0 and t=2.
+      s().addKeyframe(id, {
+        time: 0,
+        transform: { x: 0, y: 50, rotation: 0, scale: 1, opacity: 1 },
+      });
+      s().addKeyframe(id, {
+        time: 2,
+        transform: { x: 100, y: 50, rotation: 0, scale: 1, opacity: 1 },
+      });
+
+      s().bakeCameraFollow(id, 0, 2, 0.5);
+      const track = s().scene.cameraTrack!;
+      expect(track.map((k) => k.time)).toEqual([0, 0.5, 1, 1.5, 2]);
+      expect(track[0].cam.x).toBeCloseTo(0);
+      expect(track[2].cam.x).toBeCloseTo(50); // linear mid
+      expect(track[4].cam.x).toBeCloseTo(100);
+      // Position-only: zoom = live base view.
+      expect(track.every((k) => k.cam.zoom === s().scene.camera.zoom)).toBe(
+        true
+      );
+    });
+
+    it('re-bake replaces in-range keys and keeps out-of-range ones', () => {
+      const id = s().createObjectOfType('unit', { x: 0, y: 0 });
+      s().addKeyframe(id, {
+        time: 0,
+        transform: { x: 0, y: 0, rotation: 0, scale: 1, opacity: 1 },
+      });
+      s().addKeyframe(id, {
+        time: 3,
+        transform: { x: 60, y: 0, rotation: 0, scale: 1, opacity: 1 },
+      });
+
+      s().setCameraKeyframe(0.5); // pre-existing key inside the window
+      s().updateCamera((cam) => ({ ...cam, x: -999 }));
+      s().setCameraKeyframe(9); // outside the window
+
+      s().bakeCameraFollow(id, 0, 3, 1);
+      let track = s().scene.cameraTrack!;
+      expect(track.map((k) => k.time)).toEqual([0, 1, 2, 3, 9]);
+      expect(track.find((k) => k.time === 9)!.cam.x).toBe(-999);
+
+      // Re-bake with different step swaps the segment in place.
+      s().bakeCameraFollow(id, 0, 3, 1.5);
+      track = s().scene.cameraTrack!;
+      expect(track.map((k) => k.time)).toEqual([0, 1.5, 3, 9]);
+    });
+
+    it('the whole bake is ONE undo step; degenerate ranges are no-ops', () => {
+      const id = s().createObjectOfType('unit', { x: 5, y: 5 });
+
+      const pastBefore = useSceneStore.getState().past.length;
+      s().bakeCameraFollow(id, 2, 2); // degenerate -> no-op
+      expect(useSceneStore.getState().past.length).toBe(pastBefore);
+      expect(s().scene.cameraTrack).toBeUndefined();
+
+      s().bakeCameraFollow(id, 0, 2, 1);
+      expect(s().scene.cameraTrack).toHaveLength(3);
+      s().undo();
+      expect(s().scene.cameraTrack).toBeUndefined();
+
+      // Missing object -> no-op.
+      s().bakeCameraFollow('nope' as ObjId, 0, 2);
+      expect(s().scene.cameraTrack).toBeUndefined();
     });
   });
 

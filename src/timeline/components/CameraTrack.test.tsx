@@ -106,4 +106,45 @@ describe('CameraTrack', () => {
     });
     expect(useSceneStore.getState().scene.cameraTrack![0].easing).toBe('hold');
   });
+
+  it('bake-follow writes a camera track from a fresh scene (one undo step)', () => {
+    act(() => {
+      useSceneStore.getState().createObjectOfType('unit', { x: 10, y: 20 });
+    });
+    render(<CameraTrack />);
+    // Row mounts on a fresh track because the scene has objects.
+    expect(screen.getByTestId('camera-track')).toBeTruthy();
+
+    const sel = screen.getByTestId('follow-unit-select') as HTMLSelectElement;
+    expect(sel.options[sel.selectedIndex].text).toContain('unit');
+    // Pick the first REAL option (index 0 is the "Follow unit…" placeholder).
+    const unitId = sel.options[1]?.value ?? '';
+    expect(unitId).not.toBe('');
+    fireEvent.change(sel, { target: { value: unitId } });
+    expect(sel.value).toBe(unitId);
+
+    const bake = screen.getByTestId('camera-bake-follow') as HTMLButtonElement;
+    expect(bake.disabled).toBe(false);
+    fireEvent.click(bake);
+    expect(useSceneStore.getState().scene.cameraTrack!.length).toBeGreaterThan(
+      0
+    );
+    // Selection cleared after baking.
+    expect((screen.getByTestId('follow-unit-select') as HTMLSelectElement).value).toBe('');
+    // ONE undo step removes the whole baked segment.
+    act(() => {
+      useSceneStore.getState().undo();
+    });
+    expect(useSceneStore.getState().scene.cameraTrack).toBeUndefined();
+  });
+
+  it('bake button is disabled until a unit is chosen', () => {
+    act(() => {
+      useSceneStore.getState().createObjectOfType('shape', { x: 0, y: 0 });
+    });
+    render(<CameraTrack />);
+    expect(
+      (screen.getByTestId('camera-bake-follow') as HTMLButtonElement).disabled
+    ).toBe(true);
+  });
 });

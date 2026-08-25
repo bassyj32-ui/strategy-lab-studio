@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useSceneStore } from '../../scene/store';
 import { usePlaybackStore } from '../playbackStore';
 
@@ -27,6 +27,8 @@ export function CameraTrack() {
   const setCameraKeyframeEasing = useSceneStore(
     (s) => s.setCameraKeyframeEasing
   );
+  const bakeCameraFollow = useSceneStore((s) => s.bakeCameraFollow);
+  const objects = useSceneStore((s) => s.scene.objects);
   const currentTime = usePlaybackStore((s) => s.currentTime);
   const seek = usePlaybackStore((s) => s.seek);
   const laneRef = useRef<HTMLDivElement | null>(null);
@@ -35,6 +37,8 @@ export function CameraTrack() {
   const kfAtPlayhead = sorted.find(
     (k) => Math.abs(k.time - currentTime) < 1e-6
   );
+  const objectList = Object.values(objects);
+  const [followId, setFollowId] = useState('');
 
   /** Horizontal drag position → seconds (same pct math as the ruler). */
   const timeFromPointer = (clientX: number): number | null => {
@@ -45,7 +49,9 @@ export function CameraTrack() {
     return Math.min(duration, Math.max(0, pct * duration));
   };
 
-  if (!sorted.length) return null;
+  // The row stays mounted once the scene has ANY object so the commander can
+  // create the first camera key or bake a follow on a fresh track.
+  if (!sorted.length && objectList.length === 0) return null;
 
   return (
     <div className="keyframe-track" data-testid="camera-track">
@@ -123,6 +129,35 @@ export function CameraTrack() {
           </option>
         ))}
       </select>
+      {/* Baked follow: pick a unit, bake plain camera keys from playhead → end.
+          The result is ordinary diamonds — retime/re-ease/delete/re-bake. */}
+      <select
+        data-testid="follow-unit-select"
+        aria-label="Unit for the camera to follow"
+        value={followId}
+        onChange={(e) => setFollowId(e.target.value)}
+        title="Pick a unit to follow"
+      >
+        <option value="">Follow unit…</option>
+        {objectList.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.name ?? o.label ?? `${o.type} · ${o.id.slice(-4)}`}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        data-testid="camera-bake-follow"
+        disabled={!followId}
+        onClick={() => {
+          if (!followId) return;
+          bakeCameraFollow(followId, currentTime, duration);
+          setFollowId('');
+        }}
+        title="Bake editable camera keyframes following this unit from the playhead to the end"
+      >
+        Bake
+      </button>
       <button
         type="button"
         data-testid="camera-key-at-playhead"
