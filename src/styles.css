@@ -23,6 +23,13 @@
     Consolas, monospace;
 
   --radius: 8px;
+
+  /* Spacing scale — every major surface snaps to these so gaps,
+     paddings and control heights align to one rhythm (CapCut-style). */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
 }
 
 * {
@@ -59,7 +66,8 @@ button {
   background: var(--panel-raised);
   border: 1px solid var(--edge);
   border-radius: var(--radius);
-  padding: 5px 10px;
+  min-height: 28px;
+  padding: 5px 12px;
   cursor: pointer;
   touch-action: manipulation;
   transition: background-color 120ms ease, border-color 120ms ease;
@@ -173,48 +181,70 @@ h3 {
 }
 
 /* Slim horizontal strip above the canvas (replaces the old left Toolbar):
-   map import / save / export / group / formation builder. */
+   map import / save / export / group / formation builder.
+   CapCut rhythm: tight inside a cluster, generous air BETWEEN clusters. */
 .action-bar {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: var(--sp-1);
+  min-height: 46px;
+  padding: var(--sp-2) var(--sp-4);
   background: var(--panel);
   border-bottom: 1px solid var(--edge);
 }
 .action-bar button {
   white-space: nowrap;
+  /* Ghost buttons: quiet until hovered (CapCut toolbar style). */
+  background: transparent;
+  border-color: transparent;
+}
+.action-bar button:hover:not(:disabled) {
+  background: var(--panel-raised);
+  border-color: var(--edge);
+}
+.action-bar button:active:not(:disabled) {
+  background: #37373f;
+}
+/* The one loud moment in the bar: export is THE primary action. */
+.action-bar button[data-testid='export-video'] {
+  background: var(--signal);
+  border-color: var(--signal);
+  color: #0b0e14;
+  font-weight: 600;
+}
+.action-bar button[data-testid='export-video']:hover:not(:disabled) {
+  background: #6ba0ff;
+  border-color: #6ba0ff;
 }
 .action-sep {
   width: 1px;
   align-self: stretch;
-  margin: 0 4px;
+  margin: 0 var(--sp-3);
   background: var(--edge);
 }
 .formation-controls {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
-  padding: 4px 10px;
-  border: 1px solid var(--edge);
-  border-radius: 6px;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius);
   background: var(--field);
 }
 .formation-controls strong {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--signal);
+  color: var(--dim);
 }
 .formation-controls label {
   font-size: 11px;
   color: var(--dim);
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-1);
 }
 .action-status {
   margin-left: auto;
@@ -737,7 +767,7 @@ h3 {
 
 .right-tabs {
   display: flex;
-  gap: 2px;
+  gap: var(--sp-2);
   border-bottom: 1px solid #26262c;
 }
 
@@ -747,7 +777,7 @@ h3 {
   color: #9a9aa4;
   border: none;
   border-bottom: 2px solid transparent;
-  padding: 6px 4px;
+  padding: 9px var(--sp-1) 8px;
   font-size: 12px;
   cursor: pointer;
 }
