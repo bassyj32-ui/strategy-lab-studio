@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, act, cleanup, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, act, cleanup, waitFor, fireEvent, within } from '@testing-library/react';
 
 // Regression harness for the reload data-loss bug: the autosave must behave
 // like persistent session state. We swap IndexedDB for a memory map and spy
@@ -43,6 +43,7 @@ vi.mock('./ui/PreviewPanel', () => ({
 
 import App from './App';
 import { useSceneStore } from './scene/store';
+import { usePlaybackStore } from './timeline/playbackStore';
 import { createDefaultScene } from './scene/factory';
 import { saveAutosave, clearAutosave } from './persistence/autosave';
 
@@ -202,5 +203,32 @@ describe('App big-screen preview expand', () => {
     fireEvent.click(screen.getByTestId('preview-expand'));
     fireEvent.click(screen.getByTestId('preview-overlay')); // backdrop
     expect(screen.queryByTestId('preview-overlay')).toBeNull();
+  });
+
+  it('overlay mounts transport controls; Play/Pause + Spacebar drive the one clock', () => {
+    render(<App />);
+    // The timeline footer already has one transport bar; the overlay adds its
+    // own (same playback store, one clock) since it covers the footer.
+    expect(document.querySelectorAll('[data-testid="transport-controls"]')).toHaveLength(1);
+
+    fireEvent.click(screen.getByTestId('preview-expand'));
+    const overlay = screen.getByTestId('preview-overlay');
+    expect(
+      document.querySelectorAll('[data-testid="transport-controls"]')
+    ).toHaveLength(2);
+    const bar = within(overlay).getByTestId('transport-controls');
+
+    const play = within(bar).getByRole('button', { name: 'Play' });
+    fireEvent.click(play);
+    expect(usePlaybackStore.getState().isPlaying).toBe(true);
+    const pause = within(bar).getByRole('button', { name: 'Pause' });
+    fireEvent.click(pause);
+    expect(usePlaybackStore.getState().isPlaying).toBe(false);
+
+    // Spacebar = play/pause (CapCut muscle memory), scoped to the overlay.
+    fireEvent.keyDown(window, { key: ' ' });
+    expect(usePlaybackStore.getState().isPlaying).toBe(true);
+    fireEvent.keyDown(window, { key: ' ' });
+    expect(usePlaybackStore.getState().isPlaying).toBe(false);
   });
 });

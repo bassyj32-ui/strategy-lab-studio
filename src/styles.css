@@ -266,6 +266,16 @@ h3 {
   border-color: #f5a83c;
 }
 
+/* The SAME TransportControls the timeline uses, re-mounted as a slim chip
+   under the big-screen video (one playback store, one clock). */
+.preview-overlay-stage .transport-controls {
+  margin-top: 10px;
+  justify-content: center;
+  background: rgba(11, 14, 20, 0.72);
+  border-radius: 8px;
+  padding: 6px 12px;
+}
+
 .preview-dock .preview-panel {
   padding: 0;
 }

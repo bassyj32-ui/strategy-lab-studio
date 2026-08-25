@@ -6,11 +6,13 @@ import { ScenesPanel } from './ui/ScenesPanel';
 import { RightPanel } from './ui/RightPanel';
 import { PreviewPanel } from './ui/PreviewPanel';
 import { TimelinePanel } from './timeline';
+import { TransportControls } from './timeline/components/TransportControls';
 import { useSceneStore } from './scene/store';
+import { usePlaybackStore } from './timeline/playbackStore';
 import { createDefaultScene } from './scene/factory';
 import { saveAutosave, loadAutosave, clearAutosave, debounce } from './persistence/autosave';
 import { SessionToast } from './ui/SessionToast';
-import { handleEditorShortcut } from './ui/shortcuts';
+import { handleEditorShortcut, isTypingTarget } from './ui/shortcuts';
 
 // MVP-1 editor shell (Wave-3 UX layout):
 //   [ Toolbar+Scenes | CanvasStage | Preview dock + tabbed panel ]  top row
@@ -29,6 +31,11 @@ export function App() {
     if (!previewBig) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setPreviewBig(false);
+      // CapCut muscle memory: Space toggles playback while on big screen.
+      if (e.key === ' ' && !isTypingTarget(e.target)) {
+        e.preventDefault();
+        usePlaybackStore.getState().toggle();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -188,6 +195,7 @@ export function App() {
             onClick={(e) => e.stopPropagation()}
           >
             <PreviewPanel />
+            <TransportControls />
             <button
               type="button"
               className="preview-collapse"
