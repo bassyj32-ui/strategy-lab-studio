@@ -64,6 +64,7 @@ import {
 import { layerCamera, parallaxLayerTransform } from '../camera/parallax';
 import { CameraHud } from './CameraHud';
 import { useMapImage } from './useMapImage';
+import { CameraPathOverlay } from './CameraPathOverlay';
 import { ASSET_DND_MIME } from '../ui/AssetsPanel';
 import { SelectionHud } from '../ui/SelectionHud';
 import {
@@ -922,6 +923,11 @@ export function CanvasStage() {
             {selected && selectedWorldT && (
               <SelectionOutline obj={selected} world={selectedWorldT} asset={selectedAsset} />
             )}
+          </Layer>
+
+          {/* Animated-camera trajectory preview (non-interactive, editor only). */}
+          <Layer listening={false}>
+            <CameraPathOverlay scene={scene} currentTime={currentTime} />
           </Layer>
 
           {/* Curved-path handles for the selected object (interactive). */}
