@@ -1,24 +1,25 @@
 import { useState } from 'react';
 import { Inspector } from './Inspector';
-import { LayersPanel } from './LayersPanel';
+import { ArmiesPanel } from './ArmiesPanel';
 import { AiCommanderPanel } from './AiCommanderPanel';
 
-type TabKey = 'properties' | 'layers' | 'ai';
+type TabKey = 'armies' | 'object' | 'ai';
 
 const TABS: { key: TabKey; label: string }[] = [
-  { key: 'properties', label: 'Properties' },
-  { key: 'layers', label: 'Layers' },
+  { key: 'armies', label: 'Armies' },
+  { key: 'object', label: 'Object' },
   { key: 'ai', label: 'AI' },
 ];
 
 /**
- * Tabbed right column (Wave-3 UX pass): one dock instead of stacked panels,
- * so nothing scrolls off-screen. Pure view composition — every tab renders
- * its existing panel unchanged. The Assets library lives in the LEFT column
- * now (owner call), so there is no assets tab here anymore.
+ * Tabbed right column (owner redesign): [ Armies ] [ Object ] [ AI ].
+ * Armies (the army tree + layers disclosure) is the DEFAULT tab — it is the
+ * commander's home base. Object = Inspector with keyframes first. Layers is
+ * no longer its own tab; it lives inside Armies as a collapsed section. The
+ * Assets library remains in the LEFT column.
  */
 export function RightPanel() {
-  const [tab, setTab] = useState<TabKey>('properties');
+  const [tab, setTab] = useState<TabKey>('armies');
 
   return (
     <div className="right-panel" data-testid="right-panel">
@@ -38,8 +39,8 @@ export function RightPanel() {
         ))}
       </div>
       <div className="right-tab-body">
-        {tab === 'properties' && <Inspector />}
-        {tab === 'layers' && <LayersPanel />}
+        {tab === 'armies' && <ArmiesPanel />}
+        {tab === 'object' && <Inspector />}
         {tab === 'ai' && <AiCommanderPanel />}
       </div>
     </div>

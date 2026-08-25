@@ -229,3 +229,12 @@ export function formationOffsets(
   }
   return offsets;
 }
+
+/**
+ * CapCut drag law helper: the ROOT of `id`'s group (topmost ancestor), or
+ * `id` itself when it is a root. Cycle-safe via ancestors().
+ */
+export function groupRootOf(objects: Record<ObjId, SceneObject>, id: ObjId): ObjId {
+  const chain = ancestors(objects, id);
+  return chain.length > 0 ? chain[0] : id;
+}

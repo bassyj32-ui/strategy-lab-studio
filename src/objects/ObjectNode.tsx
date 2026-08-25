@@ -4,7 +4,8 @@ import type { ReactNode } from 'react';
 import type { ObjId, SceneObject, Transform } from '../scene/types';
 import { useSceneStore } from '../scene/store';
 import { usePlaybackStore } from '../timeline/playbackStore';
-import { worldPointToLocal } from './groups';
+import { worldPointToLocal, groupRootOf } from './groups';
+import { useSoloEditStore } from './soloEdit';
 import {
   CONFIDENCE_META,
   annotationRingRadius,
@@ -78,6 +79,10 @@ export function ObjectNode({
   const selectedIds = useSceneStore((s) => s.selectedIds);
   const selectedObjId = useSceneStore((s) => s.selectedObjId);
   const moveObjectsBy = useSceneStore((s) => s.moveObjectsBy);
+  // CapCut drag law: full hierarchy lookup + group-move action.
+  const objects = useSceneStore((s) => s.scene.objects);
+  const moveGroup = useSceneStore((s) => s.moveGroup);
+  const soloRoot = useSoloEditStore((s) => s.rootId);
   // §93 branding: per-scene faction color overrides (falls back to §31).
   const brand = useSceneStore((s) => s.scene.brand);
 
@@ -114,6 +119,17 @@ export function ObjectNode({
       moveObjectsBy(selectedIds, node.x() - world.x, node.y() - world.y);
       return;
     }
+    // CAPCUT DRAG LAW: dragging ANY member of a group moves the WHOLE group.
+    // Double-click "enters" a group for solo member editing; while inside,
+    // members drag individually again. `moveGroup` converts the world delta
+    // into the root's parent frame, and each dragmove event recomputes the
+    // residual delta against fresh store state, so scaled/rotated parents
+    // self-correct mid-gesture.
+    const rootId = groupRootOf(objects, obj.id);
+    if (rootId !== obj.id && soloRoot !== rootId) {
+      moveGroup(rootId, node.x() - world.x, node.y() - world.y);
+      return;
+    }
     const parent = parentWorld ?? { x: 0, y: 0, rotation: 0, scale: 1, opacity: 1 };
     const local = worldPointToLocal(parent, node.x(), node.y());
     updateTransform(obj.id, { x: local.x, y: local.y });
@@ -140,19 +156,36 @@ export function ObjectNode({
     onSelect(obj.id);
   };
 
+  // Double-click a group MEMBER to enter solo-edit mode for its group:
+  // members drag individually until an empty-canvas click exits.
+  const handleDblClick = (e: KonvaEventObject<MouseEvent>) => {
+    e.cancelBubble = true;
+    const rootId = groupRootOf(objects, obj.id);
+    if (rootId !== obj.id) useSoloEditStore.getState().enter(rootId);
+  };
+
   const common = {
     x,
     y,
     rotation,
     scaleX: scale,
     scaleY: scale,
-    opacity,
+    // Solo-mode cue: while inside this object's group, NON-selected members
+    // dim so the commander can see who moves alone. Editor-only — the
+    // Remotion render never reads this.
+    opacity:
+      soloRoot !== null &&
+      soloRoot === groupRootOf(objects, obj.id) &&
+      selectedObjId !== obj.id
+        ? opacity * 0.45
+        : opacity,
     draggable: true,
     onDragStart: handleDragStart,
     onDragMove: handleDragMove,
     onDragEnd: handleDragEnd,
     onClick: handleSelect,
     onTap: handleSelect,
+    onDblClick: handleDblClick,
     ...(wantShadow
       ? {
           shadowColor: SHADOW_COLOR,

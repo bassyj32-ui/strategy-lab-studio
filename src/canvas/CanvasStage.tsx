@@ -33,6 +33,7 @@ import {
   ARROWHEAD_LENGTH,
 } from '../objects/ObjectNode';
 import { DEFAULT_ARROW_LENGTH, DEFAULT_ARROW_COLOR } from '../objects/factory';
+import { useSoloEditStore } from '../objects/soloEdit';
 import { arrowFromDrag } from '../objects/drawGesture';
 import {
   resolveWorldTransform,
@@ -659,9 +660,11 @@ export function CanvasStage() {
       panMovedRef.current = false;
       return;
     }
-    // Click on empty canvas (target === Stage) clears the selection.
+    // Click on empty canvas (target === Stage) clears the selection AND
+    // exits solo-edit mode (CapCut drag law: back to group-level drags).
     if (e.target === e.target.getStage()) {
       setSelected(null);
+      useSoloEditStore.getState().exit();
     }
   };
 

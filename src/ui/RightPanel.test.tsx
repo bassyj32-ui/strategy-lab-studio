@@ -20,31 +20,41 @@ const reset = () => {
 describe('RightPanel', () => {
   beforeEach(reset);
 
-  it('defaults to the Properties tab (Inspector visible)', () => {
+  it('defaults to the Armies tab (the commander home base)', () => {
     render(<RightPanel />);
-    expect(screen.getByTestId('tab-properties').getAttribute('aria-selected')).toBe(
+    expect(screen.getByTestId('tab-armies').getAttribute('aria-selected')).toBe(
       'true'
     );
-    expect(screen.getByText(/No object selected/i)).toBeTruthy();
+    expect(screen.getByTestId('armies-panel')).toBeTruthy();
   });
 
-  it('switches to Layers and back', () => {
+  it('switches to the Object tab (Inspector) and back to Armies', () => {
     render(<RightPanel />);
-    fireEvent.click(screen.getByTestId('tab-layers'));
-    // The layers panel renders its layer list.
-    expect(screen.getByTestId('tab-layers').getAttribute('aria-selected')).toBe(
+    fireEvent.click(screen.getByTestId('tab-object'));
+    expect(screen.getByTestId('tab-object').getAttribute('aria-selected')).toBe(
       'true'
     );
-    expect(screen.queryByText(/No object selected/i)).toBeNull();
-    fireEvent.click(screen.getByTestId('tab-properties'));
+    // Inspector renders (no selection hint), keyframe panel included.
     expect(screen.getByText(/No object selected/i)).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('tab-armies'));
+    expect(screen.getByTestId('armies-tree')).toBeTruthy();
   });
 
-  it('switches to the AI tab; the Assets tab is gone (library moved left)', () => {
+  it('switches to the AI tab; Layers is NOT its own tab anymore', () => {
     render(<RightPanel />);
     fireEvent.click(screen.getByTestId('tab-ai'));
     expect(screen.getByTestId('ai-commander-panel')).toBeTruthy();
-    // The assets library is a full left-column panel now, not a right tab.
+    // Old tabs are gone: layers live INSIDE Armies, properties became Object.
+    expect(screen.queryByTestId('tab-layers')).toBeNull();
+    expect(screen.queryByTestId('tab-properties')).toBeNull();
     expect(screen.queryByTestId('tab-assets')).toBeNull();
+  });
+
+  it('Layers disclosure inside Armies reveals the layer editor', () => {
+    render(<RightPanel />);
+    expect(screen.queryByTestId('layer-add')).toBeNull();
+    fireEvent.click(screen.getByTestId('armies-layers-toggle'));
+    expect(screen.getByTestId('layer-add')).toBeTruthy();
   });
 });

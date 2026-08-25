@@ -4,6 +4,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { Inspector } from './Inspector';
 import { useSceneStore } from '../scene/store';
 import { createDefaultScene, DEFAULT_LAYER_ID } from '../scene/factory';
+import { usePlaybackStore } from '../timeline/playbackStore';
 
 const reset = () => {
   act(() => {
@@ -147,5 +148,73 @@ describe('Inspector', () => {
     });
     fireEvent.click(screen.getByTestId('preset-rot-0'));
     expect(useSceneStore.getState().scene.objects[id!].transform.rotation).toBe(0);
+  });
+});
+
+describe('Inspector keyframe panel (Object tab, keyframes first)', () => {
+  beforeEach(() => {
+    act(() => {
+      useSceneStore.setState({
+        scene: createDefaultScene(),
+        past: [],
+        future: [],
+        selectedObjId: null,
+        activeLayerId: DEFAULT_LAYER_ID,
+      });
+      useSceneStore.getState().setAutoKeyframe(false);
+      usePlaybackStore.setState({ currentTime: 0, isPlaying: false, duration: 10 });
+    });
+  });
+
+  const seedTwoKeyframes = () => {
+    let id: string;
+    act(() => {
+      id = useSceneStore.getState().createObjectOfType('shape');
+      useSceneStore.getState().setSelected(id!);
+      useSceneStore.getState().setKeyframeAtTime(id!, 0);
+      usePlaybackStore.setState({ currentTime: 2 });
+      useSceneStore.getState().updateTransform(id!, { x: 300 });
+      useSceneStore.getState().setKeyframeAtTime(id!, 2);
+      usePlaybackStore.setState({ currentTime: 0 });
+    });
+    return id!;
+  };
+
+  it('lists every keyframe with jump / easing / remove controls', () => {
+    const id = seedTwoKeyframes();
+    render(<Inspector />);
+    expect(screen.getByTestId('inspector-keyframes')).toBeTruthy();
+    expect(screen.getByTestId('kf-jump-0').textContent).toBe('0.00s');
+    expect(screen.getByTestId('kf-jump-1').textContent).toBe('2.00s');
+
+    // Jump seeks the playhead AND highlights the timeline diamond.
+    fireEvent.click(screen.getByTestId('kf-jump-1'));
+    expect(usePlaybackStore.getState().currentTime).toBe(2);
+
+    // Easing persists on the LEFT keyframe of the segment.
+    fireEvent.change(screen.getByTestId('kf-easing-0'), {
+      target: { value: 'easeIn' },
+    });
+    const kfs = useSceneStore.getState().scene.keyframes[id];
+    expect(kfs.find((k) => k.time === 0)?.easing).toBe('easeIn');
+
+    // Remove drops exactly one keyframe.
+    fireEvent.click(screen.getByTestId('kf-remove-1'));
+    expect(useSceneStore.getState().scene.keyframes[id]).toHaveLength(1);
+  });
+
+  it('+ Add at playhead and the Auto-KF mirror drive the same stores', () => {
+    seedTwoKeyframes();
+    render(<Inspector />);
+    // Auto-KF checkbox mirrors the editor pref.
+    fireEvent.click(screen.getByTestId('inspector-auto-kf'));
+    expect(useSceneStore.getState().autoKeyframe).toBe(true);
+
+    // Add-at-playhead writes a keyframe at the current time.
+    act(() => usePlaybackStore.setState({ currentTime: 1 }));
+    fireEvent.click(screen.getByTestId('inspector-kf-add'));
+    const [only] = Object.values(useSceneStore.getState().scene.objects);
+    const times = useSceneStore.getState().scene.keyframes[only.id].map((k) => k.time);
+    expect(times).toContain(1);
   });
 });

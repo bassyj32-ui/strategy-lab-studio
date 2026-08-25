@@ -71,6 +71,9 @@ export function AssetsPanel() {
   const [query, setQuery] = useState('');
   // Category filter chips ("All" + every category present in the library).
   const [catFilter, setCatFilter] = useState<'All' | AssetCategory>('All');
+  // Folder defaults (faction/category pickers) hide behind a disclosure chip
+  // — set once per import session, not worth the vertical space by default.
+  const [defaultsOpen, setDefaultsOpen] = useState(false);
 
   /** Display bucket for an asset (assets without a category are uncategorized). */
   const categoryOf = (a: (typeof ordered)[number]): AssetCategory | 'Uncategorized' =>
@@ -250,6 +253,16 @@ export function AssetsPanel() {
         />
       </div>
 
+      <button
+        type="button"
+        className="disclosure-chip"
+        data-testid="folder-defaults-toggle"
+        aria-expanded={defaultsOpen}
+        onClick={() => setDefaultsOpen((v) => !v)}
+      >
+        Folder defaults {defaultsOpen ? '▴' : '▾'}
+      </button>
+      {defaultsOpen && (
       <div className="assets-folder-defaults">
         <label>
           Default faction{' '}
@@ -280,6 +293,7 @@ export function AssetsPanel() {
           </select>
         </label>
       </div>
+      )}
 
       {error && <div className="assets-error">{error}</div>}
 

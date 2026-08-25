@@ -1,9 +1,21 @@
 import { useEffect, useState } from 'react';
-import type { SceneObject, Transform } from '../scene/types';
+import type { Easing, SceneObject, Transform } from '../scene/types';
 import { useSceneStore } from '../scene/store';
 import { selectedObject } from '../scene/selectors';
 import { DEFAULT_ARROW_LENGTH, DEFAULT_ARROW_COLOR } from '../objects/factory';
 import { nextZAbove, nextZBelow } from '../objects/depth';
+// Clicking a keyframe time jumps the playhead AND highlights the diamond in
+// the timeline (both stores).
+import { usePlaybackStore } from '../timeline/playbackStore';
+import { selectKeyframeUnified } from '../timeline/selection';
+
+const EASING_OPTIONS: { value: Easing; label: string }[] = [
+  { value: 'linear', label: 'Linear' },
+  { value: 'easeIn', label: 'Ease In' },
+  { value: 'easeOut', label: 'Ease Out' },
+  { value: 'easeInOut', label: 'Ease In-Out' },
+  { value: 'hold', label: 'Hold' },
+];
 
 interface FieldDef {
   key: keyof Transform;
@@ -27,6 +39,15 @@ export function Inspector() {
   const updateTransform = useSceneStore((s) => s.updateTransform);
   const updateObjectProps = useSceneStore((s) => s.updateObjectProps);
   const renameObject = useSceneStore((s) => s.renameObject);
+  // Keyframe-first Object tab (owner redesign).
+  const keyframes = useSceneStore((s) => s.scene.keyframes);
+  const setKeyframeAtTime = useSceneStore((s) => s.setKeyframeAtTime);
+  const updateKeyframe = useSceneStore((s) => s.updateKeyframe);
+  const removeKeyframe = useSceneStore((s) => s.removeKeyframe);
+  const autoKeyframe = useSceneStore((s) => s.autoKeyframe);
+  const setAutoKeyframe = useSceneStore((s) => s.setAutoKeyframe);
+  const currentTime = usePlaybackStore((s) => s.currentTime);
+  const seek = usePlaybackStore((s) => s.seek);
 
   // Name field draft: null = not editing (show stored name).
   const [nameDraft, setNameDraft] = useState<string | null>(null);
@@ -95,6 +116,78 @@ export function Inspector() {
         />
       </label>
       <div className="inspector-type">Type: {obj.type}</div>
+
+      {/* KEYFRAMES FIRST (owner redesign): the animation is the point —
+          every keyframe listed with jump-to-playhead / easing / remove, plus
+          Add-at-playhead and an Auto-KF mirror of the timeline toggle. */}
+      <div className="kf-panel" data-testid="inspector-keyframes">
+        <div className="kf-panel-head">
+          <span className="kf-panel-title">Keyframes</span>
+          <button
+            type="button"
+            data-testid="inspector-kf-add"
+            onClick={() => setKeyframeAtTime(obj.id, currentTime)}
+          >
+            + Add at playhead
+          </button>
+          <label className="kf-auto">
+            <input
+              type="checkbox"
+              data-testid="inspector-auto-kf"
+              checked={autoKeyframe}
+              onChange={(e) => setAutoKeyframe(e.target.checked)}
+            />
+            Auto-KF
+          </label>
+        </div>
+        {(keyframes[obj.id] ?? []).length === 0 ? (
+          <p className="hint">No keyframes yet.</p>
+        ) : (
+          <ul className="kf-list">
+            {(keyframes[obj.id] ?? []).map((k, i) => (
+              <li key={k.time} className={k.time === currentTime ? 'now' : ''}>
+                <button
+                  type="button"
+                  className="kf-time"
+                  data-testid={`kf-jump-${i}`}
+                  title="Jump playhead to this keyframe"
+                  onClick={() => {
+                    seek(k.time);
+                    selectKeyframeUnified(obj.id, k.time);
+                  }}
+                >
+                  {k.time.toFixed(2)}s
+                </button>
+                <select
+                  data-testid={`kf-easing-${i}`}
+                  value={k.easing ?? 'linear'}
+                  onChange={(e) =>
+                    updateKeyframe(obj.id, k.time, {
+                      easing: e.target.value as Easing,
+                    })
+                  }
+                >
+                  {EASING_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="chip"
+                  data-testid={`kf-remove-${i}`}
+                  aria-label={`Remove keyframe at ${k.time}s`}
+                  onClick={() => removeKeyframe(obj.id, k.time)}
+                >
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       {isArrow && (
         <>
           <label className="inspector-field">
@@ -244,6 +337,9 @@ export function Inspector() {
         </select>
       </label>
 
+      {/* Transform scrub fields DEMOTED below the keyframe list (owner
+          redesign) — identity and animation first, numbers second. */}
+      <div className="inspector-subhead">Transform</div>
       {FIELDS.map((f) => (
         <label key={f.key} className="inspector-field">
           <span>{f.label}</span>

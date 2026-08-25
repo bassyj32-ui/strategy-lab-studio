@@ -11,7 +11,9 @@ import {
   wouldCreateCycle,
   worldDeltaToLocal,
   worldPointToLocal,
+  groupRootOf,
 } from './groups';
+import type { ObjId } from '../scene/types';
 
 function obj(
   id: string,
@@ -188,5 +190,31 @@ describe('formationOffsets', () => {
   it('handles zero and negative counts gracefully', () => {
     expect(formationOffsets('line', 0, 10)).toEqual([]);
     expect(formationOffsets('grid', -2, 10)).toEqual([]);
+  });
+});
+
+describe('groupRootOf (CapCut drag law)', () => {
+  it('returns the object itself when it is a root', () => {
+    const objects = { a: { id: 'a', parentId: undefined } } as never;
+    expect(groupRootOf(objects, 'a' as ObjId)).toBe('a' as ObjId);
+  });
+
+  it('walks the parent chain to the topmost ancestor', () => {
+    const objects = {
+      grand: { id: 'grand', parentId: undefined },
+      mid: { id: 'mid', parentId: 'grand' },
+      leaf: { id: 'leaf', parentId: 'mid' },
+    } as never;
+    expect(groupRootOf(objects, 'leaf' as ObjId)).toBe('grand' as ObjId);
+    expect(groupRootOf(objects, 'mid' as ObjId)).toBe('grand' as ObjId);
+  });
+
+  it('is cycle-safe (a malformed loop cannot hang the drag)', () => {
+    const objects = {
+      x: { id: 'x', parentId: 'y' },
+      y: { id: 'y', parentId: 'x' },
+    } as never;
+    // Terminates; returns SOME member of the cycle.
+    expect(['x', 'y'] as ObjId[]).toContain(groupRootOf(objects, 'x' as ObjId));
   });
 });
