@@ -90,6 +90,8 @@ export function TimelinePanel() {
   const hasClosingCard = useSceneStore((s) => Boolean(s.scene.closingCard));
   const triggerSignatureOpening = useSceneStore((s) => s.triggerSignatureOpening);
   const toggleClosingCard = useSceneStore((s) => s.toggleClosingCard);
+  const autoKeyframe = useSceneStore((s) => s.autoKeyframe);
+  const setAutoKeyframe = useSceneStore((s) => s.setAutoKeyframe);
   const [hintsOpen, setHintsOpen] = useState(false);
 
   /** Apply a §27 preset; Commander Focus targets the selected object. */
@@ -199,6 +201,18 @@ export function TimelinePanel() {
             onChange={(e) => setVignette(e.target.checked)}
           />
           Vignette
+        </label>
+        <label
+          className="vignette-toggle"
+          data-testid="auto-keyframe-toggle"
+          title="Auto-keyframe: moving/scaling/rotating a unit writes a keyframe at the playhead (part of the same undo step as the move)"
+        >
+          <input
+            type="checkbox"
+            checked={autoKeyframe}
+            onChange={(e) => setAutoKeyframe(e.target.checked)}
+          />
+          Auto-KF
         </label>
         <button
           type="button"

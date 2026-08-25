@@ -41,6 +41,17 @@ describe('TimelinePanel', () => {
     expect(screen.getByRole('button', { name: 'Play' })).toBeTruthy();
   });
 
+  it('auto-KF toggle flips the store pref (default OFF)', () => {
+    render(<TimelinePanel />);
+    const toggle = screen.getByTestId('auto-keyframe-toggle')
+      .querySelector('input') as HTMLInputElement;
+    expect(useSceneStore.getState().autoKeyframe).toBe(false);
+    fireEvent.click(toggle);
+    expect(useSceneStore.getState().autoKeyframe).toBe(true);
+    fireEvent.click(toggle);
+    expect(useSceneStore.getState().autoKeyframe).toBe(false);
+  });
+
   it('clicking play sets isPlaying; clicking again pauses', () => {
     render(<TimelinePanel />);
     fireEvent.click(screen.getByRole('button', { name: 'Play' }));
@@ -78,7 +89,7 @@ describe('TimelinePanel', () => {
   it('add-keyframe button writes into scene.keyframes via the store', () => {
     render(<TimelinePanel />);
     // Select object u1 by clicking its track label, then stamp at playhead 0.
-    fireEvent.click(screen.getByText('u1'));
+    fireEvent.click(screen.getByTestId('track-select-u1'));
     fireEvent.click(screen.getByRole('button', { name: /add keyframe/i }));
 
     const kfs = useSceneStore.getState().scene.keyframes['u1'];

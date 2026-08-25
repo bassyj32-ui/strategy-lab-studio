@@ -20,6 +20,9 @@ import type {
 import { createDefaultScene, DEFAULT_LAYER_ID } from './factory';
 import { createId } from './id';
 import { mergeTransform } from './transform';
+// Playback clock read for auto-keyframe upserts (playbackStore imports only
+// zustand — no import cycle).
+import { usePlaybackStore } from '../timeline/playbackStore';
 import {
   createScene,
   deleteScene as deleteSceneOp,
@@ -100,6 +103,13 @@ function pushHistory(state: Draft<SceneState>, label?: string) {
 function scenesEqual(a: Scene, b: Scene): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
+
+/**
+ * Auto-keyframe bookkeeping (non-reactive): object ids whose transform moved
+ * during the CURRENT gesture while autoKeyframe is ON. Flushed by
+ * endInteraction into keyframes at the playhead — one undoable step total.
+ */
+const autoKfDirty = new Set<ObjId>();
 
 /**
  * Re-parent `childId` under `newParentId` (or root), converting its transform
@@ -443,6 +453,14 @@ export interface SceneState {
   selectedIds: ObjId[];
   activeLayerId: LayerId;
   activeTool: EditorTool;
+  /**
+   * Auto-keyframe (CapCut-style): when ON, every completed manual transform
+   * gesture upserts a keyframe at the playhead for each moved object —
+   * part of the SAME undoable step as the gesture itself. Editor pref,
+   * never serialized into the scene.
+   */
+  autoKeyframe: boolean;
+  setAutoKeyframe: (v: boolean) => void;
 
   // ---- History primitives ----
   /** Apply a discrete mutation as a single undoable transaction. */
@@ -704,6 +722,7 @@ export const useSceneStore = create<SceneState>()(
   selectedIds: [],
   activeLayerId: DEFAULT_LAYER_ID,
   activeTool: 'select',
+  autoKeyframe: false,
 
     transaction: (fn, label) => {
       let result: ReturnType<typeof fn>;
@@ -742,6 +761,28 @@ export const useSceneStore = create<SceneState>()(
         const last = state.past[state.past.length - 1]?.scene;
         if (last && scenesEqual(last, state.scene)) {
           state.past.pop();
+          autoKfDirty.clear();
+          return;
+        }
+        // Auto-keyframe: upsert a keyframe at the playhead for every object
+        // this gesture moved. INSIDE the same set() as the gesture's snapshot
+        // span, so gesture + keyframes are ONE undo step (never irreversible).
+        if (state.autoKeyframe && autoKfDirty.size > 0) {
+          const t = usePlaybackStore.getState().currentTime;
+          for (const id of autoKfDirty) {
+            const obj = state.scene.objects[id];
+            if (!obj) continue;
+            const list =
+              state.scene.keyframes[id] ?? (state.scene.keyframes[id] = []);
+            const kf = { time: t, transform: { ...obj.transform } };
+            const idx = list.findIndex((k) => k.time === t);
+            if (idx >= 0) list[idx] = kf;
+            else {
+              list.push(kf);
+              list.sort((a, b) => a.time - b.time);
+            }
+          }
+          autoKfDirty.clear();
         }
       });
     },
@@ -844,6 +885,7 @@ export const useSceneStore = create<SceneState>()(
         const obj = state.scene.objects[id];
         if (!obj) return;
         obj.transform = mergeTransform(obj.transform, partial);
+        if (state.autoKeyframe) autoKfDirty.add(id);
       });
     },
 
@@ -895,6 +937,7 @@ export const useSceneStore = create<SceneState>()(
           x: obj.transform.x + dx,
           y: obj.transform.y + dy,
         });
+        if (state.autoKeyframe) autoKfDirty.add(id);
       });
     },
 
@@ -1309,7 +1352,17 @@ export const useSceneStore = create<SceneState>()(
           state.scene.objects as unknown as Record<ObjId, SceneObject>,
           ids
         );
-        for (const root of roots) applyWorldDelta(state.scene, root, dx, dy);
+        for (const root of roots) {
+          applyWorldDelta(state.scene, root, dx, dy);
+          if (state.autoKeyframe) autoKfDirty.add(root);
+        }
+      });
+    },
+
+    setAutoKeyframe: (v) => {
+      set((state) => {
+        state.autoKeyframe = v;
+        autoKfDirty.clear();
       });
     },
 

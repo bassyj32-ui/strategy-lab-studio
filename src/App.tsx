@@ -22,11 +22,11 @@ export function App() {
       if (useSceneStore.getState().past.length > 0) {
         e.preventDefault();
         e.returnValue = '';
-        // Best-effort: a NORMAL close clears the continuous autosave so the
-        // recovery prompt won't appear next launch. A crash won't fire this
-        // event, so the blob survives → correct recovery.
-        void clearAutosave();
       }
+      // NEVER clear the autosave here. It is persistent session state, not
+      // crash-only recovery: wiping it on every normal close/reload destroyed
+      // unsaved work (the reload data-loss bug). The RestoreBanner decides
+      // recover-vs-discard on next launch instead.
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);

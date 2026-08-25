@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { ObjId } from '../../scene/types';
 import { useSceneStore } from '../../scene/store';
 import {
@@ -10,9 +11,8 @@ interface KeyframeTrackProps {
   objId: ObjId;
 }
 
-const DIAMOND = 10;
+const DIAMOND = 12;
 
-/** One row per object: keyframe diamonds at their times. Click selects. */
 export function KeyframeTrack({ objId }: KeyframeTrackProps) {
   // Select the whole map (stable identity under immer); derive per-object list.
   const keyframesMap = useSceneStore((s) => s.scene.keyframes);
@@ -21,12 +21,24 @@ export function KeyframeTrack({ objId }: KeyframeTrackProps) {
   const selectedKeyframeTime = useTimelineSelection((s) => s.selectedKeyframeTime);
 
   const keyframes = keyframesMap[objId] ?? [];
-  const name = objects[objId]?.id ?? objId;
+  const obj = objects[objId];
+  // Human-readable row name: commander label if set, else "type · short-id"
+  // (raw UUID-style ids read as gibberish and made tracks unidentifiable).
+  const name = obj
+    ? (obj.label ?? `${obj.type} · ${objId.slice(-4)}`)
+    : objId;
   const isActive = selectedObjId === objId;
   const duration = useSceneStore((s) => s.scene.timeline.duration);
 
+  const rowRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // Selecting a unit on canvas must REVEAL its track, even when the
+    // timeline is scrolled or the row was clipped below the fold.
+    if (isActive) rowRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [isActive]);
+
   return (
-    <div className="keyframe-track" data-testid={`keyframe-track-${objId}`}>
+    <div className="keyframe-track" data-testid={`keyframe-track-${objId}`} ref={rowRef}>
       <button
         type="button"
         className={isActive ? 'track-label active' : 'track-label'}
@@ -66,8 +78,10 @@ export function KeyframeTrack({ objId }: KeyframeTrackProps) {
                 width: DIAMOND,
                 height: DIAMOND,
                 transform: 'rotate(45deg)',
-                background: isSelected ? '#f5a83c' : '#5c6f8f',
-                border: isSelected ? '1px solid #ffe3b3' : 'none',
+                background: isSelected ? '#f5a83c' : '#8ab4ff',
+                border: isSelected
+                  ? '1px solid #ffe3b3'
+                  : '1px solid #3d5a8a',
                 borderRadius: 1,
                 cursor: 'pointer',
               }}

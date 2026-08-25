@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useSceneStore } from './store';
+import { usePlaybackStore } from '../timeline/playbackStore';
 import { createDefaultScene, DEFAULT_LAYER_ID } from './factory';
 import { getObjectWorldTransformAtTime } from '../timeline/selectors';
 import { getCameraAtTime } from '../timeline/cameraTrack';
@@ -15,6 +16,9 @@ const reset = () => {
     selectedObjId: null,
     activeLayerId: DEFAULT_LAYER_ID,
   });
+  // Auto-keyframe is an editor pref — force it OFF between tests.
+  s().setAutoKeyframe(false);
+  usePlaybackStore.setState({ currentTime: 0 });
 };
 
 describe('scene store', () => {
@@ -291,6 +295,74 @@ describe('scene store', () => {
       const id = mkAnimated();
       s().updateKeyframe(id, 0, { easing: 'easeInOut' });
       expect(s().scene.keyframes[id][0]).toMatchObject({ easing: 'easeInOut' });
+    });
+  });
+
+  describe('auto-keyframe (Auto-KF)', () => {
+    it('upserts a keyframe at the playhead when a gesture moves an object', () => {
+      const id = s().createObjectOfType('shape');
+      s().setAutoKeyframe(true);
+      usePlaybackStore.setState({ currentTime: 2 });
+      s().beginInteraction();
+      s().updateTransform(id, { x: 50, y: 25 });
+      s().endInteraction();
+      const kfs = s().scene.keyframes[id];
+      expect(kfs).toHaveLength(1);
+      expect(kfs[0]).toMatchObject({
+        time: 2,
+        transform: { x: 50, y: 25 },
+      });
+    });
+
+    it('gesture + keyframes are ONE undoable step', () => {
+      const id = s().createObjectOfType('shape');
+      s().setAutoKeyframe(true);
+      usePlaybackStore.setState({ currentTime: 3 });
+      const lenBefore = s().past.length;
+      s().beginInteraction();
+      s().updateTransform(id, { x: 80 });
+      s().endInteraction();
+      expect(s().past.length).toBe(lenBefore + 1);
+      s().undo();
+      expect(s().scene.objects[id].transform.x).toBe(0);
+      expect(s().scene.keyframes[id]).toBeUndefined();
+    });
+
+    it('a no-op gesture writes nothing and drops its history entry', () => {
+      const id = s().createObjectOfType('shape');
+      s().setAutoKeyframe(true);
+      const lenBefore = s().past.length;
+      s().beginInteraction();
+      s().updateTransform(id, { x: s().scene.objects[id].transform.x });
+      s().endInteraction();
+      expect(s().past.length).toBe(lenBefore);
+      expect(s().scene.keyframes[id]).toBeUndefined();
+    });
+
+    it('writes nothing while disabled (default)', () => {
+      const id = s().createObjectOfType('shape');
+      usePlaybackStore.setState({ currentTime: 4 });
+      s().beginInteraction();
+      s().updateTransform(id, { x: 42 });
+      s().endInteraction();
+      expect(s().scene.keyframes[id]).toBeUndefined();
+    });
+
+    it('replaces an existing keyframe at the same playhead time', () => {
+      const id = s().createObjectOfType('shape');
+      usePlaybackStore.setState({ currentTime: 5 });
+      s().addKeyframe(id, {
+        time: 5,
+        transform: { x: 1, y: 1, rotation: 0, scale: 1, opacity: 1 },
+      });
+      s().setAutoKeyframe(true);
+      s().beginInteraction();
+      s().updateTransform(id, { x: 99 });
+      s().endInteraction();
+      const kfs = s().scene.keyframes[id];
+      expect(kfs).toHaveLength(1);
+      expect(kfs[0].time).toBe(5);
+      expect(kfs[0].transform.x).toBe(99);
     });
   });
 

@@ -312,6 +312,11 @@ h3 {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  /* Every object's track must stay reachable: with more objects than fit in
+     the 34vh footer, rows below the fold were clipped invisibly (the "I can't
+     see my keyframes" bug). Scroll instead of clip. */
+  overflow-y: auto;
+  min-height: 0;
 }
 
 /* --- Transport --------------------------------------------------- */
