@@ -590,7 +590,6 @@ h3 {
 }
 .scrub-field:hover { background: #1e2c47; }
 .scrub-field.editing { cursor: text; }
-.scrub-label { font-size: 10px; color: var(--dim); letter-spacing: .06em; }
 .scrub-value {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;

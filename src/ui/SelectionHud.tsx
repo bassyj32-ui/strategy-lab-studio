@@ -194,10 +194,10 @@ function ScrubField({
   if (editing) {
     return (
       <span className="scrub-field editing">
-        <span className="scrub-label">{label}</span>
         <input
           className="hud-input"
           data-testid={`hud-input-${label}`}
+          aria-label={label}
           autoFocus
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -241,10 +241,10 @@ function ScrubField({
     <span
       className="scrub-field"
       data-testid={`hud-scrub-${label}`}
+      aria-label={label}
       onMouseDown={handleMouseDown}
-      title="Drag to change · Shift = fine · Click to type"
+      title={`${label} · drag to change · Shift = fine · Click to type`}
     >
-      <span className="scrub-label">{label}</span>
       <span className="scrub-value">{format(value)}</span>
     </span>
   );
