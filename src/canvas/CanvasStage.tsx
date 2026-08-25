@@ -108,7 +108,7 @@ function SelectionOutline({
           y={-padY}
           width={len + ARROWHEAD_LENGTH + ARROW_SHAFT_WIDTH}
           height={padY * 2}
-          stroke="#f5a83c"
+          stroke="#4d8dff"
           strokeWidth={2}
           strokeScaleEnabled={false}
           fillEnabled={false}
@@ -130,7 +130,7 @@ function SelectionOutline({
         y={box.minY}
         width={w}
         height={h}
-        stroke="#f5a83c"
+        stroke="#4d8dff"
         strokeWidth={2}
         strokeScaleEnabled={false}
         fillEnabled={false}
@@ -177,7 +177,7 @@ function selectionLocalBox(obj: SceneObject, asset?: Asset): Box {
   return { minX: -half, minY: -half, maxX: half, maxY: half };
 }
 
-const GIZMO_COLOR = '#f5a83c';
+const GIZMO_COLOR = '#4d8dff';
 const STALK_LEN_SCREEN = 26;
 
 /**

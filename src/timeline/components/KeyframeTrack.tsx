@@ -78,10 +78,10 @@ export function KeyframeTrack({ objId }: KeyframeTrackProps) {
                 width: DIAMOND,
                 height: DIAMOND,
                 transform: 'rotate(45deg)',
-                background: isSelected ? '#f5a83c' : '#8ab4ff',
+                background: isSelected ? '#4d8dff' : '#b9c0cc',
                 border: isSelected
-                  ? '1px solid #ffe3b3'
-                  : '1px solid #3d5a8a',
+                  ? '1px solid #bcd7ff'
+                  : '1px solid #3a3a42',
                 borderRadius: 1,
                 cursor: 'pointer',
               }}

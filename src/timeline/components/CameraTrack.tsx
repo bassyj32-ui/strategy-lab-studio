@@ -83,8 +83,8 @@ export function CameraTrack() {
                 width: DIAMOND,
                 height: DIAMOND,
                 transform: 'rotate(45deg)',
-                background: '#7dd3fc',
-                border: '1px solid #e0f2fe',
+                background: '#4d8dff',
+                border: '1px solid #bcd7ff',
                 borderRadius: 1,
                 cursor: 'grab',
               }}

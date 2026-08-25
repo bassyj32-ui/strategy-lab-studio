@@ -53,7 +53,7 @@ export function CameraPathOverlay({
     <>
       <Line
         points={flat}
-        stroke="#7dd3fc"
+        stroke="#4d8dff"
         strokeWidth={2}
         opacity={0.55}
         dash={[8, 8]}
@@ -65,8 +65,8 @@ export function CameraPathOverlay({
         x={now.x}
         y={now.y}
         radius={7}
-        fill="#7dd3fc"
-        stroke="#e0f2fe"
+        fill="#4d8dff"
+        stroke="#bcd7ff"
         strokeWidth={1.5}
         opacity={0.9}
         listening={false}

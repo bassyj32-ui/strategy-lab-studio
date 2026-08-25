@@ -1,28 +1,28 @@
 /* ============================================================
-   Strategy Lab Studio — "Signals Console" design system
-   Night-slate surfaces + phosphor amber. Amber means exactly
-   one thing anywhere in the app: this is live / selected.
-   Type: condensed uppercase eyebrows · system body · mono data
+   Strategy Lab Studio — "CapCut Dark" design system
+   Near-black neutral surfaces, hairline borders, one electric
+   blue accent (--signal). Blue means exactly one thing anywhere
+   in the app: this is live / selected. Battle-canvas content
+   colors are NOT themed here (footage ≠ chrome).
    ============================================================ */
 
 :root {
-  --bg: #0c1220;
-  --panel: #131b2c;
-  --panel-raised: #18233a;
-  --edge: #24334d;
-  --ink: #dee7f4;
-  --dim: #8798b5;
-  --signal: #f5a83c;
-  --signal-dim: rgba(245, 168, 60, 0.35);
-  --field: #0b1020;
+  --bg: #111114;
+  --panel: #1e1e22;
+  --panel-raised: #26262c;
+  --edge: #2c2c31;
+  --ink: #e9e9ee;
+  --dim: #9a9aa4;
+  --signal: #4d8dff;
+  --signal-dim: rgba(77, 141, 255, 0.35);
+  --field: #17171b;
 
   --font-ui: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-condensed: 'Avenir Next Condensed', 'Arial Narrow',
-    'Helvetica Neue', system-ui, sans-serif;
+  --font-condensed: system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo,
     Consolas, monospace;
 
-  --radius: 4px;
+  --radius: 8px;
 }
 
 * {
@@ -65,11 +65,11 @@ button {
   transition: background-color 120ms ease, border-color 120ms ease;
 }
 button:hover:not(:disabled) {
-  background: #1e2c47;
-  border-color: #31456b;
+  background: #2e2e35;
+  border-color: #3a3a42;
 }
 button:active:not(:disabled) {
-  background: #24365a;
+  background: #37373f;
 }
 button:disabled {
   opacity: 0.45;
@@ -92,16 +92,15 @@ input[type='checkbox'] {
   accent-color: var(--signal);
 }
 
-/* --- Panel headings: instrument eyebrows --------------------- */
+/* --- Panel headings: quiet CapCut-style section titles -------- */
 h3 {
   margin: 0 0 8px;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--edge);
-  font-family: var(--font-condensed);
+  font-family: var(--font-ui);
   font-weight: 600;
   font-size: 12px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
   color: var(--dim);
 }
 
@@ -208,7 +207,7 @@ h3 {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #f5a83c;
+  color: var(--signal);
 }
 .formation-controls label {
   font-size: 11px;
@@ -281,8 +280,8 @@ h3 {
   cursor: pointer;
 }
 .preview-expand:hover {
-  color: #f5a83c;
-  border-color: #f5a83c;
+  color: var(--signal);
+  border-color: var(--signal);
 }
 
 /* Shown in the dock while the player lives on the big-screen overlay. */
@@ -327,8 +326,8 @@ h3 {
   cursor: pointer;
 }
 .preview-collapse:hover {
-  color: #f5a83c;
-  border-color: #f5a83c;
+  color: var(--signal);
+  border-color: var(--signal);
 }
 
 /* The SAME TransportControls the timeline uses, re-mounted as a slim chip
@@ -511,11 +510,11 @@ h3 {
   bottom: 0;
   width: 1px;
   height: 6px;
-  background: #3a4a68;
+  background: #34343c;
 }
 .ruler-tick.major {
   height: 13px;
-  background: #55688c;
+  background: #45454f;
 }
 .playhead {
   position: absolute;
@@ -570,7 +569,7 @@ h3 {
   border-radius: 2px;
 }
 .kf-lane.active {
-  background: #14203a;
+  background: #1a1a1f;
 }
 
 .keyframe-editor {
@@ -712,7 +711,7 @@ h3 {
   cursor: ew-resize;
   border-radius: 3px;
 }
-.scrub-field:hover { background: #1e2c47; }
+.scrub-field:hover { background: #2e2e35; }
 .scrub-field.editing { cursor: text; }
 .scrub-value {
   font-family: var(--font-mono);
@@ -739,13 +738,13 @@ h3 {
 .right-tabs {
   display: flex;
   gap: 2px;
-  border-bottom: 1px solid #1e293b;
+  border-bottom: 1px solid #26262c;
 }
 
 .right-tab {
   flex: 1;
   background: transparent;
-  color: #94a3b8;
+  color: #9a9aa4;
   border: none;
   border-bottom: 2px solid transparent;
   padding: 6px 4px;
@@ -754,12 +753,12 @@ h3 {
 }
 
 .right-tab:hover {
-  color: #e2e8f0;
+  color: #e9e9ee;
 }
 
 .right-tab.active {
-  color: #f5a83c;
-  border-bottom-color: #f5a83c;
+  color: var(--signal);
+  border-bottom-color: var(--signal);
 }
 
 .right-tab-body {
@@ -777,14 +776,14 @@ h3 {
 
 .preset-label {
   font-size: 11px;
-  color: #94a3b8;
+  color: #9a9aa4;
   width: 52px;
 }
 
 .chip {
-  background: #1e293b;
-  color: #e2e8f0;
-  border: 1px solid #334155;
+  background: #26262c;
+  color: #e9e9ee;
+  border: 1px solid #3a3a42;
   border-radius: 10px;
   font-size: 11px;
   padding: 2px 8px;
@@ -792,8 +791,8 @@ h3 {
 }
 
 .chip:hover {
-  border-color: #f5a83c;
-  color: #f5a83c;
+  border-color: var(--signal);
+  color: var(--signal);
 }
 
 /* ---- Wave-3 UX: CapCut-style timeline top row ---- */
@@ -823,8 +822,8 @@ h3 {
 }
 
 .hints-toggle:hover {
-  color: #f5a83c;
-  border-color: #f5a83c;
+  color: var(--signal);
+  border-color: var(--signal);
 }
 
 .timeline-panel {
@@ -842,7 +841,7 @@ h3 {
   padding: 0 6px;
 }
 .camera-preset:hover {
-  color: #f5a83c;
+  color: var(--signal);
 }
 
 /* Vignette (PRD §38): editor mirror of the export's radial gradient. */
@@ -885,7 +884,7 @@ h3 {
 .layer-depth input[type='range'] {
   flex: 1;
   min-width: 0;
-  accent-color: #f5a83c;
+  accent-color: var(--signal);
 }
 .layer-depth-value {
   min-width: 34px;
@@ -906,7 +905,7 @@ h3 {
   background: var(--panel-raised);
   border: 1px solid var(--edge);
   border-radius: 6px;
-  color: #e2e8f0;
+  color: #e9e9ee;
   font-size: 11px;
   padding: 4px 6px;
 }
@@ -928,25 +927,25 @@ h3 {
 }
 
 .ai-order {
-  background: #1e293b;
-  color: #e2e8f0;
+  background: #26262c;
+  color: #e9e9ee;
   align-self: flex-end;
 }
 
 .ai-reply {
   background: var(--panel-raised);
-  color: #cbd5e1;
+  color: #c7c7cf;
 }
 
 .ai-system {
   background: transparent;
-  color: #94a3b8;
+  color: #9a9aa4;
   font-size: 10px;
 }
 
 .ai-proposal {
   background: rgba(245, 168, 60, 0.08);
-  border: 1px solid #f5a83c;
+  border: 1px solid var(--signal);
   border-radius: 6px;
   padding: 6px 8px;
   margin-bottom: 6px;
@@ -954,7 +953,7 @@ h3 {
 }
 
 .ai-proposal-title {
-  color: #f5a83c;
+  color: var(--signal);
   font-weight: 600;
   margin-bottom: 4px;
 }
@@ -962,7 +961,7 @@ h3 {
 .ai-proposal ul {
   margin: 0 0 6px 16px;
   padding: 0;
-  color: #e2e8f0;
+  color: #e9e9ee;
 }
 
 .ai-proposal-actions {
@@ -996,7 +995,7 @@ h3 {
 }
 
 .ai-diff-modify {
-  background: #f5a83c;
+  background: var(--signal);
 }
 
 .ai-diff-remove {
@@ -1004,12 +1003,12 @@ h3 {
 }
 
 .ai-diff-title {
-  color: #e2e8f0;
+  color: #e9e9ee;
 }
 
 .ai-diff-kf {
   grid-column: 1 / -1;
-  color: #94a3b8;
+  color: #9a9aa4;
   font-size: 10px;
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
 }
@@ -1017,7 +1016,7 @@ h3 {
 .ai-diff-reject {
   background: transparent;
   border: 1px solid rgba(148, 163, 184, 0.35);
-  color: #94a3b8;
+  color: #9a9aa4;
   border-radius: 4px;
   cursor: pointer;
   padding: 0 6px;
@@ -1042,7 +1041,7 @@ h3 {
   background: var(--panel-raised);
   border: 1px solid var(--edge);
   border-radius: 6px;
-  color: #e2e8f0;
+  color: #e9e9ee;
   font-size: 11px;
   font-family: inherit;
   padding: 5px 6px;
@@ -1062,8 +1061,8 @@ h3 {
 
 .ai-suggest {
   background: rgba(245, 168, 60, 0.12);
-  border: 1px solid var(--accent, #f5a83c);
-  color: #f5a83c;
+  border: 1px solid var(--accent, var(--signal));
+  color: var(--signal);
   border-radius: 6px;
   cursor: pointer;
   font-size: 11px;
@@ -1086,12 +1085,12 @@ h3 {
    align-items: center;
    gap: 4px;
    font-size: 11px;
-   color: #94a3b8;
+   color: #9a9aa4;
    white-space: nowrap;
  }
  .ai-settings input[type='number'] {
    width: 44px;
-   background: var(--panel-raised, #18233a);
+   background: var(--panel-raised, #26262c);
    color: #e5e7eb;
    border: 1px solid #243049;
    border-radius: 4px;
@@ -1104,7 +1103,7 @@ h3 {
  .ai-history-toggle button {
    background: none;
    border: none;
-   color: var(--accent, #f5a83c);
+   color: var(--accent, var(--signal));
    font-size: 11px;
    cursor: pointer;
    padding: 0;
@@ -1124,10 +1123,10 @@ h3 {
    justify-content: space-between;
    gap: 8px;
    font-size: 11px;
-   color: #cbd5e1;
+   color: #c7c7cf;
  }
  .ai-history-label {
-   color: #94a3b8;
+   color: #9a9aa4;
  }
  .ai-history-row button {
    background: #243049;
@@ -1167,11 +1166,11 @@ h3 {
   cursor: pointer;
 }
 .asset-chip:hover {
-  color: #f5a83c;
+  color: var(--signal);
 }
 .asset-chip.active {
-  background: #f5a83c;
-  border-color: #f5a83c;
+  background: var(--signal);
+  border-color: var(--signal);
   color: #14171d;
 }
 
@@ -1296,6 +1295,23 @@ h3 {
   cursor: pointer;
 }
 .session-toast button:hover {
-  color: #f5a83c;
-  border-color: #f5a83c;
+  color: var(--signal);
+  border-color: var(--signal);
+}
+
+/* --- CapCut-style scrollbars ---------------------------------- */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #303036;
+  border-radius: 5px;
+  border: 2px solid var(--bg);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3c3c44;
 }
