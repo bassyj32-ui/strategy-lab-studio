@@ -7,14 +7,12 @@ import { ExportDialog } from './ExportDialog';
 // timeline immediately target the new object.
 import { selectObjectUnified } from '../timeline/selection';
 
-// MVP-1 palette: `shape` and `marker`. Arrow (MVP-2): clicking ARMS the
-// canvas draw tool instead of instant-placing; drag-drop places a default.
-// `unit` (sprite) places an asset-less gray placeholder unit (drop a library
-// sprite onto it — or drag a unit-category asset directly — to paint the image).
+// Draw palette (slimmed to the ONE tool that cannot be an imported image):
+// `arrow` is a drawn vector symbol — clicking ARMS the canvas draw tool and
+// the gesture creates tail→head (drag-drop places a default arrow instead).
+// Generic shape/marker/unit placeholders were removed (owner call): the asset
+// library is the single source for placed sprites now.
 const PALETTE: { type: SceneObjectType; label: string }[] = [
-  { type: 'shape', label: 'Shape (blue)' },
-  { type: 'marker', label: 'Marker (red)' },
-  { type: 'unit', label: 'Unit (sprite)' },
   { type: 'arrow', label: 'Arrow (amber)' },
 ];
 
@@ -141,11 +139,11 @@ export function Toolbar() {
 
   return (
     <div className="toolbar">
-      <h3>Palette</h3>
+      <h3>Draw</h3>
       <p className="hint">
         {activeTool === 'arrow'
           ? 'Arrow tool armed — drag on the canvas to draw tail → head. Click again to disarm.'
-          : 'Drag onto the canvas — or click to place.'}
+          : 'Click Arrow, then drag on the canvas to draw tail → head.'}
       </p>
       {PALETTE.map((item) => (
         <div

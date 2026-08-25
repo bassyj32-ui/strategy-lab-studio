@@ -9,6 +9,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act, cleanup } from '@testing-library/react';
 import { Toolbar } from '../../ui/Toolbar';
+import { AssetsPanel } from '../../ui/AssetsPanel';
 import { KeyframeTrack } from './KeyframeTrack';
 import { KeyframeEditor } from './KeyframeEditor';
 import { useSceneStore } from '../../scene/store';
@@ -30,29 +31,21 @@ beforeEach(() => {
 });
 
 describe('selection sync (component level)', () => {
-  it('BUG 1: toolbar click-to-place creates AND selects the new object', () => {
+  it('BUG 1 successor: palette arrow click ARMS the draw tool (placement now lives in the asset library and is covered by AssetsPanel tests)', () => {
     render(<Toolbar />);
-    fireEvent.click(screen.getByTestId('palette-shape'));
-
-    const st = useSceneStore.getState();
-    const ids = Object.keys(st.scene.objects);
-    expect(ids).toHaveLength(1);
-    // Scene store: Inspector + canvas outline now target the new object.
-    expect(st.selectedObjId).toBe(ids[0]);
-    // Timeline store: KeyframeEditor targets it too.
-    expect(useTimelineSelection.getState().selectedObjId).toBe(ids[0]);
+    const arrow = screen.getByTestId('palette-arrow');
+    fireEvent.click(arrow);
+    expect(useSceneStore.getState().activeTool).toBe('arrow');
+    expect(arrow.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(arrow);
+    expect(useSceneStore.getState().activeTool).toBe('select');
   });
 
-  it('BUG 1: keyboard placement (Enter) selects the new object too', () => {
+  it('keyboard activation (Enter) toggles the arrow tool too', () => {
     render(<Toolbar />);
-    const item = screen.getByTestId('palette-marker');
+    const item = screen.getByTestId('palette-arrow');
     fireEvent.keyDown(item, { key: 'Enter' });
-
-    const st = useSceneStore.getState();
-    const ids = Object.keys(st.scene.objects);
-    expect(ids).toHaveLength(1);
-    expect(st.selectedObjId).toBe(ids[0]);
-    expect(useTimelineSelection.getState().selectedObjId).toBe(ids[0]);
+    expect(useSceneStore.getState().activeTool).toBe('arrow');
   });
 
   it('BUG 2: clicking a track label selects the object for the Inspector too', () => {
@@ -75,10 +68,26 @@ describe('selection sync (component level)', () => {
   });
 
   it('keyframe buttons enable from ANY selection path', () => {
-    // Path A: place via the toolbar.
+    // Path A: place a unit from the asset library (the placement flow).
+    act(() => {
+      useSceneStore.getState().registerAsset({
+        id: 'a1',
+        kind: 'sprite',
+        name: 'cavalry',
+        src: 'data:image/png;base64,xxxx',
+        width: 16,
+        height: 16,
+        metadata: {
+          aspectRatio: 1,
+          defaultScale: 1,
+          category: 'Cavalry',
+          faction: 'red',
+        },
+      });
+    });
     render(
       <>
-        <Toolbar />
+        <AssetsPanel />
         <KeyframeTrack objId="u1" />
         <KeyframeEditor />
       </>
@@ -86,8 +95,9 @@ describe('selection sync (component level)', () => {
     const addBtn = screen.getByRole('button', { name: /add keyframe at playhead/i });
     expect((addBtn as HTMLButtonElement).disabled).toBe(true); // nothing selected yet
 
-    fireEvent.click(screen.getByTestId('palette-shape'));
+    fireEvent.click(screen.getByTestId('place-unit-a1'));
     expect((addBtn as HTMLButtonElement).disabled).toBe(false);
+    expect(useTimelineSelection.getState().selectedObjId).not.toBeNull();
 
     // Path B: select a different object via the track label.
     act(() => {

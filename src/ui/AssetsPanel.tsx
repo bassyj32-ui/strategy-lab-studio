@@ -69,10 +69,42 @@ export function AssetsPanel() {
 
   // Search filter: case-insensitive substring on the asset name.
   const [query, setQuery] = useState('');
-  const visible =
-    query.trim() === ''
-      ? ordered
-      : ordered.filter((a) => a.name.toLowerCase().includes(query.trim().toLowerCase()));
+  // Category filter chips ("All" + every category present in the library).
+  const [catFilter, setCatFilter] = useState<'All' | AssetCategory>('All');
+
+  /** Display bucket for an asset (assets without a category are uncategorized). */
+  const categoryOf = (a: (typeof ordered)[number]): AssetCategory | 'Uncategorized' =>
+    a.metadata?.category ?? 'Uncategorized';
+
+  // Categories present in the library, in battlefield-canonical order
+  // (units first), so the chips and the grouped sections stay stable.
+  const presentCats = new Set(ordered.map(categoryOf));
+  const canonical: Array<AssetCategory | 'Uncategorized'> = [
+    ...UNIT_CATEGORIES,
+    'Markers',
+    'Highlights',
+    'Effects',
+    'Terrain',
+    'Labels',
+    'Uncategorized',
+  ];
+  const chipCats = canonical.filter((c) => presentCats.has(c));
+
+  const matchesCat = (a: (typeof ordered)[number]) =>
+    catFilter === 'All' || categoryOf(a) === catFilter;
+  const visible = ordered.filter(
+    (a) =>
+      matchesCat(a) &&
+      (query.trim() === '' ||
+        a.name.toLowerCase().includes(query.trim().toLowerCase()))
+  );
+  // Grouped view only when no specific chip is selected (flat list otherwise).
+  const grouped =
+    catFilter === 'All'
+      ? chipCats
+          .map((cat) => ({ cat, items: visible.filter((a) => categoryOf(a) === cat) }))
+          .filter((g) => g.items.length > 0)
+      : [{ cat: catFilter, items: visible }];
 
   /**
    * Display names of every object (across ALL scenes) that references the
@@ -261,6 +293,24 @@ export function AssetsPanel() {
         onChange={(e) => setQuery(e.target.value)}
       />
 
+      {/* Category chips: All + every category present in the library. */}
+      {ordered.length > 0 && (
+        <div className="asset-chips" data-testid="asset-chips">
+          {(['All', ...chipCats] as const).map((c) => (
+            <button
+              key={c}
+              type="button"
+              className={`asset-chip${catFilter === c ? ' active' : ''}`}
+              data-testid={`asset-chip-${c}`}
+              aria-pressed={catFilter === c}
+              onClick={() => setCatFilter(c as 'All' | AssetCategory)}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="assets-list">
         {ordered.length === 0 && (
           <div className="assets-empty">No assets yet — import an image.</div>
@@ -268,10 +318,15 @@ export function AssetsPanel() {
         {visible.length === 0 && ordered.length > 0 && (
           <div className="assets-empty">No assets match “{query}”.</div>
         )}
-        {visible.map((asset) => {
-          const removable = canDeleteAsset(asset.id);
-          const refs = removable ? [] : referencingNames(asset.id);
-          return (
+        {grouped.map(({ cat, items }) => (
+          <section key={cat} className="asset-group">
+            <div className="assets-group-label">
+              {cat} · {items.length}
+            </div>
+            {items.map((asset) => {
+            const removable = canDeleteAsset(asset.id);
+            const refs = removable ? [] : referencingNames(asset.id);
+            return (
             <div
               key={asset.id}
               className="asset-card"
@@ -364,7 +419,9 @@ export function AssetsPanel() {
               </button>
             </div>
           );
-        })}
+            })}
+          </section>
+        ))}
       </div>
     </div>
   );

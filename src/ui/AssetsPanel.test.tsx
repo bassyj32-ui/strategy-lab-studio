@@ -94,6 +94,32 @@ describe('AssetsPanel', () => {
     expect(screen.getByText('flag')).toBeTruthy();
   });
 
+  it('category chips filter the library and sections group by category', () => {
+    act(() => {
+      useSceneStore.getState().registerAsset(unitAsset);
+      useSceneStore.getState().registerAsset(markerAsset);
+    });
+    render(<AssetsPanel />);
+
+    // Grouped view shows both section headers with counts.
+    expect(screen.getByText('Infantry · 1')).toBeTruthy();
+    expect(screen.getByText('Markers · 1')).toBeTruthy();
+
+    // Clicking a chip narrows to that category only.
+    fireEvent.click(screen.getByTestId('asset-chip-Markers'));
+    expect(screen.getByTestId('asset-m1')).toBeTruthy();
+    expect(screen.queryByTestId('asset-u1')).toBeNull();
+    fireEvent.click(screen.getByTestId('asset-chip-Infantry'));
+    expect(screen.getByTestId('asset-u1')).toBeTruthy();
+    expect(screen.queryByTestId('asset-m1')).toBeNull();
+
+    // Back to All restores the grouped view.
+    fireEvent.click(screen.getByTestId('asset-chip-All'));
+    expect(screen.getByTestId('asset-u1')).toBeTruthy();
+    expect(screen.getByTestId('asset-m1')).toBeTruthy();
+    expect(screen.getByText('Markers · 1')).toBeTruthy();
+  });
+
   it('delete is enabled for an unreferenced asset and removes it', () => {
     act(() => {
       useSceneStore.getState().registerAsset(seedAsset);
