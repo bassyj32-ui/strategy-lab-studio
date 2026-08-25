@@ -212,3 +212,20 @@ describe('buildSignatureOpening (PRD §95)', () => {
     );
   });
 });
+
+describe('macro camera easing (cinematic keys)', () => {
+  it('buildDecisiveMove stamps easeInOut on every camera key', () => {
+    expect(run().cameraKeys.every((k) => k.easing === 'easeInOut')).toBe(true);
+  });
+
+  it('buildWhyItWorked stamps easeInOut on every camera key', () => {
+    const r = buildWhyItWorked(createDefaultScene());
+    expect(r.cameraKeys.length).toBeGreaterThan(1);
+    expect(r.cameraKeys.every((k) => k.easing === 'easeInOut')).toBe(true);
+  });
+
+  it('buildSignatureOpening stamps easeInOut on every camera key', () => {
+    const r = buildSignatureOpening(createDefaultScene());
+    expect(r.cameraKeys.every((k) => k.easing === 'easeInOut')).toBe(true);
+  });
+});

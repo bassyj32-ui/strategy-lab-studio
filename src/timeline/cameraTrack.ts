@@ -1,4 +1,5 @@
 import type { CameraKeyframe, CameraState, Scene } from '../scene/types';
+import { applyEasing } from '../render/interpolate';
 
 /**
  * CANONICAL camera-track evaluation — the ONE shared implementation consumed
@@ -9,8 +10,10 @@ import type { CameraKeyframe, CameraState, Scene } from '../scene/types';
  * - No track / empty track -> a copy of `scene.camera` (the live base view),
  *   so zero-keyframe scenes behave byte-identically to pre-track scenes.
  * - Before first / after last keyframe -> HOLD (clamp to nearest keyframe).
- * - Between two keyframes -> LINEAR lerp of x/y/zoom and, when the keyframes
- *   carry it, `rotation` (RADIANS — canonical unit, scene/types.ts).
+ * - Between two keyframes -> eased lerp of x/y/zoom and, when the keyframes
+ *   carry it, `rotation` (RADIANS — canonical unit, scene/types.ts). The
+ *   LEFT keyframe's optional `easing` governs the segment (absent = linear,
+ *   so legacy tracks stay byte-identical).
  * - `rotation` absent on a keyframe falls back to the base `scene.camera`.
  * - Pure + deterministic: same inputs -> same outputs, no clocks, no RNG.
  */
@@ -42,7 +45,11 @@ export function getCameraAtTime(scene: Scene, time: number): CameraState {
 
   if (a.time === b.time) return { ...base, ...a.cam };
 
-  const t = (time - a.time) / (b.time - a.time);
+  // The LEFT keyframe's easing shapes the whole outgoing segment (same rule
+  // as the object track); 'hold' freezes at a's view for the segment.
+  const easing = a.easing ?? 'linear';
+  if (easing === 'hold') return { ...base, ...a.cam };
+  const t = applyEasing(easing, (time - a.time) / (b.time - a.time));
   const lerp = (p: number, q: number): number => p + (q - p) * t;
   // Rotation is animated only when the keyframes carry it; otherwise the
   // pre-rotation behaviour (base rotation throughout) is preserved exactly.

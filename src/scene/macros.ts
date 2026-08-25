@@ -31,8 +31,8 @@ export interface DecisiveMoveOptions {
   /** Pulse the highlight marker's opacity while zoomed (default true). */
   pulse?: boolean;
   /**
-    * Dramatic timing: hold the establishing view briefly before pushing in,
-    * approximating ease-in with LINEAR keys (default true).
+    * Dramatic timing: hold the establishing view briefly before pushing in
+    * (default true). The push itself is eased easeInOut per-keyframe.
     */
   dramaticTiming?: boolean;
   /** Enable the scene's cinematic edge-darkening flag (default false). */
@@ -78,15 +78,16 @@ export function buildDecisiveMove(
     ? scene.cameraTrack[scene.cameraTrack.length - 1].cam
     : scene.camera;
   const cameraKeys: CameraKeyframe[] = [
-    { time: startAt, cam: { x: base.x, y: base.y, zoom: base.zoom } },
+    { time: startAt, cam: { x: base.x, y: base.y, zoom: base.zoom }, easing: 'easeInOut' },
   ];
   if (dramatic) {
     cameraKeys.push({
       time: startAt + duration * 0.35,
       cam: { x: base.x, y: base.y, zoom: base.zoom },
+      easing: 'easeInOut',
     });
   }
-  cameraKeys.push({ time: endAt, cam: { x: focus.x, y: focus.y, zoom } });
+  cameraKeys.push({ time: endAt, cam: { x: focus.x, y: focus.y, zoom }, easing: 'easeInOut' });
 
   // ---- highlight marker at the focal point ----
   const highlightId = createId('marker');
@@ -192,12 +193,13 @@ export function buildWhyItWorked(
     ? scene.cameraTrack[scene.cameraTrack.length - 1].cam
     : scene.camera;
   const cameraKeys: CameraKeyframe[] = [
-    { time: startAt, cam: { x: base.x, y: base.y, zoom: base.zoom } },
+    { time: startAt, cam: { x: base.x, y: base.y, zoom: base.zoom }, easing: 'easeInOut' },
     {
       time: startAt + duration * 0.25,
       cam: { x: base.x, y: base.y, zoom: base.zoom },
+      easing: 'easeInOut',
     },
-    { time: endAt, cam: { x: centre.x, y: centre.y, zoom } },
+    { time: endAt, cam: { x: centre.x, y: centre.y, zoom }, easing: 'easeInOut' },
   ];
 
   // ---- gentle pulse of the winning faction's units ----
@@ -266,10 +268,11 @@ export function buildSignatureOpening(
       duration,
     },
     cameraKeys: [
-      { time: 0, cam: { x: base.x, y: base.y, zoom } },
+      { time: 0, cam: { x: base.x, y: base.y, zoom }, easing: 'easeInOut' },
       {
         time: duration,
         cam: { x: base.x, y: base.y, zoom: base.zoom },
+        easing: 'easeInOut',
       },
     ],
   };

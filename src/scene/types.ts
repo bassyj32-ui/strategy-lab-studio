@@ -260,9 +260,9 @@ export interface Timeline {
 
 /**
  * One keyframe on the per-scene CAMERA track. `cam` stores the view (world
- * centre + zoom + optional rotation). Like object Keyframes there is NO
- * stored easing field: segments are LINEAR, boundaries HOLD (see
- * timeline/cameraTrack.ts).
+ * centre + zoom + optional rotation). Like object Keyframes an OPTIONAL
+ * `easing` shapes the OUTGOING segment (absent = 'linear'); boundaries HOLD
+ * (see timeline/cameraTrack.ts).
  */
 export interface CameraKeyframe {
   time: number;
@@ -272,6 +272,8 @@ export interface CameraKeyframe {
    * base `Scene.camera.rotation` at evaluation time.
    */
   cam: Pick<CameraState, 'x' | 'y' | 'zoom'> & { rotation?: number };
+  /** Temporal easing for the segment STARTING at this key (absent = linear). */
+  easing?: Easing;
 }
 
 export interface Scene {

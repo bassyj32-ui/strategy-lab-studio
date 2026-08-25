@@ -68,8 +68,8 @@ export function buildCameraPreset(
     case 'flank-follow': {
       // Steady lateral pan across the line of battle, left → right.
       return [
-        { time: 0, cam: { x: w * 0.3, y: cy, zoom: 1.5 } },
-        { time: dur, cam: { x: w * 0.7, y: cy, zoom: 1.5 } },
+        { time: 0, cam: { x: w * 0.3, y: cy, zoom: 1.5 }, easing: 'easeInOut' },
+        { time: dur, cam: { x: w * 0.7, y: cy, zoom: 1.5 }, easing: 'easeInOut' },
       ];
     }
     case 'commander-focus': {
@@ -80,8 +80,8 @@ export function buildCameraPreset(
     case 'decisive':
       // Slow dramatic push-in toward the centre of the action.
       return [
-        { time: 0, cam: { x: cx, y: cy, zoom: 1 } },
-        { time: dur, cam: { x: cx, y: cy, zoom: 1.6 } },
+        { time: 0, cam: { x: cx, y: cy, zoom: 1 }, easing: 'easeInOut' },
+        { time: dur, cam: { x: cx, y: cy, zoom: 1.6 }, easing: 'easeInOut' },
       ];
   }
 }

@@ -134,3 +134,97 @@ describe('hasCameraTrack', () => {
     ).toBe(true);
   });
 });
+
+describe('camera easing (parity with object keyframes)', () => {
+  const linear = makeScene({
+    cameraTrack: [
+      { time: 2, cam: { x: 100, y: 100, zoom: 1 } },
+      { time: 4, cam: { x: 300, y: 300, zoom: 5 } },
+    ],
+  });
+
+  it('absent easing stays byte-identical LINEAR (legacy scenes)', () => {
+    expect(getCameraAtTime(linear, 3)).toEqual({ x: 200, y: 200, zoom: 3 });
+    expect(getCameraAtTime(linear, 2.5)).toEqual({ x: 150, y: 150, zoom: 2 });
+  });
+
+  it('endpoints still clamp-hold regardless of easing', () => {
+    const eased = makeScene({
+      cameraTrack: [
+        { time: 2, cam: { x: 100, y: 100, zoom: 1 }, easing: 'easeIn' },
+        { time: 4, cam: { x: 300, y: 300, zoom: 5 }, easing: 'easeOut' },
+      ],
+    });
+    expect(getCameraAtTime(eased, 1)).toEqual({ x: 100, y: 100, zoom: 1 });
+    expect(getCameraAtTime(eased, 9)).toEqual({ x: 300, y: 300, zoom: 5 });
+  });
+
+  it('easeIn on the left key slows the segment start (t=0.5 → quarter distance)', () => {
+    const scene = makeScene({
+      cameraTrack: [
+        { time: 2, cam: { x: 0, y: 0, zoom: 1 }, easing: 'easeIn' },
+        { time: 4, cam: { x: 200, y: 200, zoom: 3 } },
+      ],
+    });
+    // easeIn(0.5) = 0.25 → x = 200 * 0.25 = 50, zoom = 1 + 2*0.25 = 1.5
+    expect(getCameraAtTime(scene, 3).x).toBeCloseTo(50);
+    expect(getCameraAtTime(scene, 3).zoom).toBeCloseTo(1.5);
+  });
+
+  it('easeInOut midpoint lands at half distance; quarter-point lags', () => {
+    const scene = makeScene({
+      cameraTrack: [
+        { time: 0, cam: { x: 0, y: 0, zoom: 1 }, easing: 'easeInOut' },
+        { time: 10, cam: { x: 100, y: 100, zoom: 2 } },
+      ],
+    });
+    expect(getCameraAtTime(scene, 5).x).toBeCloseTo(50);
+    expect(getCameraAtTime(scene, 2.5).x).toBeCloseTo(12.5); // easeInOut(.25)=.125
+    expect(getCameraAtTime(scene, 7.5).y).toBeCloseTo(87.5); // mirrored
+  });
+
+  it('hold freezes the LEFT view for the whole segment', () => {
+    const scene = makeScene({
+      cameraTrack: [
+        { time: 2, cam: { x: 10, y: 20, zoom: 2 }, easing: 'hold' },
+        { time: 4, cam: { x: 900, y: 900, zoom: 9 } },
+      ],
+    });
+    expect(getCameraAtTime(scene, 3)).toEqual({ x: 10, y: 20, zoom: 2 });
+    expect(getCameraAtTime(scene, 3.999).x).toBeCloseTo(10);
+  });
+
+  it('eased t drives ALL channels together (incl. rotation)', () => {
+    const scene = makeScene({
+      cameraTrack: [
+        {
+          time: 0,
+          cam: { x: 0, y: 0, zoom: 1, rotation: 0 },
+          easing: 'easeOut',
+        },
+        { time: 2, cam: { x: 100, y: 100, zoom: 3, rotation: 1 } },
+      ],
+    });
+    // easeOut(0.5) = 0.75
+    const mid = getCameraAtTime(scene, 1);
+    expect(mid.x).toBeCloseTo(75);
+    expect(mid.y).toBeCloseTo(75);
+    expect(mid.zoom).toBeCloseTo(2.5);
+    expect(mid.rotation).toBeCloseTo(0.75);
+  });
+
+  it('is monotonic in time for eased segments (no backtracking)', () => {
+    const scene = makeScene({
+      cameraTrack: [
+        { time: 0, cam: { x: 0, y: 0, zoom: 1 }, easing: 'easeInOut' },
+        { time: 6, cam: { x: 600, y: 0, zoom: 4 } },
+      ],
+    });
+    let prev = -Infinity;
+    for (let t = 0; t <= 6; t += 0.25) {
+      const x = getCameraAtTime(scene, t).x;
+      expect(x).toBeGreaterThanOrEqual(prev);
+      prev = x;
+    }
+  });
+});
