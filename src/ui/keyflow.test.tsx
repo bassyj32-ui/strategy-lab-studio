@@ -67,13 +67,14 @@ describe('user flow: move unit A from X to Y with two keyframes', () => {
 
     const scene = useSceneStore.getState().scene;
     expect(scene.keyframes['uA']).toHaveLength(2);
+    const base = T(100, 200);
 
     // Playback must TRAVEL: t=1 halfway, t>=2 exactly Y, t<=0 exactly X
-    const at1 = interpolateTransform(scene.keyframes['uA'], 1)!;
+    const at1 = interpolateTransform(scene.keyframes['uA'], 1, base)!;
     expect(at1.x).toBeCloseTo(200);
     expect(at1.y).toBeCloseTo(350);
-    expect(interpolateTransform(scene.keyframes['uA'], 0)!.x).toBeCloseTo(100);
-    expect(interpolateTransform(scene.keyframes['uA'], 2)!.x).toBeCloseTo(300);
+    expect(interpolateTransform(scene.keyframes['uA'], 0, base)!.x).toBeCloseTo(100);
+    expect(interpolateTransform(scene.keyframes['uA'], 2, base)!.x).toBeCloseTo(300);
   });
 
   it('Auto-KF mode records the drag itself (no manual second Add needed)', () => {
