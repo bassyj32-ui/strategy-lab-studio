@@ -49,6 +49,12 @@ export function AssetsPanel() {
   const canDeleteAsset = useSceneStore((s) => s.canDeleteAsset);
   const createObjectOfType = useSceneStore((s) => s.createObjectOfType);
   const renameAsset = useSceneStore((s) => s.renameAsset);
+  // UX repair pass: duplicate-asset action + search filter + delete
+  // feedback that names the referencing units.
+  const duplicateAsset = useSceneStore((s) => s.duplicateAsset);
+  // Subscribed so delete-guard tooltips refresh when units are placed/removed.
+  const activeScene = useSceneStore((s) => s.scene);
+  const inactiveScenes = useSceneStore((s) => s.inactiveScenes);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement | null>(null);
@@ -60,6 +66,36 @@ export function AssetsPanel() {
   const [defaultCategory, setDefaultCategory] = useState<AssetCategory>('Infantry');
 
   const ordered = Object.values(assets);
+
+  // Search filter: case-insensitive substring on the asset name.
+  const [query, setQuery] = useState('');
+  const visible =
+    query.trim() === ''
+      ? ordered
+      : ordered.filter((a) => a.name.toLowerCase().includes(query.trim().toLowerCase()));
+
+  /**
+   * Display names of every object (across ALL scenes) that references the
+   * given asset — surfaced on the disabled Delete button so "in use" is
+   * actionable instead of a dead end. The map counts as a referencer too.
+   */
+  const referencingNames = (assetId: string): string[] => {
+    const names: string[] = [];
+    const collect = (sc: {
+      mapAssetId?: string | null;
+      objects: Record<string, { name?: string; label?: string; type: string; id: string; assetId?: string }>;
+    }) => {
+      if (sc.mapAssetId === assetId) names.push('the map');
+      for (const o of Object.values(sc.objects)) {
+        if (o.assetId === assetId) {
+          names.push(o.name ?? o.label ?? `${o.type} · ${o.id.slice(-4)}`);
+        }
+      }
+    };
+    collect(activeScene);
+    for (const sc of Object.values(inactiveScenes)) collect(sc);
+    return names;
+  };
 
   const onPick = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -215,12 +251,26 @@ export function AssetsPanel() {
 
       {error && <div className="assets-error">{error}</div>}
 
+      <input
+        type="text"
+        className="asset-search"
+        data-testid="asset-search"
+        placeholder="Search assets…"
+        spellCheck={false}
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+
       <div className="assets-list">
         {ordered.length === 0 && (
           <div className="assets-empty">No assets yet — import an image.</div>
         )}
-        {ordered.map((asset) => {
+        {visible.length === 0 && ordered.length > 0 && (
+          <div className="assets-empty">No assets match “{query}”.</div>
+        )}
+        {visible.map((asset) => {
           const removable = canDeleteAsset(asset.id);
+          const refs = removable ? [] : referencingNames(asset.id);
           return (
             <div
               key={asset.id}
@@ -291,12 +341,22 @@ export function AssetsPanel() {
               </button>
               <button
                 type="button"
+                data-testid={`duplicate-asset-${asset.id}`}
+                title="Duplicate asset — same image, new independent library entry"
+                onClick={() => duplicateAsset(asset.id)}
+              >
+                Duplicate
+              </button>
+              <button
+                type="button"
                 data-testid={`delete-asset-${asset.id}`}
                 disabled={!removable}
                 title={
                   removable
                     ? 'Delete asset'
-                    : 'In use — remove its objects first'
+                    : `In use by ${refs.length} object(s): ${refs
+                        .slice(0, 3)
+                        .join(', ')}${refs.length > 3 ? '…' : ''}`
                 }
                 onClick={() => deleteAsset(asset.id)}
               >

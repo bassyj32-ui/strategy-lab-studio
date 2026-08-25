@@ -408,6 +408,133 @@ describe('scene store', () => {
     });
   });
 
+  describe('duplicateObject + duplicateAsset (UX repair pass ④)', () => {
+    it('duplicates an object with new id, copied props, nudged transform', () => {
+      const asset = {
+        id: 'a1',
+        kind: 'sprite' as const,
+        name: 'infantry',
+        src: 'data:image/png;base64,iVBORw0KGgo=',
+        width: 1,
+        height: 1,
+      };
+      s().registerAssets([asset]);
+      const id = s().createObjectOfType('unit', {
+        assetId: 'a1',
+        faction: 'red',
+        x: 100,
+        y: 200,
+      });
+      s().renameObject(id, 'Cavalry');
+
+      const newId = s().duplicateObject(id);
+      expect(newId).not.toBeNull();
+      expect(newId).not.toBe(id);
+      const copy = s().scene.objects[newId!];
+      expect(copy.assetId).toBe('a1');
+      expect(copy.faction).toBe('red');
+      expect(copy.name).toBe('Cavalry copy');
+      expect(copy.transform.x).toBe(124); // +24 nudge
+      expect(copy.transform.y).toBe(224);
+      // Original untouched.
+      expect(s().scene.objects[id].transform.x).toBe(100);
+      // Duplicate becomes the primary selection.
+      expect(s().selectedObjId).toBe(newId);
+      // Duplication itself is exactly ONE undoable transaction.
+      const lenBeforeDup = s().past.length;
+      s().undo();
+      expect(s().scene.objects[newId!]).toBeUndefined();
+      // Reverting the duplication leaves the original (and its rename).
+      expect(s().scene.objects[id].name).toBe('Cavalry');
+      expect(s().past.length).toBe(lenBeforeDup - 1);
+    });
+
+    it('copies keyframes with identical times and easing', () => {
+      const id = s().createObjectOfType('unit');
+      s().addKeyframe(id, {
+        time: 1,
+        transform: { x: 10, y: 10, rotation: 0, scale: 1, opacity: 1 },
+      });
+      s().addKeyframe(id, {
+        time: 3,
+        transform: { x: 50, y: 60, rotation: 90, scale: 2, opacity: 0.5 },
+      });
+      // Easing is a keyframe PATCH (addKeyframe stores time + transform only).
+      s().updateKeyframe(id, 1, { easing: 'easeIn' });
+
+      const newId = s().duplicateObject(id)!;
+      const orig = s().scene.keyframes[id];
+      const copy = s().scene.keyframes[newId];
+      expect(copy.map((k) => k.time)).toEqual(orig.map((k) => k.time));
+      expect(copy[0].easing).toBe('easeIn');
+      expect(copy[1].transform.x).toBe(50);
+      // Independent: editing the copy's keyframes never touches the original.
+      s().updateKeyframe(newId, 1, { easing: 'hold' });
+      expect(s().scene.keyframes[id][0].easing).toBe('easeIn');
+      expect(s().scene.keyframes[newId][0].easing).toBe('hold');
+    });
+
+    it('a duplicate of a grouped child stays under the same parent', () => {
+      const a = s().createObjectOfType('unit');
+      const b = s().createObjectOfType('unit');
+      const groupId = s().groupObject([a, b])!;
+      s().setSelected(b);
+      const copyId = s().duplicateObject(b)!;
+      expect(s().scene.objects[copyId].parentId).toBe(groupId);
+    });
+
+    it('duplicating a group root duplicates the whole subtree', () => {
+      // createFormation makes a REAL 'group' node with N children.
+      const { groupId, childIds } = s().createFormation('line', { count: 3 });
+      const newGroupId = s().duplicateObject(groupId)!;
+      expect(newGroupId).not.toBeNull();
+      const childrenOfNew = Object.values(s().scene.objects).filter(
+        (o) => o.parentId === newGroupId
+      );
+      expect(childrenOfNew).toHaveLength(3);
+      // Children remapped to the NEW group; original subtree untouched.
+      for (const c of childIds) {
+        expect(s().scene.objects[c].parentId).toBe(groupId);
+      }
+    });
+
+    it('returns null for an unknown object and writes nothing', () => {
+      const before = s().past.length;
+      expect(s().duplicateObject('nope' as never)).toBeNull();
+      expect(s().past.length).toBe(before);
+    });
+
+    it('duplicateAsset shares bytes but gets a new id + " copy" name across scenes', () => {
+      useSceneStore.setState({
+        inactiveScenes: { 'scene-b': createDefaultScene('scene-b') },
+      });
+      s().registerAssets([
+        {
+          id: 'a1',
+          kind: 'sprite' as const,
+          name: 'cavalry',
+          src: 'data:image/png;base64,iVBORw0KGgo=',
+          width: 1,
+          height: 1,
+        },
+      ]);
+      const lenBefore = s().past.length;
+      const newId = s().duplicateAsset('a1')!;
+      expect(newId).not.toBe('a1');
+      expect(s().scene.assets[newId].name).toBe('cavalry copy');
+      expect(s().scene.assets[newId].src).toBe(
+        s().scene.assets['a1'].src
+      );
+      expect(s().inactiveScenes['scene-b'].assets[newId]).toBeDefined();
+      expect(s().scene.assets['a1'].name).toBe('cavalry');
+      expect(s().past.length).toBe(lenBefore + 1);
+      s().undo();
+      expect(s().scene.assets[newId]).toBeUndefined();
+      expect(s().inactiveScenes['scene-b'].assets[newId]).toBeUndefined();
+      expect(s().scene.assets['a1']).toBeDefined();
+    });
+  });
+
   describe('layers', () => {
     it('addLayer appends a visible layer with a higher order', () => {
       s().addLayer('Test');

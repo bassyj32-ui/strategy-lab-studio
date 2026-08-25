@@ -46,7 +46,7 @@ import type {
   FormationPattern,
 } from './types';
 import type { ImportAssetOptions, ImportMapOptions } from '../assets/types';
-import { importAssetFromFile, importMapAsset } from '../assets/import';
+import { importAssetFromFile, importMapAsset, generateAssetId } from '../assets/import';
 import {
   buildCameraPreset,
   type CameraPresetFocus,
@@ -637,6 +637,15 @@ export interface SceneState {
      */
     removeObject: (id: ObjId) => void;
     /**
+     * UX repair pass: DUPLICATE one object — new independent id, same
+     * sprite/transform (+24,+24 offset so the copy is visible)/props and a
+     * full copy of its keyframes. Duplicating a group duplicates its WHOLE
+     * subtree (ids remapped, hierarchy shape preserved). A duplicate of a
+     * grouped child stays under the SAME parent. ONE undoable transaction.
+     * Returns the new root id (null when `id` is unknown).
+     */
+    duplicateObject: (id: ObjId) => ObjId | null;
+    /**
      * Gesture helper (no snapshot): move several SELECTION ROOTS by one WORLD
      * delta. Each object's delta is converted into its own parent frame.
      */
@@ -713,6 +722,13 @@ export interface SceneState {
     renameObject: (id: ObjId, name: string) => void;
     /** Renames a library asset across EVERY scene in one undoable step. */
     renameAsset: (id: AssetId, name: string) => void;
+    /**
+     * UX repair pass: duplicates a library asset — SAME image bytes (src is
+     * shared, non-destructive per PRD §43), NEW independent id + " copy"
+     * name, mirrored across every scene in ONE undoable transaction.
+     * Returns the new asset id (null when `id` is unknown).
+     */
+    duplicateAsset: (id: AssetId) => AssetId | null;
   }
 
 export const useSceneStore = create<SceneState>()(
@@ -1349,6 +1365,64 @@ export const useSceneStore = create<SceneState>()(
       });
     },
 
+    duplicateObject: (id) => {
+      let newRootId: ObjId | null = null;
+      set((state) => {
+        const src = state.scene.objects[id];
+        if (!src) return;
+        pushHistory(state);
+        // Whole subtree (a plain object is its own single-node subtree).
+        const objects = state.scene
+          .objects as unknown as Record<ObjId, SceneObject>;
+        const subtree: SceneObject[] = [];
+        const walk = (oid: ObjId) => {
+          const o = objects[oid];
+          if (!o) return;
+          subtree.push(o);
+          for (const c of directChildren(objects, oid)) walk(c.id);
+        };
+        walk(id);
+        // Old id -> new id so child parentId pointers remap together.
+        const idMap = new Map<ObjId, ObjId>();
+        for (const o of subtree) idMap.set(o.id, createId(o.type));
+        for (const o of subtree) {
+          const nid = idMap.get(o.id)!;
+          const isRoot = o.id === id;
+          // Only the SUBTREE ROOT is nudged (+24,+24) so the copy is visible
+          // next to the original; children keep their local offsets so the
+          // hierarchy shape lands identically.
+          const copy: SceneObject = {
+            ...o,
+            id: nid,
+            name: o.name ? `${o.name} copy` : undefined,
+            parentId:
+              o.parentId != null && idMap.has(o.parentId)
+                ? idMap.get(o.parentId)!
+                : o.parentId,
+            transform: {
+              ...o.transform,
+              x: o.transform.x + (isRoot ? 24 : 0),
+              y: o.transform.y + (isRoot ? 24 : 0),
+            },
+          };
+          state.scene.objects[nid] = copy;
+          // Full keyframe copy: same times, easing and bezier handles.
+          const kfs = state.scene.keyframes[o.id];
+          if (kfs && kfs.length > 0) {
+            state.scene.keyframes[nid] = JSON.parse(
+              JSON.stringify(kfs)
+            ) as typeof kfs;
+          }
+        }
+        newRootId = idMap.get(id)!;
+        // The duplicate becomes the primary selection everywhere (the
+        // timeline mirror subscribes to selectedObjId).
+        state.selectedObjId = newRootId;
+        state.selectedIds = [newRootId];
+      });
+      return newRootId;
+    },
+
     moveObjectsBy: (ids, dx, dy) => {
       // No snapshot: gesture helper — caller owns begin/endInteraction.
       set((state) => {
@@ -1665,6 +1739,27 @@ export const useSceneStore = create<SceneState>()(
           if (s.assets[id]) s.assets[id].name = trimmed;
         }
       });
+    },
+
+    duplicateAsset: (id) => {
+      const s = get();
+      const src = s.scene.assets[id];
+      if (!src) return null;
+      // Same image bytes (shared `src`, non-destructive PRD §43), new
+      // independent id + name — placed objects keep pointing at the original.
+      const copy: Asset = {
+        ...src,
+        id: generateAssetId(src.kind),
+        name: `${src.name} copy`,
+      };
+      set((state) => {
+        pushHistory(state);
+        state.scene.assets[copy.id] = copy;
+        for (const sc of Object.values(state.inactiveScenes)) {
+          sc.assets[copy.id] = copy;
+        }
+      });
+      return copy.id;
     },
   }))
 );

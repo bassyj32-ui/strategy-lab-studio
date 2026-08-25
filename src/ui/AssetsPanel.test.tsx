@@ -6,11 +6,13 @@ import { useSceneStore } from '../scene/store';
 import { createDefaultScene } from '../scene/factory';
 
 // The real import reads image dimensions via the DOM `Image` element, which is
-// unavailable in jsdom. Mock the module so folder-import tests exercise the
-// batching/undo path without real decoding (REV-PASS FIX #2b).
-vi.mock('../assets/import', () => ({
-  importAssetFromFile: vi.fn(),
-}));
+// unavailable in jsdom. Mock ONLY importAssetFromFile; everything else
+// (generateAssetId used by duplicateAsset) stays real (UX pass ④).
+vi.mock('../assets/import', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../assets/import')>();
+  return { ...actual, importAssetFromFile: vi.fn() };
+});
 
 import { importAssetFromFile } from '../assets/import';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -111,6 +113,60 @@ describe('AssetsPanel', () => {
     render(<AssetsPanel />);
     const del = screen.getByTestId('delete-asset-flag-1') as HTMLButtonElement;
     expect(del.disabled).toBe(true);
+  });
+
+  it('delete tooltip names the referencing objects (UX repair pass)', () => {
+    act(() => {
+      useSceneStore.getState().registerAsset(seedAsset);
+      const oid = useSceneStore
+        .getState()
+        .createObjectOfType('unit', { assetId: 'flag-1' });
+      useSceneStore.getState().renameObject(oid, 'Hannibal');
+    });
+    render(<AssetsPanel />);
+    const del = screen.getByTestId('delete-asset-flag-1') as HTMLButtonElement;
+    expect(del.disabled).toBe(true);
+    expect(del.title).toContain('Hannibal');
+  });
+
+  describe('search + duplicate (UX repair pass ④)', () => {
+    it('search filters cards by name, case-insensitively', () => {
+      act(() => {
+        useSceneStore.getState().registerAssets([seedAsset, unitAsset]);
+      });
+      render(<AssetsPanel />);
+      expect(screen.getByTestId('asset-flag-1')).toBeTruthy();
+      expect(screen.getByTestId('asset-u1')).toBeTruthy();
+
+      fireEvent.change(screen.getByTestId('asset-search'), {
+        target: { value: 'CAV' },
+      });
+      expect(screen.queryByTestId('asset-flag-1')).toBeNull();
+      expect(screen.getByTestId('asset-u1')).toBeTruthy();
+      // No match at all → explicit empty state.
+      fireEvent.change(screen.getByTestId('asset-search'), {
+        target: { value: 'zzz' },
+      });
+      expect(screen.getByText(/No assets match/)).toBeTruthy();
+    });
+
+    it('Duplicate creates an independent library entry (" copy") in one undo step', () => {
+      act(() => {
+        useSceneStore.getState().registerAsset(unitAsset);
+      });
+      render(<AssetsPanel />);
+      const lenBefore = useSceneStore.getState().past.length;
+      fireEvent.click(screen.getByTestId('duplicate-asset-u1'));
+      const assets = useSceneStore.getState().scene.assets;
+      const copyId = Object.keys(assets).find((k) => k !== 'u1')!;
+      expect(assets[copyId].name).toBe('cavalry copy');
+      expect(assets[copyId].src).toBe(unitAsset.src);
+      // Original untouched.
+      expect(assets['u1'].name).toBe('cavalry');
+      expect(useSceneStore.getState().past.length).toBe(lenBefore + 1);
+      useSceneStore.getState().undo();
+      expect(useSceneStore.getState().scene.assets[copyId]).toBeUndefined();
+    });
   });
 
   describe('isUnitAsset', () => {

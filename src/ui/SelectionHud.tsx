@@ -53,6 +53,9 @@ export function SelectionHud({
   const beginInteraction = useSceneStore((s) => s.beginInteraction);
   const endInteraction = useSceneStore((s) => s.endInteraction);
   const updateTransform = useSceneStore((s) => s.updateTransform);
+  // UX repair pass: one-click duplicate of the selected object (new
+  // independent id, sprite/transform/keyframes copied, ONE undo step).
+  const duplicateObject = useSceneStore((s) => s.duplicateObject);
 
   // Values frozen at gesture start — drags are ABSOLUTE from this base so
   // repeated mousemove events never compound (each event recomputes
@@ -142,6 +145,15 @@ export function SelectionHud({
         }
         onCommit={(v) => apply({ rotation: normalizeDeg(v) })}
       />
+      <button
+        type="button"
+        className="hud-duplicate"
+        data-testid="hud-duplicate"
+        title="Duplicate object (⌘D) — copies sprite, pose, keyframes and group membership"
+        onClick={() => duplicateObject(obj.id)}
+      >
+        Duplicate
+      </button>
     </div>
   );
 }

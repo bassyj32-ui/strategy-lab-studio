@@ -73,6 +73,11 @@ export function ObjectNode({
   const beginInteraction = useSceneStore((s) => s.beginInteraction);
   const endInteraction = useSceneStore((s) => s.endInteraction);
   const updateTransform = useSceneStore((s) => s.updateTransform);
+  // UX repair pass: shift-click multi-select + drag-the-selection-as-one.
+  const toggleSelected = useSceneStore((s) => s.toggleSelected);
+  const selectedIds = useSceneStore((s) => s.selectedIds);
+  const selectedObjId = useSceneStore((s) => s.selectedObjId);
+  const moveObjectsBy = useSceneStore((s) => s.moveObjectsBy);
   // §93 branding: per-scene faction color overrides (falls back to §31).
   const brand = useSceneStore((s) => s.scene.brand);
 
@@ -96,6 +101,19 @@ export function ObjectNode({
     // position is in WORLD space (the Stage carries the camera); convert it
     // into the object's local frame before storing.
     const node = e.target;
+    // Multi-selection move-as-one: dragging any member of a loose multi-
+    // selection moves every SELECTION ROOT by the same world delta (the
+    // delta self-corrects to zero once the store catches up). Grouped
+    // hierarchies already move as one via their parent, so this path only
+    // applies to multi-selections.
+    if (
+      selectedObjId !== null &&
+      selectedIds.length > 1 &&
+      selectedIds.includes(obj.id)
+    ) {
+      moveObjectsBy(selectedIds, node.x() - world.x, node.y() - world.y);
+      return;
+    }
     const parent = parentWorld ?? { x: 0, y: 0, rotation: 0, scale: 1, opacity: 1 };
     const local = worldPointToLocal(parent, node.x(), node.y());
     updateTransform(obj.id, { x: local.x, y: local.y });
@@ -107,6 +125,12 @@ export function ObjectNode({
 
   const handleSelect = (e: KonvaEventObject<MouseEvent>) => {
     e.cancelBubble = true;
+    // Shift-click ADDS TO / REMOVES FROM the multi-selection without
+    // disturbing the primary. Plain click keeps the single choke point.
+    if (e.evt?.shiftKey) {
+      toggleSelected(obj.id);
+      return;
+    }
     // SINGLE CHOKE POINT for canvas selection: sync both stores here so the
     // Inspector, canvas outline and timeline always agree, no matter which
     // parent supplies `onSelect`.

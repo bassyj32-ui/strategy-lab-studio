@@ -9,6 +9,7 @@ import { useSceneStore } from './scene/store';
 import type { Project } from './scene/types';
 import { saveAutosave, loadAutosave, clearAutosave, debounce } from './persistence/autosave';
 import { RestoreBanner } from './ui/RestoreBanner';
+import { handleEditorShortcut } from './ui/shortcuts';
 
 // MVP-1 editor shell (Wave-3 UX layout):
 //   [ Toolbar+Scenes | CanvasStage | Preview dock + tabbed panel ]  top row
@@ -67,6 +68,16 @@ export function App() {
     await clearAutosave();
     setPending(null);
   };
+
+  // Global editor shortcuts (⌘D duplicate / ⌘G group / ⌘⇧G ungroup /
+  // Delete remove). The handler ignores text-entry targets itself.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      handleEditorShortcut(e);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   return (
     <div className="app">
