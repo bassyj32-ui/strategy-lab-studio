@@ -366,6 +366,48 @@ describe('scene store', () => {
     });
   });
 
+  describe('naming (UX repair pass)', () => {
+    it('renameObject sets a trimmed display name and is undoable', () => {
+      const id = s().createObjectOfType('unit');
+      const lenBefore = s().past.length;
+      s().renameObject(id, '  Hannibal  ');
+      expect(s().scene.objects[id].name).toBe('Hannibal');
+      expect(s().past.length).toBe(lenBefore + 1);
+      s().undo();
+      expect(s().scene.objects[id].name).toBeUndefined();
+    });
+
+    it('renameObject with empty string clears the name', () => {
+      const id = s().createObjectOfType('unit');
+      s().renameObject(id, 'Cavalry');
+      s().renameObject(id, '   ');
+      expect(s().scene.objects[id].name).toBeUndefined();
+    });
+
+    it('renameAsset renames the library asset across all scenes in one step', () => {
+      // Register into active + an inactive scene (library is shared).
+      useSceneStore.setState({
+        inactiveScenes: { 'scene-b': createDefaultScene('scene-b') },
+      });
+      const asset = {
+        id: 'a1',
+        kind: 'sprite' as const,
+        name: 'infantry',
+        src: 'data:image/png;base64,iVBORw0KGgo=',
+        width: 1,
+        height: 1,
+      };
+      s().registerAssets([asset]);
+      const lenBefore = s().past.length;
+      s().renameAsset('a1', 'Libyan Spear');
+      expect(s().scene.assets['a1'].name).toBe('Libyan Spear');
+      expect(s().inactiveScenes['scene-b'].assets['a1'].name).toBe(
+        'Libyan Spear'
+      );
+      expect(s().past.length).toBe(lenBefore + 1);
+    });
+  });
+
   describe('layers', () => {
     it('addLayer appends a visible layer with a higher order', () => {
       s().addLayer('Test');

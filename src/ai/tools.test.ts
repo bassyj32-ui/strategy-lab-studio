@@ -68,6 +68,18 @@ describe('resolveTarget (§62 name resolution)', () => {
     expect(resolveTarget(s, '').error).toBeTruthy();
     expect(resolveTarget(s, 42 as never).error).toBeTruthy();
   });
+
+  it('resolves the editable display name (name wins over fallback surfaces)', () => {
+    const s = scene();
+    s.objects.u1.name = 'Libyan Spearmen';
+    expect(resolveTarget(s, 'libyan spearmen').id).toBe('u1');
+    // Label still resolves; a name/label COLLISION across objects is ambiguous.
+    const s2 = scene();
+    s2.objects.u1.name = 'Veterans';
+    s2.objects.u2 = { ...s2.objects.u1, id: 'u2', name: undefined };
+    s2.objects.u2.label = 'Veterans';
+    expect(resolveTarget(s2, 'veterans').error).toContain('ambiguous');
+  });
 });
 
 describe('resolveOp validation', () => {

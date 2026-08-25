@@ -709,6 +709,10 @@ export interface SceneState {
     canDeleteAsset: (id: AssetId) => boolean;
     /** Deletes `id` from the project library iff unreferenced. No-op (false) if in use. */
     deleteAsset: (id: AssetId) => boolean;
+    /** Editable display name for a placed object. Empty string clears it. Undoable. */
+    renameObject: (id: ObjId, name: string) => void;
+    /** Renames a library asset across EVERY scene in one undoable step. */
+    renameAsset: (id: AssetId, name: string) => void;
   }
 
 export const useSceneStore = create<SceneState>()(
@@ -1634,6 +1638,33 @@ export const useSceneStore = create<SceneState>()(
         }
       });
       return true;
+    },
+
+    renameObject: (id, name) => {
+      const trimmed = name.trim();
+      set((state) => {
+        const obj = state.scene.objects[id];
+        if (!obj) return;
+        pushHistory(state);
+        if (trimmed) obj.name = trimmed;
+        else delete obj.name;
+      });
+    },
+
+    renameAsset: (id, name) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      set((state) => {
+        if (!state.scene.assets[id] && !state.inactiveScenes[id]?.assets[id]) {
+          return;
+        }
+        pushHistory(state);
+        // Library is shared: rename in every scene so surfaces stay consistent.
+        if (state.scene.assets[id]) state.scene.assets[id].name = trimmed;
+        for (const s of Object.values(state.inactiveScenes)) {
+          if (s.assets[id]) s.assets[id].name = trimmed;
+        }
+      });
     },
   }))
 );

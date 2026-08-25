@@ -22,10 +22,10 @@ export function KeyframeTrack({ objId }: KeyframeTrackProps) {
 
   const keyframes = keyframesMap[objId] ?? [];
   const obj = objects[objId];
-  // Human-readable row name: commander label if set, else "type · short-id"
-  // (raw UUID-style ids read as gibberish and made tracks unidentifiable).
+  // Human-readable row name: editable name, then commander label, then
+  // "type · short-id" (raw UUID-style ids read as gibberish).
   const name = obj
-    ? (obj.label ?? `${obj.type} · ${objId.slice(-4)}`)
+    ? (obj.name ?? obj.label ?? `${obj.type} · ${objId.slice(-4)}`)
     : objId;
   const isActive = selectedObjId === objId;
   const duration = useSceneStore((s) => s.scene.timeline.duration);

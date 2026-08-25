@@ -166,6 +166,12 @@ export interface SceneObject {
    * render doors. Purely descriptive — never affects animation math.
    */
   label?: string;
+  /**
+   * EDITABLE DISPLAY NAME (UX repair pass): human identity used by the
+   * timeline tracks, Inspector, and AI Commander NL resolution. Absent =
+   * surfaces as "type · short-id". Pure metadata — never affects animation.
+   */
+  name?: string;
   /** COMMANDER MARKER: faction ring drawn AROUND the object (PRD §31 colors). */
   faction?: Faction;
   /**

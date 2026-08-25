@@ -354,12 +354,18 @@ export function resolveTarget(
   const objects = Object.values(scene.objects);
   if (objects.some((o) => o.id === ref)) return { id: ref };
   const needle = ref.trim().toLowerCase();
-  const byLabel = objects.filter(
-    (o) => o.label && o.label.toLowerCase() === needle
+  // NL resolution: match the editable display name OR the commander label
+  // (exact, case-insensitive). Ambiguity is REJECTED — never guess.
+  const byName = objects.filter(
+    (o) =>
+      (o.name && o.name.toLowerCase() === needle) ||
+      (o.label && o.label.toLowerCase() === needle)
   );
-  if (byLabel.length === 1) return { id: byLabel[0].id };
-  if (byLabel.length > 1) {
-    return { error: `ambiguous label "${ref}" matches ${byLabel.length} objects` };
+  if (byName.length === 1) return { id: byName[0].id };
+  if (byName.length > 1) {
+    return {
+      error: `ambiguous label "${ref}" matches ${byName.length} objects`,
+    };
   }
   return { error: `no object with id or label "${ref}"` };
 }

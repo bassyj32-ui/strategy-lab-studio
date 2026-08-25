@@ -92,7 +92,7 @@ function toEntry(obj: SceneObject, keyframeCount: number): SummaryEntry {
     x: round(obj.transform.x),
     y: round(obj.transform.y),
   };
-  if (obj.label) entry.label = obj.label;
+  if (obj.name || obj.label) entry.label = obj.name ?? obj.label;
   const t = obj.transform;
   if (t.rotation !== 0) entry.rotation = round(t.rotation);
   if (t.scale !== 1) entry.scale = round(t.scale);
@@ -171,7 +171,7 @@ export function summarizeScene(
     if (sel) {
       summary.selected = {
         id: sel.id,
-        ...(sel.label ? { label: sel.label } : {}),
+        ...(sel.name || sel.label ? { label: sel.name ?? sel.label } : {}),
         type: sel.type,
       };
     }

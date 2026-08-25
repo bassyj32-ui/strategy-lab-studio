@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import type { SceneObject, Transform } from '../scene/types';
 import { useSceneStore } from '../scene/store';
 import { selectedObject } from '../scene/selectors';
@@ -25,6 +26,16 @@ export function Inspector() {
   const endInteraction = useSceneStore((s) => s.endInteraction);
   const updateTransform = useSceneStore((s) => s.updateTransform);
   const updateObjectProps = useSceneStore((s) => s.updateObjectProps);
+  const renameObject = useSceneStore((s) => s.renameObject);
+
+  // Name field draft: null = not editing (show stored name).
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const [nameDraftId, setNameDraftId] = useState<string | null>(null);
+  // Selection changed mid-edit? Drop the stale draft.
+  useEffect(() => {
+    setNameDraft(null);
+    setNameDraftId(null);
+  }, [selectedObjId]);
 
   // Quick-set preset chips (Wave-3 UX pass): one click = one undo step.
   const applyPreset = (partial: Partial<Transform>) => {
@@ -55,6 +66,34 @@ export function Inspector() {
   return (
     <div className="inspector">
       <h3>Inspector</h3>
+      {/* Editable display name (UX repair pass): surfaces in timeline tracks,
+          AI resolution, and here. Draft commits on blur/Enter so typing does
+          NOT flood undo history with one entry per keystroke. Empty = falls
+          back to "type · short-id". */}
+      <label className="inspector-field">
+        <span>Name</span>
+        <input
+          type="text"
+          spellCheck={false}
+          autoComplete="off"
+          data-testid="inspector-object-name"
+          value={obj.id === nameDraftId && nameDraft !== null ? nameDraft : (obj.name ?? '')}
+          placeholder={`${obj.type} · ${obj.id.slice(-4)}`}
+          onFocus={() => setNameDraftId(obj.id)}
+          onChange={(e) => {
+            setNameDraftId(obj.id);
+            setNameDraft(e.target.value);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          }}
+          onBlur={(e) => {
+            if (nameDraft !== null) renameObject(obj.id, e.target.value);
+            setNameDraft(null);
+            setNameDraftId(null);
+          }}
+        />
+      </label>
       <div className="inspector-type">Type: {obj.type}</div>
       {isArrow && (
         <>

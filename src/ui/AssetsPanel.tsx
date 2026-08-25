@@ -48,9 +48,13 @@ export function AssetsPanel() {
   const deleteAsset = useSceneStore((s) => s.deleteAsset);
   const canDeleteAsset = useSceneStore((s) => s.canDeleteAsset);
   const createObjectOfType = useSceneStore((s) => s.createObjectOfType);
+  const renameAsset = useSceneStore((s) => s.renameAsset);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement | null>(null);
+  // Inline asset rename (double-click the name): null = not editing.
+  const [editingAssetId, setEditingAssetId] = useState<string | null>(null);
+  const [assetNameDraft, setAssetNameDraft] = useState('');
   // Folder-import tag defaults (overridden per-file by filename heuristics).
   const [defaultFaction, setDefaultFaction] = useState<Faction>('red');
   const [defaultCategory, setDefaultCategory] = useState<AssetCategory>('Infantry');
@@ -236,7 +240,36 @@ export function AssetsPanel() {
             >
               <img className="asset-thumb" src={asset.src} alt={asset.name} />
               <div className="asset-meta">
-                <span className="asset-name">{asset.name}</span>
+                {editingAssetId === asset.id ? (
+                  <input
+                    type="text"
+                    autoFocus
+                    spellCheck={false}
+                    data-testid={`asset-rename-${asset.id}`}
+                    value={assetNameDraft}
+                    onChange={(e) => setAssetNameDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter')
+                        (e.target as HTMLInputElement).blur();
+                      if (e.key === 'Escape') setEditingAssetId(null);
+                    }}
+                    onBlur={() => {
+                      renameAsset(asset.id, assetNameDraft);
+                      setEditingAssetId(null);
+                    }}
+                  />
+                ) : (
+                  <span
+                    className="asset-name"
+                    title={`${asset.name} — double-click to rename`}
+                    onDoubleClick={() => {
+                      setEditingAssetId(asset.id);
+                      setAssetNameDraft(asset.name);
+                    }}
+                  >
+                    {asset.name}
+                  </span>
+                )}
                 <span className="asset-kind">{asset.kind}</span>
               </div>
               <button
