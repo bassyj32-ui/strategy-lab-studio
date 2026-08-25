@@ -1174,9 +1174,61 @@ h3 {
 /* ============================================================
    UX REPAIR PASS — asset library cards, search, duplicate HUD
    ============================================================ */
+
+/* Panel title row ("Assets" + Import / Import Folder…). CapCut-style:
+   quiet label left, ghost buttons right, real air around it. */
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-2);
+}
+.panel-header > span:first-child {
+  margin-right: auto;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dim);
+}
+.panel-header button {
+  min-height: 24px;
+  padding: 3px 10px;
+  font-size: 12px;
+  background: transparent;
+  border-color: transparent;
+}
+.panel-header button:hover:not(:disabled) {
+  background: var(--panel-raised);
+  border-color: var(--edge);
+}
+
+/* Folder-import tag defaults (faction / category pickers) — secondary
+   row under the header, visually quieter than the primary controls. */
+.assets-folder-defaults {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-2);
+  padding: 0 var(--sp-2) var(--sp-2);
+}
+.assets-folder-defaults label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: 11px;
+  color: var(--dim);
+}
+.assets-folder-defaults select {
+  background: var(--field);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+  padding: 2px 4px;
+  font-size: 11px;
+}
+
 .asset-search {
-  margin: 6px 8px;
-  width: calc(100% - 16px);
+  margin: 0 var(--sp-2) var(--sp-2);
+  width: calc(100% - var(--sp-3) - var(--sp-3));
 }
 
 /* Category filter chips (All / Infantry / Cavalry / …). */
