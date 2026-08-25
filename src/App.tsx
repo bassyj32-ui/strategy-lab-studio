@@ -19,6 +19,18 @@ export function App() {
   const [pending, setPending] = useState<{ project: Project; savedAt: number } | null>(null);
   // Timeline footer height in vh (DAW-style draggable divider, default 34).
   const [timelineH, setTimelineH] = useState(34);
+  // Big-screen preview: when true the SAME <PreviewPanel> instance is moved
+  // into a fullscreen overlay (never mounted twice -> one Player, one clock).
+  const [previewBig, setPreviewBig] = useState(false);
+
+  useEffect(() => {
+    if (!previewBig) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPreviewBig(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [previewBig]);
 
   /** Drag the divider above the timeline to grow/shrink it (clamped 14–70vh). */
   const startTimelineResize = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -117,11 +129,49 @@ export function App() {
           {/* Program monitor pinned at eye level (Premiere-style): the
               playing window is visible at first sight, never buried. */}
           <div className="preview-dock">
-            <PreviewPanel />
+            <button
+              type="button"
+              className="preview-expand"
+              data-testid="preview-expand"
+              title="Big screen (Esc to close)"
+              onClick={() => setPreviewBig(true)}
+            >
+              ⛶
+            </button>
+            {previewBig ? (
+              <div className="preview-dock-placeholder" data-testid="preview-dock-placeholder">
+                Preview on big screen
+              </div>
+            ) : (
+              <PreviewPanel />
+            )}
           </div>
           <RightPanel />
         </div>
       </div>
+      {previewBig && (
+        <div
+          className="preview-overlay"
+          data-testid="preview-overlay"
+          onClick={() => setPreviewBig(false)}
+        >
+          <div
+            className="preview-overlay-stage"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <PreviewPanel />
+            <button
+              type="button"
+              className="preview-collapse"
+              data-testid="preview-collapse"
+              title="Close big screen (Esc)"
+              onClick={() => setPreviewBig(false)}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
       <div
         className="timeline-resizer"
         data-testid="timeline-resizer"

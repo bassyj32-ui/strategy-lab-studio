@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, act, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, act, cleanup, waitFor, fireEvent } from '@testing-library/react';
 
 // Regression harness for the reload data-loss bug: the autosave must behave
 // like persistent session state. We swap IndexedDB for a memory map and spy
@@ -37,7 +37,9 @@ vi.mock('./persistence/autosave', async (importOriginal) => {
 // vitest's node/jsdom split) and the Remotion Player needs a real canvas 2D
 // context. Persistence is what's under test here.
 vi.mock('./canvas/CanvasStage', () => ({ CanvasStage: () => <div /> }));
-vi.mock('./ui/PreviewPanel', () => ({ PreviewPanel: () => <div /> }));
+vi.mock('./ui/PreviewPanel', () => ({
+  PreviewPanel: () => <div data-testid="preview-player-stub" />,
+}));
 
 import App from './App';
 import { useSceneStore } from './scene/store';
@@ -95,5 +97,45 @@ describe('App persistence (reload data-loss regression)', () => {
     Object.defineProperty(evt, 'returnValue', { value: '', writable: true });
     window.dispatchEvent(evt);
     expect(evt.preventDefault).toHaveBeenCalled();
+  });
+});
+
+describe('App big-screen preview expand', () => {
+  beforeEach(() => {
+    act(() => {
+      useSceneStore.setState({
+        scene: createDefaultScene(),
+        past: [],
+        future: [],
+      });
+    });
+  });
+
+  it('expand moves the player into a fullscreen overlay; Esc returns it', () => {
+    render(<App />);
+    expect(screen.queryByTestId('preview-overlay')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('preview-expand'));
+    // Overlay holds the (single) player instance; the dock shows a placeholder.
+    expect(screen.getByTestId('preview-overlay')).toBeTruthy();
+    expect(screen.getByTestId('preview-dock-placeholder')).toBeTruthy();
+    expect(
+      document.querySelectorAll('[data-testid="preview-player-stub"]')
+    ).toHaveLength(1); // moved, never duplicated
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByTestId('preview-overlay')).toBeNull();
+    expect(screen.queryByTestId('preview-dock-placeholder')).toBeNull();
+  });
+
+  it('✕ button and backdrop click also close the overlay', () => {
+    render(<App />);
+    fireEvent.click(screen.getByTestId('preview-expand'));
+    fireEvent.click(screen.getByTestId('preview-collapse'));
+    expect(screen.queryByTestId('preview-overlay')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('preview-expand'));
+    fireEvent.click(screen.getByTestId('preview-overlay')); // backdrop
+    expect(screen.queryByTestId('preview-overlay')).toBeNull();
   });
 });

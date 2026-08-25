@@ -192,10 +192,78 @@ h3 {
 /* Program monitor dock at the top of the right column (Premiere-style).
    PreviewPlayer already self-sizes to width:100% + 16/9 aspect. */
 .preview-dock {
+  position: relative;
   flex-shrink: 0;
   padding: 8px;
   border-bottom: 1px solid var(--edge);
   background: var(--panel);
+}
+
+/* Big-screen expand chip (top-right of the dock). */
+.preview-expand {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 2;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid var(--edge);
+  background: rgba(11, 14, 20, 0.75);
+  color: var(--dim);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.preview-expand:hover {
+  color: #f5a83c;
+  border-color: #f5a83c;
+}
+
+/* Shown in the dock while the player lives on the big-screen overlay. */
+.preview-dock-placeholder {
+  aspect-ratio: 16 / 9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--dim);
+  background: var(--field);
+  border-radius: 2px;
+}
+
+/* Fullscreen preview overlay — the SAME PreviewPanel instance is moved here,
+   so playback stays single-sourced. Click backdrop / ✕ / Esc to close. */
+.preview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.preview-overlay-stage {
+  position: relative;
+  width: min(94vw, calc(94vh * 16 / 9));
+}
+.preview-collapse {
+  position: absolute;
+  top: -26px;
+  right: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid var(--edge);
+  background: rgba(11, 14, 20, 0.75);
+  color: var(--dim);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.preview-collapse:hover {
+  color: #f5a83c;
+  border-color: #f5a83c;
 }
 
 .preview-dock .preview-panel {
