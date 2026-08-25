@@ -2,13 +2,21 @@ import { useRef } from 'react';
 import { useSceneStore } from '../../scene/store';
 import { usePlaybackStore } from '../playbackStore';
 
-const DIAMOND = 10;
+const DIAMOND = 12;
+
+const EASING_OPTIONS = [
+  { value: 'linear', label: 'Linear' },
+  { value: 'easeIn', label: 'Ease In' },
+  { value: 'easeOut', label: 'Ease Out' },
+  { value: 'easeInOut', label: 'Ease In-Out' },
+  { value: 'hold', label: 'Hold' },
+] as const;
 
 /**
  * The per-scene CAMERA track row: one diamond per camera keyframe, seek on
  * click, drag a diamond to move its time (one undo step, committed on drop),
- * plus key/remove-at-playhead controls. Pure DOM — the battlefield canvas is
- * never rendered here.
+ * an easing selector for the key at the playhead, plus key/remove-at-playhead
+ * controls. Pure DOM — the battlefield canvas is never rendered here.
  */
 export function CameraTrack() {
   const track = useSceneStore((s) => s.scene.cameraTrack);
@@ -16,12 +24,15 @@ export function CameraTrack() {
   const setCameraKeyframe = useSceneStore((s) => s.setCameraKeyframe);
   const removeCameraKeyframe = useSceneStore((s) => s.removeCameraKeyframe);
   const moveCameraKeyframe = useSceneStore((s) => s.moveCameraKeyframe);
+  const setCameraKeyframeEasing = useSceneStore(
+    (s) => s.setCameraKeyframeEasing
+  );
   const currentTime = usePlaybackStore((s) => s.currentTime);
   const seek = usePlaybackStore((s) => s.seek);
   const laneRef = useRef<HTMLDivElement | null>(null);
 
   const sorted = [...(track ?? [])].sort((a, b) => a.time - b.time);
-  const hasAtPlayhead = sorted.some(
+  const kfAtPlayhead = sorted.find(
     (k) => Math.abs(k.time - currentTime) < 1e-6
   );
 
@@ -93,6 +104,25 @@ export function CameraTrack() {
           );
         })}
       </div>
+      <select
+        data-testid="camera-easing"
+        aria-label="Easing for the camera keyframe at the playhead"
+        disabled={!kfAtPlayhead}
+        value={kfAtPlayhead?.easing ?? 'linear'}
+        onChange={(e) =>
+          setCameraKeyframeEasing(
+            currentTime,
+            e.target.value as (typeof EASING_OPTIONS)[number]['value']
+          )
+        }
+        title="Shapes the motion from this keyframe to the next"
+      >
+        {EASING_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
       <button
         type="button"
         data-testid="camera-key-at-playhead"
@@ -104,7 +134,7 @@ export function CameraTrack() {
       <button
         type="button"
         data-testid="camera-remove-at-playhead"
-        disabled={!hasAtPlayhead}
+        disabled={!kfAtPlayhead}
         onClick={() => removeCameraKeyframe(currentTime)}
         title="Remove the camera keyframe at the playhead"
       >

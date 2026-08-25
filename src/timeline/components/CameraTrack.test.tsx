@@ -71,4 +71,39 @@ describe('CameraTrack', () => {
     fireEvent.click(screen.getByTestId('camera-kf-4'));
     expect(usePlaybackStore.getState().currentTime).toBe(4);
   });
+
+  it('easing select is disabled without a key at the playhead', () => {
+    act(() => {
+      useSceneStore.getState().setCameraKeyframe(2);
+    });
+    render(<CameraTrack />);
+    const sel = screen.getByTestId('camera-easing') as HTMLSelectElement;
+    expect(sel.disabled).toBe(true); // playhead at t=0, key at t=2
+  });
+
+  it('easing select shows the stored value and persists changes (one undo step)', () => {
+    act(() => {
+      useSceneStore.getState().setCameraKeyframe(2);
+      usePlaybackStore.getState().seek(2);
+    });
+    render(<CameraTrack />);
+    const sel = screen.getByTestId('camera-easing') as HTMLSelectElement;
+    expect(sel.disabled).toBe(false);
+    expect(sel.value).toBe('linear'); // absent = linear
+
+    fireEvent.change(sel, { target: { value: 'easeInOut' } });
+    expect(useSceneStore.getState().scene.cameraTrack![0].easing).toBe(
+      'easeInOut'
+    );
+    // One undo step restores linear.
+    act(() => {
+      useSceneStore.getState().undo();
+    });
+    expect(useSceneStore.getState().scene.cameraTrack![0].easing).toBeUndefined();
+
+    fireEvent.change(screen.getByTestId('camera-easing'), {
+      target: { value: 'hold' },
+    });
+    expect(useSceneStore.getState().scene.cameraTrack![0].easing).toBe('hold');
+  });
 });

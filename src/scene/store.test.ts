@@ -859,6 +859,27 @@ describe('scene store', () => {
       expect(mid.zoom).toBeCloseTo(1.5);
       expect(getCameraAtTime(scene, 9).x).toBe(100); // HOLD after last
     });
+
+    it('setCameraKeyframeEasing persists, defaults to undefined, and is ONE undo step', () => {
+      s().setCameraKeyframe(1);
+      s().setCameraKeyframe(3);
+      // No key at time 99 -> no-op.
+      s().setCameraKeyframeEasing(99, 'easeIn');
+      expect(s().scene.cameraTrack!.every((k) => !k.easing)).toBe(true);
+
+      s().setCameraKeyframeEasing(1, 'easeInOut');
+      expect(s().scene.cameraTrack![0].easing).toBe('easeInOut');
+      expect(s().scene.cameraTrack![1].easing).toBeUndefined();
+
+      s().undo();
+      expect(s().scene.cameraTrack![0].easing).toBeUndefined();
+
+      // Re-setting the same easing is a no-op (no history churn).
+      s().setCameraKeyframeEasing(1, 'linear');
+      const pastLen = useSceneStore.getState().past.length;
+      s().setCameraKeyframeEasing(1, 'linear');
+      expect(useSceneStore.getState().past.length).toBe(pastLen);
+    });
   });
 
   describe('asset library (project-scoped, mirrored across scenes)', () => {

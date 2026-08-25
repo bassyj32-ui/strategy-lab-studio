@@ -670,6 +670,11 @@ export interface SceneState {
      */
     moveCameraKeyframe: (fromTime: number, toTime: number) => void;
     /**
+     * Sets the temporal easing on the keyframe at `time` (governs its
+     * OUTGOING segment). No-op when no keyframe sits there. One undo step.
+     */
+    setCameraKeyframeEasing: (time: number, easing: Easing) => void;
+    /**
      * Applies a named PRD §27 camera preset (overview / tactical / flank
      * follow / commander focus / decisive), REPLACING the whole camera track.
      * `focus` optionally centres Commander Focus on a world point. One undo step.
@@ -1512,6 +1517,17 @@ export const useSceneStore = create<SceneState>()(
         if (collision >= 0) track.splice(collision, 1);
         kf.time = toTime;
         track.sort((a, b) => a.time - b.time);
+      });
+    },
+
+    setCameraKeyframeEasing: (time, easing) => {
+      set((state) => {
+        const track = state.scene.cameraTrack;
+        if (!track) return;
+        const kf = track.find((k) => k.time === time);
+        if (!kf || kf.easing === easing) return;
+        pushHistory(state);
+        kf.easing = easing;
       });
     },
 
