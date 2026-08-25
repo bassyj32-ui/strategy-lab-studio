@@ -1,22 +1,21 @@
 import { useState } from 'react';
 import { Inspector } from './Inspector';
 import { LayersPanel } from './LayersPanel';
-import { AssetsPanel } from './AssetsPanel';
 import { AiCommanderPanel } from './AiCommanderPanel';
 
-type TabKey = 'properties' | 'layers' | 'assets' | 'ai';
+type TabKey = 'properties' | 'layers' | 'ai';
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'properties', label: 'Properties' },
   { key: 'layers', label: 'Layers' },
-  { key: 'assets', label: 'Assets' },
   { key: 'ai', label: 'AI' },
 ];
 
 /**
- * Tabbed right column (Wave-3 UX pass): one dock instead of three stacked
- * panels, so nothing scrolls off-screen. Pure view composition — every tab
- * renders its existing panel unchanged.
+ * Tabbed right column (Wave-3 UX pass): one dock instead of stacked panels,
+ * so nothing scrolls off-screen. Pure view composition — every tab renders
+ * its existing panel unchanged. The Assets library lives in the LEFT column
+ * now (owner call), so there is no assets tab here anymore.
  */
 export function RightPanel() {
   const [tab, setTab] = useState<TabKey>('properties');
@@ -41,7 +40,6 @@ export function RightPanel() {
       <div className="right-tab-body">
         {tab === 'properties' && <Inspector />}
         {tab === 'layers' && <LayersPanel />}
-        {tab === 'assets' && <AssetsPanel />}
         {tab === 'ai' && <AiCommanderPanel />}
       </div>
     </div>

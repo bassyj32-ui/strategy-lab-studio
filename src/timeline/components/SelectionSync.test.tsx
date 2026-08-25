@@ -2,13 +2,13 @@
 // Regression tests for UNIFIED SELECTION across components.
 //
 // Bugs covered:
-//  - Bug 1: Toolbar click-to-place created an object but never selected it,
-//    so the Inspector stayed on "No object selected".
+//  - Bug 1 (successor): placement lives in the asset library; placing a unit
+//    must select it everywhere (covered below + AssetsPanel tests). The old
+//    Toolbar palette was removed — arrows are imported sprites now.
 //  - Bug 2 (timeline side): clicking a KeyframeTrack label selected only for
 //    the timeline; the Inspector/canvas did not follow.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act, cleanup } from '@testing-library/react';
-import { Toolbar } from '../../ui/Toolbar';
 import { AssetsPanel } from '../../ui/AssetsPanel';
 import { KeyframeTrack } from './KeyframeTrack';
 import { KeyframeEditor } from './KeyframeEditor';
@@ -31,23 +31,6 @@ beforeEach(() => {
 });
 
 describe('selection sync (component level)', () => {
-  it('BUG 1 successor: palette arrow click ARMS the draw tool (placement now lives in the asset library and is covered by AssetsPanel tests)', () => {
-    render(<Toolbar />);
-    const arrow = screen.getByTestId('palette-arrow');
-    fireEvent.click(arrow);
-    expect(useSceneStore.getState().activeTool).toBe('arrow');
-    expect(arrow.getAttribute('aria-pressed')).toBe('true');
-    fireEvent.click(arrow);
-    expect(useSceneStore.getState().activeTool).toBe('select');
-  });
-
-  it('keyboard activation (Enter) toggles the arrow tool too', () => {
-    render(<Toolbar />);
-    const item = screen.getByTestId('palette-arrow');
-    fireEvent.keyDown(item, { key: 'Enter' });
-    expect(useSceneStore.getState().activeTool).toBe('arrow');
-  });
-
   it('BUG 2: clicking a track label selects the object for the Inspector too', () => {
     act(() => {
       useSceneStore.getState().addObject({

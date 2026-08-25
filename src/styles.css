@@ -132,9 +132,17 @@ h3 {
 }
 
 .app-side.left {
-  width: 200px;
+  width: 250px; /* wide enough for the 2-column asset grid */
   flex-shrink: 0;
   border-right: 1px solid var(--edge);
+  display: flex;
+  flex-direction: column;
+}
+/* Asset library takes the flexible share; scenes panel keeps its natural
+   height below. Each manages its own scroll. */
+.app-side.left > :first-child {
+  flex: 1;
+  min-height: 0;
 }
 
 .app-right {
@@ -160,6 +168,63 @@ h3 {
 .canvas-center {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Slim horizontal strip above the canvas (replaces the old left Toolbar):
+   map import / save / export / group / formation builder. */
+.action-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--edge);
+}
+.action-bar button {
+  white-space: nowrap;
+}
+.action-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 0 4px;
+  background: var(--edge);
+}
+.formation-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 4px 10px;
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  background: var(--field);
+}
+.formation-controls strong {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #f5a83c;
+}
+.formation-controls label {
+  font-size: 11px;
+  color: var(--dim);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.action-status {
+  margin-left: auto;
+}
+
+/* Scrollable area holding the stage below the action bar. */
+.canvas-scroll {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
 }
 
@@ -286,25 +351,6 @@ h3 {
   margin: 8px auto;
   border: 1px solid var(--edge);
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.45);
-}
-
-/* --- Palette -------------------------------------------------- */
-.palette-item {
-  margin-bottom: 6px;
-  padding: 9px 10px;
-  background: var(--field);
-  border: 1px dashed var(--edge);
-  border-radius: var(--radius);
-  cursor: grab;
-  user-select: none;
-  transition: border-color 120ms ease;
-}
-.palette-item:hover {
-  border-color: var(--signal-dim);
-  background: #10182b;
-}
-.palette-item:active {
-  cursor: grabbing;
 }
 
 /* --- Inspector ------------------------------------------------ */

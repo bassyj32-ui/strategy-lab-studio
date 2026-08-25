@@ -40,9 +40,11 @@ describe('RightPanel', () => {
     expect(screen.getByText(/No object selected/i)).toBeTruthy();
   });
 
-  it('switches to the Assets tab', () => {
+  it('switches to the AI tab; the Assets tab is gone (library moved left)', () => {
     render(<RightPanel />);
-    fireEvent.click(screen.getByTestId('tab-assets'));
-    expect(screen.getByTestId('assets-panel')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('tab-ai'));
+    expect(screen.getByTestId('ai-commander-panel')).toBeTruthy();
+    // The assets library is a full left-column panel now, not a right tab.
+    expect(screen.queryByTestId('tab-assets')).toBeNull();
   });
 });

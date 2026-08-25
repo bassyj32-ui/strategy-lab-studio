@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { CanvasStage } from './canvas/CanvasStage';
-import { Toolbar } from './ui/Toolbar';
+import { CanvasActionBar } from './ui/CanvasActionBar';
+import { AssetsPanel } from './ui/AssetsPanel';
 import { ScenesPanel } from './ui/ScenesPanel';
 import { RightPanel } from './ui/RightPanel';
 import { PreviewPanel } from './ui/PreviewPanel';
@@ -154,11 +155,17 @@ export function App() {
       )}
       <div className="app-main">
         <div className="app-side left">
-          <Toolbar />
+          {/* Asset library is the left column now (owner workflow: everything
+              is an imported sprite); the old Toolbar's canvas actions moved
+              to the CanvasActionBar above the stage. */}
+          <AssetsPanel />
           <ScenesPanel />
         </div>
         <div className="canvas-center">
-          <CanvasStage />
+          <CanvasActionBar />
+          <div className="canvas-scroll">
+            <CanvasStage />
+          </div>
         </div>
         <div className="app-right">
           {/* Program monitor pinned at eye level (Premiere-style): the
