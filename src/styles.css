@@ -165,13 +165,28 @@ h3 {
 
 .bottom-row {
   flex-shrink: 0;
-  /* Timeline-only footer (preview lives in the right dock): stable height so
-     track rows get consistent breathing room, CapCut-style. */
+  /* Timeline-only footer (preview lives in the right dock). Height is set
+     inline by App's draggable divider (default 34vh); this value is the
+     no-JS fallback. Column flex so the inner panel can be height-bound. */
+  display: flex;
+  flex-direction: column;
   height: 34vh;
   overflow: hidden;
   overscroll-behavior: contain;
-  border-top: 1px solid var(--edge);
+  border-top: none;
   background: var(--panel);
+}
+
+/* DAW-style divider: drag to grow/shrink the timeline footer. */
+.timeline-resizer {
+  flex-shrink: 0;
+  height: 5px;
+  cursor: ns-resize;
+  border-top: 1px solid var(--edge);
+  background: transparent;
+}
+.timeline-resizer:hover {
+  background: rgba(245, 168, 60, 0.25);
 }
 
 /* Program monitor dock at the top of the right column (Premiere-style).
@@ -312,11 +327,18 @@ h3 {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  /* Every object's track must stay reachable: with more objects than fit in
-     the 34vh footer, rows below the fold were clipped invisibly (the "I can't
-     see my keyframes" bug). Scroll instead of clip. */
-  overflow-y: auto;
+  /* Height-bound child of .bottom-row so the tracks scroller below can
+     actually overflow — the panel itself never scrolls. */
+  flex: 1;
   min-height: 0;
+}
+
+/* ONLY the diamond rows scroll (CapCut behaviour): transport, ruler and the
+   keyframe editor stay pinned above/below it, always visible. */
+.timeline-tracks {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 /* --- Transport --------------------------------------------------- */
@@ -390,12 +412,17 @@ h3 {
 }
 
 .track-label {
+  /* Sticky left edge: if a lane ever overflows horizontally while scrolling,
+     names stay readable above the diamonds. */
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--panel);
   width: 120px;
   flex-shrink: 0;
   padding: 2px 4px;
   font-size: 12px;
   color: var(--dim);
-  background: none;
   border: none;
   border-radius: 2px;
   text-align: left;

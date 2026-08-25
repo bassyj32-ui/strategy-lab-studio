@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
 import { CanvasStage } from './canvas/CanvasStage';
 import { Toolbar } from './ui/Toolbar';
 import { ScenesPanel } from './ui/ScenesPanel';
@@ -16,6 +17,26 @@ import { handleEditorShortcut } from './ui/shortcuts';
 //   [              TimelinePanel (full width)                   ]  bottom row
 export function App() {
   const [pending, setPending] = useState<{ project: Project; savedAt: number } | null>(null);
+  // Timeline footer height in vh (DAW-style draggable divider, default 34).
+  const [timelineH, setTimelineH] = useState(34);
+
+  /** Drag the divider above the timeline to grow/shrink it (clamped 14–70vh). */
+  const startTimelineResize = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startH = timelineH;
+    const onMove = (ev: PointerEvent) => {
+      const vh = window.innerHeight || 1080;
+      const next = startH + ((startY - ev.clientY) / vh) * 100;
+      setTimelineH(Math.min(70, Math.max(14, next)));
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
 
   // The scene lives only in memory — warn before losing unsaved work.
   useEffect(() => {
@@ -101,7 +122,15 @@ export function App() {
           <RightPanel />
         </div>
       </div>
-      <div className="bottom-row">
+      <div
+        className="timeline-resizer"
+        data-testid="timeline-resizer"
+        role="separator"
+        aria-orientation="horizontal"
+        title="Drag to resize the timeline"
+        onPointerDown={startTimelineResize}
+      />
+      <div className="bottom-row" style={{ height: `${timelineH}vh` }}>
         <TimelinePanel />
       </div>
     </div>

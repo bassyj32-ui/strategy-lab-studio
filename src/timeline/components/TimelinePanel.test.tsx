@@ -41,6 +41,17 @@ describe('TimelinePanel', () => {
     expect(screen.getByRole('button', { name: 'Play' })).toBeTruthy();
   });
 
+  it('scrolls ONLY the track rows: transport/ruler stay outside the scroller', () => {
+    render(<TimelinePanel />);
+    const scroller = screen.getByTestId('timeline-tracks');
+    // Tracks + camera row live INSIDE the scrollable region…
+    expect(scroller.querySelector('[data-testid="keyframe-track-u1"]')).toBeTruthy();
+    // …while transport, ruler and keyframe editor stay PINNED outside it.
+    expect(scroller.contains(screen.getByTestId('transport-controls'))).toBe(false);
+    expect(scroller.contains(screen.getByTestId('timeline-ruler'))).toBe(false);
+    expect(scroller.contains(screen.getByRole('button', { name: /add keyframe/i }))).toBe(false);
+  });
+
   it('auto-KF toggle flips the store pref (default OFF)', () => {
     render(<TimelinePanel />);
     const toggle = screen.getByTestId('auto-keyframe-toggle')

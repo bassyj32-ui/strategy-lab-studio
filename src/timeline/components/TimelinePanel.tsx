@@ -226,15 +226,17 @@ export function TimelinePanel() {
         </button>
       </div>
       <Ruler />
-      {ids.map((id) => (
-        <KeyframeTrack key={id} objId={id} />
-      ))}
-      <CameraTrack />
-      {ids.length === 0 ? (
-        <div className="empty-note" data-testid="empty-coaching">
-          Place a unit, select it, then Add keyframe at playhead.
-        </div>
-      ) : null}
+      <div className="timeline-tracks" data-testid="timeline-tracks">
+        {ids.map((id) => (
+          <KeyframeTrack key={id} objId={id} />
+        ))}
+        <CameraTrack />
+        {ids.length === 0 ? (
+          <div className="empty-note" data-testid="empty-coaching">
+            Place a unit, select it, then Add keyframe at playhead.
+          </div>
+        ) : null}
+      </div>
       {hintsOpen ? (
         <div className="timeline-hints" data-testid="timeline-keyboard-hints">
           <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> step frame ·{' '}
