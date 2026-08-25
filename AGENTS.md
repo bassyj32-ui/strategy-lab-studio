@@ -48,6 +48,10 @@
   unless explicitly asked.
 - **No SaaS anything:** no billing, no public signup, no teams, no
   marketplace, no multi-tenant architecture [PRD §3].
+- **INTERNAL-ONLY, FOREVER:** this is a private single-user tool for the
+  owner (bassyj32-ui). It must NEVER be published, shared publicly, or
+  deployed as a public site under any circumstance. No feature work exists
+  to serve hypothetical other users.
 - CapCut/DaVinci own final filmmaking — we stop at exported footage [PRD §92].
 
 ## Coding
