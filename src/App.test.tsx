@@ -50,6 +50,9 @@ afterEach(cleanup);
 
 describe('App persistence (reload data-loss regression)', () => {
   beforeEach(() => {
+    // Mock fns keep call history across tests — start each test clean.
+    vi.mocked(saveAutosave).mockClear();
+    vi.mocked(clearAutosave).mockClear();
     act(() => {
       useSceneStore.setState({
         scene: createDefaultScene(),
@@ -57,6 +60,78 @@ describe('App persistence (reload data-loss regression)', () => {
         future: [],
       });
     });
+  });
+
+  it('AUTO-RESTORES the autosave at boot — no click needed', async () => {
+    // Seed a previous session's work.
+    act(() => {
+      const st = useSceneStore.getState();
+      st.renameScene(st.activeSceneId, 'Cannae');
+    });
+    await act(async () => {
+      await saveAutosave(useSceneStore.getState().getProject());
+    });
+
+    // Simulate relaunch: fresh default scene in memory, same persisted blob.
+    cleanup();
+    act(() => {
+      useSceneStore.setState({ scene: createDefaultScene(), past: [], future: [] });
+    });
+    render(<App />);
+
+    // The saved project is loaded straight into the store…
+    await waitFor(() => {
+      expect(useSceneStore.getState().scene.name).toBe('Cannae');
+    });
+    // …and only a small "Start fresh" toast confirms it (no blocking banner).
+    // Own waitFor: the zustand store commit and the React toast state can
+    // land in separate renders under load.
+    await waitFor(() => {
+      expect(screen.getByTestId('session-toast')).toBeTruthy();
+    });
+  });
+
+  it('"Start fresh" wipes the autosave and resets to a clean default scene', async () => {
+    act(() => {
+      const st = useSceneStore.getState();
+      st.renameScene(st.activeSceneId, 'Trebia');
+    });
+    await act(async () => {
+      await saveAutosave(useSceneStore.getState().getProject());
+    });
+    cleanup();
+    act(() => {
+      useSceneStore.setState({ scene: createDefaultScene(), past: [], future: [] });
+    });
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByTestId('session-toast')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByTestId('session-toast-fresh'));
+    expect(clearAutosave).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.queryByTestId('session-toast')).toBeNull();
+    });
+    expect(useSceneStore.getState().scene.name).toBe(createDefaultScene().name);
+    expect(useSceneStore.getState().inactiveScenes).toEqual({});
+    expect(useSceneStore.getState().past).toHaveLength(0);
+  });
+
+  it('flushes the debounced autosave when the tab goes hidden (zero-loss window)', async () => {
+    render(<App />);
+    act(() => {
+      useSceneStore.getState().renameScene(useSceneStore.getState().activeSceneId, 'Zama');
+    });
+    expect(saveAutosave).not.toHaveBeenCalled(); // still inside debounce window
+
+    const doc = document as Document & { hidden: boolean };
+    const prevHidden = Object.getOwnPropertyDescriptor(doc, 'hidden');
+    Object.defineProperty(doc, 'hidden', { value: true, configurable: true });
+    fireEvent(document, new Event('visibilitychange'));
+    Object.defineProperty(doc, 'hidden', prevHidden ?? { value: false, configurable: true });
+
+    expect(saveAutosave).toHaveBeenCalledTimes(1);
   });
 
   it('does NOT clear the autosave when the user closes/reloads with unsaved work', async () => {
@@ -74,16 +149,6 @@ describe('App persistence (reload data-loss regression)', () => {
     window.dispatchEvent(new Event('beforeunload'));
 
     expect(clearAutosave).not.toHaveBeenCalled();
-
-    // Simulate relaunch: fresh store, same persisted blob.
-    cleanup();
-    act(() => {
-      useSceneStore.setState({ scene: createDefaultScene(), past: [], future: [] });
-    });
-    render(<App />);
-    await waitFor(() => {
-      expect(screen.getByTestId('restore-banner')).toBeDefined();
-    });
   });
 
   it('still warns before losing unsaved work (beforeunload prompt)', () => {

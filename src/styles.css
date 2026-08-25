@@ -1172,3 +1172,36 @@ h3 {
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+
+/* ---- Session resume toast (auto-restored previous session) ------------- */
+.session-toast {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  background: rgba(11, 14, 20, 0.92);
+  color: var(--ink);
+  font-size: 12px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+}
+.session-toast button {
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--edge);
+  background: transparent;
+  color: var(--dim);
+  font-size: 11px;
+  cursor: pointer;
+}
+.session-toast button:hover {
+  color: #f5a83c;
+  border-color: #f5a83c;
+}

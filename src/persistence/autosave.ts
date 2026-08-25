@@ -72,16 +72,22 @@ export function memoryStore(): KVStore {
 }
 
 export const AUTOSAVE_KEY = 'sls:autosave';
+/** Legacy single-blob key kept as a fallback source for pre-ring saves. */
 interface AutosaveEnvelope { project: Project; savedAt: number }
 
-export async function saveAutosave(project: Project, opts?: { store?: KVStore }): Promise<void> {
-  const store = opts?.store ?? idbStore;
-  await store.set(AUTOSAVE_KEY, JSON.stringify({ project, savedAt: Date.now() }));
-}
+/**
+ * Snapshot RING (corruption safety net): instead of one blob, keep the last
+ * SNAPSHOT_COUNT autosaves under rotating keys. A write interrupted by a
+ * crash can only damage the newest snapshot — boot then falls back to the
+ * previous one instead of losing everything. `sls:snap:head` names the
+ * newest slot.
+ */
+export const SNAPSHOT_COUNT = 3;
+export const SNAP_HEAD_KEY = 'sls:snap:head';
+export const snapKey = (i: number): string => `sls:snap:${((i % SNAPSHOT_COUNT) + SNAPSHOT_COUNT) % SNAPSHOT_COUNT}`;
 
-export async function loadAutosave(opts?: { store?: KVStore }): Promise<{ project: Project; savedAt: number } | null> {
-  const store = opts?.store ?? idbStore;
-  const raw = await store.get(AUTOSAVE_KEY);
+/** Parse + structurally validate one envelope blob; null when unusable. */
+function parseEnvelope(raw: string | null): AutosaveEnvelope | null {
   if (!raw) return null;
   let env: Partial<AutosaveEnvelope>;
   try { env = JSON.parse(raw); } catch { return null; }
@@ -91,8 +97,36 @@ export async function loadAutosave(opts?: { store?: KVStore }): Promise<{ projec
   return { project: env.project, savedAt };
 }
 
+export async function saveAutosave(project: Project, opts?: { store?: KVStore }): Promise<void> {
+  const store = opts?.store ?? idbStore;
+  const headRaw = await store.get(SNAP_HEAD_KEY);
+  const head = headRaw !== null && /^\d+$/.test(headRaw) ? Number(headRaw) : -1;
+  const next = head + 1; // first ever write lands in slot 0
+  await store.set(snapKey(next), JSON.stringify({ project, savedAt: Date.now() }));
+  await store.set(SNAP_HEAD_KEY, String(((next % SNAPSHOT_COUNT) + SNAPSHOT_COUNT) % SNAPSHOT_COUNT));
+}
+
+export async function loadAutosave(opts?: { store?: KVStore }): Promise<{ project: Project; savedAt: number } | null> {
+  const store = opts?.store ?? idbStore;
+
+  // Newest -> oldest through the ring…
+  const headRaw = await store.get(SNAP_HEAD_KEY);
+  if (headRaw !== null && /^\d+$/.test(headRaw)) {
+    const head = Number(headRaw);
+    for (let age = 0; age < SNAPSHOT_COUNT; age++) {
+      const env = parseEnvelope(await store.get(snapKey(head - age)));
+      if (env) return env;
+    }
+  }
+  // …then the pre-ring single blob, for upgrades from older builds.
+  return parseEnvelope(await store.get(AUTOSAVE_KEY));
+}
+
 export async function clearAutosave(opts?: { store?: KVStore }): Promise<void> {
-  await (opts?.store ?? idbStore).del(AUTOSAVE_KEY);
+  const store = opts?.store ?? idbStore;
+  await store.del(AUTOSAVE_KEY);
+  for (let i = 0; i < SNAPSHOT_COUNT; i++) await store.del(snapKey(i));
+  await store.del(SNAP_HEAD_KEY);
 }
 
 export function debounce<A extends unknown[]>(fn: (...a: A) => void, ms: number): ((...a: A) => void) & { flush(): void; cancel(): void } {

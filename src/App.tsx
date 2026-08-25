@@ -7,16 +7,18 @@ import { RightPanel } from './ui/RightPanel';
 import { PreviewPanel } from './ui/PreviewPanel';
 import { TimelinePanel } from './timeline';
 import { useSceneStore } from './scene/store';
-import type { Project } from './scene/types';
+import { createDefaultScene } from './scene/factory';
 import { saveAutosave, loadAutosave, clearAutosave, debounce } from './persistence/autosave';
-import { RestoreBanner } from './ui/RestoreBanner';
+import { SessionToast } from './ui/SessionToast';
 import { handleEditorShortcut } from './ui/shortcuts';
 
 // MVP-1 editor shell (Wave-3 UX layout):
 //   [ Toolbar+Scenes | CanvasStage | Preview dock + tabbed panel ]  top row
 //   [              TimelinePanel (full width)                   ]  bottom row
 export function App() {
-  const [pending, setPending] = useState<{ project: Project; savedAt: number } | null>(null);
+  // When non-null: the previous session's autosave was ALREADY restored at
+  // boot (silently, no click) and this is a small toast offering "Start fresh".
+  const [restoredAt, setRestoredAt] = useState<number | null>(null);
   // Timeline footer height in vh (DAW-style draggable divider, default 34).
   const [timelineH, setTimelineH] = useState(34);
   // Big-screen preview: when true the SAME <PreviewPanel> instance is moved
@@ -66,21 +68,37 @@ export function App() {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, []);
 
-  // On mount, recover any autosaved project from a previous session.
+  // On mount, RESUME the previous session automatically: if an autosave
+  // exists, load it straight into the store — no click, no banner. The user
+  // lands exactly where they left off; a small toast offers "Start fresh".
   useEffect(() => {
     let alive = true;
     loadAutosave()
-      .then((a) => { if (alive && a) setPending(a); })
+      .then((a) => {
+        if (!alive || !a) return;
+        useSceneStore.getState().loadProjectFromJson(JSON.stringify(a.project));
+        setRestoredAt(a.savedAt);
+      })
       .catch(() => {});
+    // Ask Chrome to treat our IndexedDB as persistent (never evict under
+    // disk pressure). Fire-and-forget: unsupported browsers just ignore it.
+    void navigator.storage?.persist?.().catch(() => {});
     return () => { alive = false; };
   }, []);
 
   // Debounced autosave: only real content edits (scene / inactiveScenes /
   // activeSceneId changing) trigger a write — selection/tool changes don't.
+  // The debounce shrinks the 0.8s loss window to ZERO at the moments a tab
+  // actually goes away: hidden (tab switch/minimize) and pagehide (close,
+  // reload, navigate) both flush any pending write immediately.
   useEffect(() => {
     const debounced = debounce(() => {
       void saveAutosave(useSceneStore.getState().getProject()).catch(() => {});
     }, 800);
+    const onHidden = () => { if (document.hidden) debounced.flush(); };
+    const onPageHide = () => debounced.flush();
+    document.addEventListener('visibilitychange', onHidden);
+    window.addEventListener('pagehide', onPageHide);
     const unsub = useSceneStore.subscribe((state, prev) => {
       const same =
         state.scene === prev.scene &&
@@ -88,18 +106,28 @@ export function App() {
         state.activeSceneId === prev.activeSceneId;
       if (!same) debounced();
     });
-    return () => { unsub(); debounced.cancel(); };
+    return () => {
+      unsub();
+      document.removeEventListener('visibilitychange', onHidden);
+      window.removeEventListener('pagehide', onPageHide);
+      debounced.cancel();
+    };
   }, []);
 
-  const onRestore = () => {
-    if (!pending) return;
-    useSceneStore.getState().loadProjectFromJson(JSON.stringify(pending.project));
-    setPending(null);
-  };
-
-  const onDiscard = async () => {
+  /** "Start fresh" on the resume toast: wipe the autosave + reset the store. */
+  const onStartFresh = async () => {
     await clearAutosave();
-    setPending(null);
+    const fresh = createDefaultScene();
+    useSceneStore.setState({
+      scene: fresh,
+      inactiveScenes: {},
+      activeSceneId: fresh.id,
+      past: [],
+      future: [],
+      selectedObjId: undefined,
+      selectedIds: [],
+    });
+    setRestoredAt(null);
   };
 
   // Global editor shortcuts (⌘D duplicate / ⌘G group / ⌘⇧G ungroup /
@@ -114,8 +142,8 @@ export function App() {
 
   return (
     <div className="app">
-      {pending && (
-        <RestoreBanner savedAt={pending.savedAt} onRestore={onRestore} onDiscard={onDiscard} />
+      {restoredAt !== null && (
+        <SessionToast savedAt={restoredAt} onStartFresh={onStartFresh} />
       )}
       <div className="app-main">
         <div className="app-side left">
