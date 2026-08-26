@@ -14,6 +14,18 @@ const BattleSceneAlpha: FC<BattleSceneProps> = ({ scene }) => (
   <BattleScene scene={scene} exportMode="alpha" />
 );
 
+/** Null-safe metadata derived from scene.timeline (guards against incomplete props). */
+function sceneMetadata(scene: BattleSceneProps['scene']) {
+  const fps = scene?.timeline?.fps ?? 30;
+  const duration = scene?.timeline?.duration ?? 10;
+  return {
+    fps,
+    durationInFrames: Math.round(duration * fps),
+    width: EXPORT_RESOLUTION.width,
+    height: EXPORT_RESOLUTION.height,
+  };
+}
+
 /**
  * Remotion root. Registers two Compositions over the SAME `BattleScene`
  * component (single source of truth for frames):
@@ -47,17 +59,7 @@ export const RemotionRoot: FC = () => {
         durationInFrames={300}
         width={EXPORT_RESOLUTION.width}
         height={EXPORT_RESOLUTION.height}
-        calculateMetadata={({ props }) => {
-          const scene = props.scene;
-          return {
-            fps: scene.timeline.fps,
-            durationInFrames: Math.round(
-              scene.timeline.duration * scene.timeline.fps
-            ),
-            width: EXPORT_RESOLUTION.width,
-            height: EXPORT_RESOLUTION.height,
-          };
-        }}
+        calculateMetadata={({ props }) => sceneMetadata(props.scene)}
       />
       <Composition
         id="BattleSceneAlpha"
@@ -67,17 +69,7 @@ export const RemotionRoot: FC = () => {
         durationInFrames={300}
         width={EXPORT_RESOLUTION.width}
         height={EXPORT_RESOLUTION.height}
-        calculateMetadata={({ props }) => {
-          const scene = props.scene;
-          return {
-            fps: scene.timeline.fps,
-            durationInFrames: Math.round(
-              scene.timeline.duration * scene.timeline.fps
-            ),
-            width: EXPORT_RESOLUTION.width,
-            height: EXPORT_RESOLUTION.height,
-          };
-        }}
+        calculateMetadata={({ props }) => sceneMetadata(props.scene)}
       />
     </>
   );

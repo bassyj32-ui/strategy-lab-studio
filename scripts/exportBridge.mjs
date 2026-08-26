@@ -192,6 +192,17 @@ export function parseRemotionProgress(buffer, carry = {}) {
       c.stage = 'rendering';
       continue;
     }
+
+    // Catch common Remotion failure modes that don't start with "error":
+    // "ffmpeg was not found", "No usable sandbox", "Could not find Chrome", etc.
+    if (
+      /ffmpeg\s+(was\s+not\s+found|not\s+found|is\s+not\s+installed)/i.test(line) ||
+      /could\s+not\s+find\s+chrome/i.test(line) ||
+      /no\s+usable\s+sandbox/i.test(line)
+    ) {
+      c.error = line;
+      continue;
+    }
   }
 
   return c;
