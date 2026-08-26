@@ -463,6 +463,8 @@ export interface SceneState {
    */
   autoKeyframe: boolean;
   setAutoKeyframe: (v: boolean) => void;
+  /** Count of keyframes written by the last Auto-KF gesture (for UI feedback). */
+  lastAutoKfCount: number;
 
   // ---- History primitives ----
   /** Apply a discrete mutation as a single undoable transaction. */
@@ -767,6 +769,7 @@ export const useSceneStore = create<SceneState>()(
   activeLayerId: DEFAULT_LAYER_ID,
   activeTool: 'select',
   autoKeyframe: false,
+  lastAutoKfCount: 0,
 
     transaction: (fn, label) => {
       let result: ReturnType<typeof fn>;
@@ -813,6 +816,7 @@ export const useSceneStore = create<SceneState>()(
         // span, so gesture + keyframes are ONE undo step (never irreversible).
         if (state.autoKeyframe && autoKfDirty.size > 0) {
           const t = usePlaybackStore.getState().currentTime;
+          let count = 0;
           for (const id of autoKfDirty) {
             const obj = state.scene.objects[id];
             if (!obj) continue;
@@ -825,7 +829,9 @@ export const useSceneStore = create<SceneState>()(
               list.push(kf);
               list.sort((a, b) => a.time - b.time);
             }
+            count++;
           }
+          state.lastAutoKfCount = count;
           autoKfDirty.clear();
         }
       });

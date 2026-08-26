@@ -13,6 +13,7 @@ import { usePlaybackStore } from './timeline/playbackStore';
 import { createDefaultScene } from './scene/factory';
 import { saveAutosave, loadAutosave, clearAutosave, debounce } from './persistence/autosave';
 import { SessionToast } from './ui/SessionToast';
+import { AutoKfToast } from './ui/AutoKfToast';
 import { handleEditorShortcut, isTypingTarget } from './ui/shortcuts';
 
 // MVP-1 editor shell (Wave-3 UX layout):
@@ -153,6 +154,7 @@ export function App() {
       {restoredAt !== null && (
         <SessionToast savedAt={restoredAt} onStartFresh={onStartFresh} />
       )}
+      <AutoKfToast />
       <div className="app-main">
         <div className="app-side left">
           {/* Asset library is the left column now (owner workflow: everything

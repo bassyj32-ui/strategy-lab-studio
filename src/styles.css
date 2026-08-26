@@ -1381,6 +1381,24 @@ h3 {
   border-color: var(--signal);
 }
 
+/* ---- Auto-KF feedback toast ------------------------------------------- */
+.auto-kf-toast {
+  position: fixed;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1100;
+  padding: 5px 12px;
+  border: 1px solid var(--signal);
+  border-radius: 6px;
+  background: rgba(11, 14, 20, 0.88);
+  color: var(--signal);
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+
 /* --- CapCut-style scrollbars ---------------------------------- */
 ::-webkit-scrollbar {
   width: 10px;

@@ -40,6 +40,7 @@ import {
   composeTransform,
   worldPointToLocal,
 } from '../objects/groups';
+import { getObjectWorldTransformAtTime } from '../timeline/selectors';
 import type {
   Asset,
   Keyframe,
@@ -646,6 +647,8 @@ export function CanvasStage() {
           },
         });
       }
+      // Feedback: show toast with keyframe count.
+      useSceneStore.setState({ lastAutoKfCount: points.length });
     }
     setTool('select');
   };
@@ -946,9 +949,9 @@ export function CanvasStage() {
               rotation={pT.rotation}
             >
                {objectsForLayer(scene, layer.id).map((obj) => {
-                 const worldT = resolveWorldTransform(scene.objects, obj.id);
+                 const worldT = getObjectWorldTransformAtTime(scene, obj.id, currentTime);
                  const parentWorldT = obj.parentId
-                   ? resolveWorldTransform(scene.objects, obj.parentId)
+                   ? getObjectWorldTransformAtTime(scene, obj.parentId, currentTime)
                    : null;
                  // Editor shadow preview (Tab D): mirror the Remotion render's
                  // asset-driven `defaultShadow` so the canvas matches the export.
