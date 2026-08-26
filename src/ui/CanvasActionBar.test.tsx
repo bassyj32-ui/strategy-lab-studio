@@ -20,7 +20,7 @@ beforeEach(() => {
 });
 
 describe('CanvasActionBar (relocated Toolbar actions)', () => {
-  it('renders map/save/export, group/ungroup and the formation builder', () => {
+  it('renders map/save/export, group/ungroup, path tool and the formation builder', () => {
     render(<CanvasActionBar />);
     for (const id of [
       'import-map',
@@ -28,6 +28,7 @@ describe('CanvasActionBar (relocated Toolbar actions)', () => {
       'export-video',
       'group',
       'ungroup',
+      'path-tool',
       'formation-pattern',
       'formation-child-type',
       'formation-count',
@@ -37,6 +38,21 @@ describe('CanvasActionBar (relocated Toolbar actions)', () => {
     ]) {
       expect(screen.getByTestId(id)).toBeTruthy();
     }
+  });
+
+  it('path-tool button toggles activeTool between path and select', () => {
+    render(<CanvasActionBar />);
+    const btn = screen.getByTestId('path-tool');
+    expect(btn.textContent).toBe('Draw Path');
+    expect(useSceneStore.getState().activeTool).toBe('select');
+
+    fireEvent.click(btn);
+    expect(useSceneStore.getState().activeTool).toBe('path');
+    expect(btn.textContent).toBe('✓ Path');
+
+    fireEvent.click(btn);
+    expect(useSceneStore.getState().activeTool).toBe('select');
+    expect(btn.textContent).toBe('Draw Path');
   });
 
   it('group/ungroup gate on selection; grouping selects the new parent', () => {

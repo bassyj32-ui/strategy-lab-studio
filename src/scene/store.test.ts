@@ -149,6 +149,8 @@ describe('scene store', () => {
     expect(s().activeTool).toBe('arrow');
     s().undo();
     expect(s().activeTool).toBe('arrow'); // Tool state survives undo/redo.
+    s().setTool('path');
+    expect(s().activeTool).toBe('path');
     s().setTool('select');
     expect(s().activeTool).toBe('select');
   });

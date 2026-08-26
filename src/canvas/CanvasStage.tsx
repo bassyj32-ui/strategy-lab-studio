@@ -1,4 +1,4 @@
-import { useRef, useState, useMemo } from 'react';
+import { useRef, useState, useMemo, useEffect } from 'react';
 import type { DragEvent as ReactDragEvent, ReactNode } from 'react';
 import {
   Stage,
@@ -614,6 +614,42 @@ export function CanvasStage() {
     setTool('select'); // One arrow per arming — predictable hand-off.
   };
 
+  // ---- Path draw gesture ----
+  // Click-to-place-point polyline; double-click finishes; applies position
+  // keyframes to the selected object along the drawn path.
+  const pathPointsRef = useRef<Array<{ x: number; y: number }>>([]);
+  const [pathCursor, setPathCursor] = useState<{ x: number; y: number } | null>(null);
+
+  const finishPathDraw = (): void => {
+    const points = pathPointsRef.current;
+    pathPointsRef.current = [];
+    setPathCursor(null);
+    if (points.length < 2) return; // Need ≥2 points for a path.
+    suppressNextClickRef.current = true;
+
+    // Apply path as position keyframes to the selected object.
+    if (selected) {
+      const duration = Math.max(scene.timeline.duration, 1);
+      const id = selected.id;
+      const addKf = useSceneStore.getState().addKeyframe;
+      // Place a keyframe at each drawn waypoint, evenly spaced over time.
+      for (let i = 0; i < points.length; i++) {
+        const t = (i / (points.length - 1)) * duration;
+        addKf(id, {
+          time: Math.round(t * 100) / 100,
+          transform: {
+            x: points[i].x,
+            y: points[i].y,
+            rotation: selected.transform.rotation,
+            scale: selected.transform.scale,
+            opacity: selected.transform.opacity,
+          },
+        });
+      }
+    }
+    setTool('select');
+  };
+
   /** Ghost line while drawing (world coords, rendered non-interactively). */
   const ghost =
     arrowTailRef.current && arrowHead
@@ -621,6 +657,12 @@ export function CanvasStage() {
           tail: arrowTailRef.current,
           head: arrowHead,
         }
+      : null;
+
+  /** Path preview while drawing — committed points + trailing cursor line. */
+  const pathPreview =
+    activeTool === 'path' && pathPointsRef.current.length > 0
+      ? { points: pathPointsRef.current, cursor: pathCursor }
       : null;
 
   /** True when this event hit the EMPTY canvas rather than an object. */
@@ -637,9 +679,17 @@ export function CanvasStage() {
       ? resolveWorldTransform(scene.objects, selected.parentId)
       : null;
 
-  // Double-click empty canvas = reset view. Skipped right after a pan so a
-  // drag ending in a quick second press can't teleport the view.
+  // Double-click: finish path draw (if active) or reset view on empty canvas.
+  // Skipped right after a pan so a drag ending in a quick second press can't
+  // teleport the view.
   const handleStageDblClick = (e: KonvaEventObject<MouseEvent>): void => {
+    if (activeTool === 'path') {
+      // Remove the point added by the click that preceded this dblClick,
+      // then finish with the remaining points.
+      pathPointsRef.current.pop();
+      finishPathDraw();
+      return;
+    }
     if (!isBackgroundTarget(e) || panMovedRef.current) return;
     resetView();
   };
@@ -651,9 +701,9 @@ export function CanvasStage() {
       suppressNextClickRef.current = false;
       return;
     }
-    // While the arrow tool is armed the gesture handlers own background
-    // clicks (a too-short drag is discarded above) — never clear selection.
-    if (activeTool === 'arrow') return;
+    // While the arrow or path tool is armed the gesture handlers own background
+    // clicks — never clear selection.
+    if (activeTool === 'arrow' || activeTool === 'path') return;
     // A background pan ends with a click on the empty canvas — don't punish
     // the gesture by clearing the current selection.
     if (panMovedRef.current) {
@@ -747,6 +797,20 @@ export function CanvasStage() {
     setSelected(id);
   };
 
+  // Escape key cancels in-progress path drawing.
+  useEffect(() => {
+    if (activeTool !== 'path') return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        pathPointsRef.current = [];
+        setPathCursor(null);
+        setTool('select');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [activeTool, setTool]);
+
   const verticalLines: ReactNode[] = [];
   for (let gx = GRID_STEP; gx < worldSize.w; gx += GRID_STEP) {
     verticalLines.push(
@@ -787,6 +851,14 @@ export function CanvasStage() {
           onDblTap={handleStageDblClick}
           onWheel={handleWheel}
           onMouseDown={(e) => {
+            // Path tool: background click adds a waypoint.
+            if (activeTool === 'path') {
+              if (e.target !== e.target.getStage()) return;
+              const world = pointerWorld();
+              if (!world) return;
+              pathPointsRef.current.push(world);
+              return;
+            }
             // Arrow tool: a background press starts a draw gesture instead of
             // a pan; object presses stay object drags.
             if (activeTool === 'arrow') {
@@ -802,6 +874,12 @@ export function CanvasStage() {
             if (e.target === e.target.getStage()) panHandlers.onPointerDown();
           }}
           onMouseMove={() => {
+            // Path tool: show trailing cursor preview line.
+            if (activeTool === 'path' && pathPointsRef.current.length > 0) {
+              const world = pointerWorld();
+              if (world) setPathCursor(world);
+              return;
+            }
             if (arrowTailRef.current) {
               const world = pointerWorld();
               if (world) setArrowHead(world);
@@ -918,6 +996,53 @@ export function CanvasStage() {
                     opacity={0.8}
                   />
                 </Group>
+              </Group>
+            )}
+          </Layer>
+
+          {/* Path-draw preview (non-interactive): committed polyline + cursor trail. */}
+          <Layer listening={false}>
+            {pathPreview && (
+              <Group>
+                {/* Committed path segments. */}
+                {pathPreview.points.length >= 2 && (
+                  <Line
+                    points={pathPreview.points.flatMap((p) => [p.x, p.y])}
+                    stroke="#4d8dff"
+                    strokeWidth={3}
+                    opacity={0.7}
+                    dash={[10, 6]}
+                    lineCap="round"
+                    lineJoin="round"
+                  />
+                )}
+                {/* Waypoint dots. */}
+                {pathPreview.points.map((p, i) => (
+                  <Circle
+                    key={i}
+                    x={p.x}
+                    y={p.y}
+                    radius={5}
+                    fill="#4d8dff"
+                    opacity={0.9}
+                  />
+                ))}
+                {/* Trailing cursor line (last point → cursor). */}
+                {pathPreview.cursor && pathPreview.points.length > 0 && (
+                  <Line
+                    points={[
+                      pathPreview.points[pathPreview.points.length - 1].x,
+                      pathPreview.points[pathPreview.points.length - 1].y,
+                      pathPreview.cursor.x,
+                      pathPreview.cursor.y,
+                    ]}
+                    stroke="#4d8dff"
+                    strokeWidth={2}
+                    opacity={0.4}
+                    dash={[6, 4]}
+                    lineCap="round"
+                  />
+                )}
               </Group>
             )}
           </Layer>

@@ -69,7 +69,7 @@ const MAX_HISTORY = 100;
  * Canvas tool (store-root UI state, never undoable). `select` is the default
  * pan/select behaviour; `arrow` turns background drags into arrow drawing.
  */
-export type EditorTool = 'select' | 'arrow';
+export type EditorTool = 'select' | 'arrow' | 'path';
 
 /**
  * One undo step = the WHOLE project at that moment (active scene + every

@@ -27,6 +27,8 @@ export function CanvasActionBar() {
   const redo = useSceneStore((s) => s.redo);
   const canUndo = useSceneStore((s) => s.past.length > 0);
   const canRedo = useSceneStore((s) => s.future.length > 0);
+  const activeTool = useSceneStore((s) => s.activeTool);
+  const setTool = useSceneStore((s) => s.setTool);
   const mapFileRef = useRef<HTMLInputElement | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [showExport, setShowExport] = useState(false);
@@ -182,6 +184,18 @@ export function CanvasActionBar() {
         onClick={handleUngroup}
       >
         Ungroup
+      </button>
+
+      <span className="action-sep" aria-hidden="true" />
+
+      <button
+        type="button"
+        data-testid="path-tool"
+        className={activeTool === 'path' ? 'active' : undefined}
+        title="Draw path — click waypoints, double-click to finish"
+        onClick={() => setTool(activeTool === 'path' ? 'select' : 'path')}
+      >
+        {activeTool === 'path' ? '✓ Path' : 'Draw Path'}
       </button>
 
       <span className="action-sep" aria-hidden="true" />
