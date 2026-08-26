@@ -402,6 +402,7 @@ export function AssetsPanel() {
                     faction: asset.metadata?.faction,
                     x: worldSize.w / 2,
                     y: worldSize.h / 2,
+                    scale: 0.3,
                   });
                   selectObjectUnified(id);
                 }}

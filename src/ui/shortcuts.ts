@@ -43,6 +43,18 @@ export function handleEditorShortcut(e: {
   const mod = e.metaKey || e.ctrlKey;
   const s = useSceneStore.getState();
 
+  if (mod && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+    e.preventDefault();
+    s.undo();
+    return true;
+  }
+
+  if (mod && e.key.toLowerCase() === 'z' && e.shiftKey) {
+    e.preventDefault();
+    s.redo();
+    return true;
+  }
+
   if (mod && !e.shiftKey && e.key.toLowerCase() === 'd') {
     if (!s.selectedObjId) return false;
     e.preventDefault();

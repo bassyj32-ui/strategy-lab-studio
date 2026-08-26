@@ -22,6 +22,8 @@ export interface CreateObjectOpts {
    * only CameraState is radians-canonical — see render/draw.ts conversion).
    */
   rotation?: number;
+  /** Initial scale. Defaults to 1. Placed sprites typically start smaller. */
+  scale?: number;
   /** ARROW-ONLY: local-space shaft length. Defaults to DEFAULT_ARROW_LENGTH. */
   length?: number;
   /** ARROW-ONLY: explicit stroke color override. */
@@ -40,6 +42,7 @@ function withTransform(opts: CreateObjectOpts): Transform {
   if (opts.x !== undefined) t.x = opts.x;
   if (opts.y !== undefined) t.y = opts.y;
   if (opts.rotation !== undefined) t.rotation = opts.rotation;
+  if (opts.scale !== undefined) t.scale = opts.scale;
   return t;
 }
 

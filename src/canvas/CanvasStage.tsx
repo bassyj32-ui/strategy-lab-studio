@@ -728,6 +728,7 @@ export function CanvasStage() {
         faction,
         x: world.x,
         y: world.y,
+        scale: 0.3,
       });
       setSelected(id);
       return;
@@ -980,7 +981,6 @@ export function CanvasStage() {
         <SelectionHud
           obj={selected}
           worldT={selectedWorldT}
-          parentFrame={selectedParentFrame}
           displayCamera={displayCamera}
           vp={vp}
           displayScale={DISPLAY_SCALE}

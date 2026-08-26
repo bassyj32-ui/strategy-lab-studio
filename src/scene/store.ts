@@ -501,6 +501,8 @@ export interface SceneState {
       y?: number;
       /** DEGREES (object-transform convention). */
       rotation?: number;
+      /** Initial scale. Defaults to 1. */
+      scale?: number;
       /** ARROW-ONLY. */
       length?: number;
       /** ARROW-ONLY. */
@@ -907,6 +909,7 @@ export const useSceneStore = create<SceneState>()(
           x: opts?.x,
           y: opts?.y,
           rotation: opts?.rotation,
+          scale: opts?.scale,
           length: opts?.length,
           color: opts?.color,
         });

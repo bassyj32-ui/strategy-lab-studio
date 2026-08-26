@@ -4,12 +4,9 @@ import type { Transform, SceneObject, CameraState } from '../scene/types';
 import type { Viewport } from '../camera/cameraMath';
 import { worldToScreen } from '../camera/cameraMath';
 import { useSceneStore } from '../scene/store';
-import { worldPointToLocal } from '../objects/groups';
 import {
   scrubValue,
-  localDeltaForWorldDelta,
   normalizeDeg,
-  clampScale,
 } from '../canvas/gizmo';
 
 /**
@@ -23,18 +20,9 @@ import {
  * Reads/writes ONLY existing store actions — no store changes.
  */
 
-const IDENTITY_FRAME: Transform = {
-  x: 0,
-  y: 0,
-  rotation: 0,
-  scale: 1,
-  opacity: 1,
-};
-
 interface HudProps {
   obj: SceneObject;
   worldT: Transform;
-  parentFrame: Transform | null;
   displayCamera: CameraState;
   vp: Viewport;
   displayScale: number;
@@ -44,7 +32,6 @@ interface HudProps {
 export function SelectionHud({
   obj,
   worldT,
-  parentFrame,
   displayCamera,
   vp,
   displayScale,
@@ -66,20 +53,6 @@ export function SelectionHud({
     beginInteraction();
   };
 
-  /** World px delta → parent-frame local delta (roots: identity). */
-  const mapDelta = (dxCss: number, dyCss: number, fine: boolean) => {
-    const k =
-      (fine ? 0.1 : 1) /
-      Math.max(displayCamera.zoom, 0.0001) /
-      Math.max(displayScale, 0.0001);
-    return localDeltaForWorldDelta(
-      (wx: number, wy: number) =>
-        worldPointToLocal(parentFrame ?? IDENTITY_FRAME, wx, wy),
-      dxCss * k,
-      dyCss * k
-    );
-  };
-
   const apply = (partial: Partial<Transform>): void =>
     updateTransform(obj.id, partial);
 
@@ -95,41 +68,6 @@ export function SelectionHud({
       style={{ left, top }}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      <ScrubField
-        label="X"
-        value={obj.transform.x}
-        format={(v) => String(Math.round(v))}
-        onBegin={beginGesture}
-        onEnd={endInteraction}
-        onScrubPx={(dx, dy, fine) =>
-          apply({ x: baseRef.current.x + mapDelta(dx, dy, fine).x })
-        }
-        onCommit={(v) => apply({ x: v })}
-      />
-      <ScrubField
-        label="Y"
-        value={obj.transform.y}
-        format={(v) => String(Math.round(v))}
-        onBegin={beginGesture}
-        onEnd={endInteraction}
-        onScrubPx={(dx, dy, fine) =>
-          apply({ y: baseRef.current.y + mapDelta(dx, dy, fine).y })
-        }
-        onCommit={(v) => apply({ y: v })}
-      />
-      <ScrubField
-        label="SCL"
-        value={obj.transform.scale}
-        format={(v) => `${v.toFixed(2)}×`}
-        onBegin={beginGesture}
-        onEnd={endInteraction}
-        onScrubPx={(dx, _dy, fine) =>
-          apply({
-            scale: clampScale(scrubValue(baseRef.current.scale, dx, 0.01, fine)),
-          })
-        }
-        onCommit={(v) => apply({ scale: clampScale(v) })}
-      />
       <ScrubField
         label="ROT"
         value={obj.transform.rotation}

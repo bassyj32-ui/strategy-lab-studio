@@ -23,6 +23,10 @@ export function CanvasActionBar() {
   const createFormation = useSceneStore((s) => s.createFormation);
   const worldSize = useSceneStore((s) => s.scene.worldSize);
   const objects = useSceneStore((s) => s.scene.objects);
+  const undo = useSceneStore((s) => s.undo);
+  const redo = useSceneStore((s) => s.redo);
+  const canUndo = useSceneStore((s) => s.past.length > 0);
+  const canRedo = useSceneStore((s) => s.future.length > 0);
   const mapFileRef = useRef<HTMLInputElement | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [showExport, setShowExport] = useState(false);
@@ -128,7 +132,7 @@ export function CanvasActionBar() {
         data-testid="save-scene"
         onClick={handleSaveScene}
       >
-        Save Scene JSON
+        Save Project
       </button>
       <button
         type="button"
@@ -136,6 +140,27 @@ export function CanvasActionBar() {
         onClick={openExport}
       >
         Export Video…
+      </button>
+
+      <span className="action-sep" aria-hidden="true" />
+
+      <button
+        type="button"
+        data-testid="undo"
+        disabled={!canUndo}
+        title="Undo (⌘Z)"
+        onClick={undo}
+      >
+        ↩ Undo
+      </button>
+      <button
+        type="button"
+        data-testid="redo"
+        disabled={!canRedo}
+        title="Redo (⌘⇧Z)"
+        onClick={redo}
+      >
+        ↪ Redo
       </button>
 
       <span className="action-sep" aria-hidden="true" />
