@@ -67,6 +67,9 @@ import { layerCamera, parallaxLayerTransform } from '../camera/parallax';
 import { CameraHud } from './CameraHud';
 import { useMapImage } from './useMapImage';
 import { CameraPathOverlay } from './CameraPathOverlay';
+import { WaypointHandles } from './WaypointHandles';
+import { GroupOverlay } from './GroupOverlay';
+import { EffectOverlay } from './EffectOverlay';
 import { ASSET_DND_MIME } from '../ui/AssetsPanel';
 import { SelectionHud } from '../ui/SelectionHud';
 import {
@@ -633,9 +636,26 @@ export function CanvasStage() {
       const duration = Math.max(scene.timeline.duration, 1);
       const id = selected.id;
       const addKf = useSceneStore.getState().addKeyframe;
-      // Place a keyframe at each drawn waypoint, evenly spaced over time.
+      // Distance-proportional timing: each leg's share of the timeline is
+      // proportional to its length, so the object crosses at a constant
+      // speed (boss-approved). Zero-length legs (duplicate points) get the
+      // even-spacing fallback so time still advances.
+      const legs: number[] = [];
+      let total = 0;
+      for (let i = 1; i < points.length; i++) {
+        const len = dist(points[i - 1], points[i]);
+        legs.push(len);
+        total += len;
+      }
       for (let i = 0; i < points.length; i++) {
-        const t = (i / (points.length - 1)) * duration;
+        let t: number;
+        if (total > 0 && i > 0) {
+          let cum = 0;
+          for (let j = 0; j < i; j++) cum += legs[j];
+          t = (cum / total) * duration;
+        } else {
+          t = (i / (points.length - 1)) * duration;
+        }
         addKf(id, {
           time: Math.round(t * 100) / 100,
           transform: {
@@ -1050,6 +1070,16 @@ export function CanvasStage() {
             )}
           </Layer>
 
+          {/* Group overlay: dashed AABB + spokes for groups (non-interactive). */}
+          <Layer listening={false}>
+            <GroupOverlay scene={scene} currentTime={currentTime} />
+          </Layer>
+
+          {/* Battle FX: deterministic burst rings for active effect instances. */}
+          <Layer listening={false}>
+            <EffectOverlay scene={scene} time={currentTime} />
+          </Layer>
+
           {/* Selection outline on top (non-interactive). */}
           <Layer listening={false}>
             {selected && selectedWorldT && (
@@ -1074,6 +1104,15 @@ export function CanvasStage() {
                 }
               />
             )}
+          </Layer>
+
+          {/* Persistent waypoint polyline + draggable handles (selected object, ≥2 keyframes). */}
+          <Layer>
+            {selected &&
+              (scene.keyframes[selected.id]?.length ?? 0) >= 2 &&
+              !(activeTool === 'path' && pathPreview) && (
+                <WaypointHandles obj={selected} parentWorld={selectedParentFrame} />
+              )}
           </Layer>
 
           {/* Transform gizmos (interactive, topmost): corner-scale + rotate. */}
