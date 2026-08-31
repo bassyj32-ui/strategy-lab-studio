@@ -92,7 +92,35 @@ export function TimelinePanel() {
   const toggleClosingCard = useSceneStore((s) => s.toggleClosingCard);
   const autoKeyframe = useSceneStore((s) => s.autoKeyframe);
   const setAutoKeyframe = useSceneStore((s) => s.setAutoKeyframe);
+  const transaction = useSceneStore((s) => s.transaction);
   const [hintsOpen, setHintsOpen] = useState(false);
+  const [durationDraft, setDurationDraft] = useState<string | null>(null);
+  const [fpsDraft, setFpsDraft] = useState<string | null>(null);
+
+  const commitDuration = () => {
+    if (durationDraft === null) return;
+    const raw = Number(durationDraft);
+    setDurationDraft(null);
+    if (!Number.isFinite(raw) || raw <= 0) return;
+    const d = Math.round(raw * 100) / 100;
+    if (d !== duration) {
+      transaction((scene) => {
+        scene.timeline.duration = d;
+      });
+    }
+  };
+  const commitFps = () => {
+    if (fpsDraft === null) return;
+    const raw = Number(fpsDraft);
+    setFpsDraft(null);
+    if (!Number.isFinite(raw) || raw <= 0) return;
+    const f = Math.round(raw);
+    if (f !== fps) {
+      transaction((scene) => {
+        scene.timeline.fps = f;
+      });
+    }
+  };
 
   /** Apply a §27 preset; Commander Focus targets the selected object. */
   const onPresetChange = (e: ReactChangeEvent<HTMLSelectElement>) => {
@@ -121,6 +149,39 @@ export function TimelinePanel() {
     <div className="timeline-panel" data-testid="timeline-panel" onKeyDown={onPanelKeyDown}>
       <div className="timeline-top-row">
         <TransportControls />
+        <label className="timeline-meta" title="Timeline duration in seconds">
+          Dur
+          <input
+            type="number"
+            data-testid="timeline-duration"
+            min={0.1}
+            step={0.1}
+            value={durationDraft !== null ? durationDraft : duration}
+            onChange={(e) => setDurationDraft(e.target.value)}
+            onFocus={() => setDurationDraft(String(duration))}
+            onBlur={commitDuration}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+            }}
+          />
+        </label>
+        <label className="timeline-meta" title="Frames per second">
+          FPS
+          <input
+            type="number"
+            data-testid="timeline-fps"
+            min={1}
+            max={60}
+            step={1}
+            value={fpsDraft !== null ? fpsDraft : fps}
+            onChange={(e) => setFpsDraft(e.target.value)}
+            onFocus={() => setFpsDraft(String(fps))}
+            onBlur={commitFps}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+            }}
+          />
+        </label>
         <select
           className="camera-preset"
           data-testid="camera-preset"

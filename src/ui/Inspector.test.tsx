@@ -180,12 +180,12 @@ describe('Inspector keyframe panel (Object tab, keyframes first)', () => {
     return id!;
   };
 
-  it('lists every keyframe with jump / easing / remove controls', () => {
+  it('lists every keyframe with time / jump / easing / remove controls', () => {
     const id = seedTwoKeyframes();
     render(<Inspector />);
     expect(screen.getByTestId('inspector-keyframes')).toBeTruthy();
-    expect(screen.getByTestId('kf-jump-0').textContent).toBe('0.00s');
-    expect(screen.getByTestId('kf-jump-1').textContent).toBe('2.00s');
+    expect((screen.getByTestId(`kf-time-${id}-0`) as HTMLInputElement).value).toBe('0.00');
+    expect((screen.getByTestId(`kf-time-${id}-2`) as HTMLInputElement).value).toBe('2.00');
 
     // Jump seeks the playhead AND highlights the timeline diamond.
     fireEvent.click(screen.getByTestId('kf-jump-1'));

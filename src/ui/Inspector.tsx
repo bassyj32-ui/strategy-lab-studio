@@ -31,6 +31,51 @@ const FIELDS: FieldDef[] = [
   { key: 'opacity', label: 'Opacity', step: 0.1 },
 ];
 
+/**
+ * Editable keyframe time. A keyframe's `time` IS its identity (store invariant),
+ * so editing it is a time-move with replace-on-collision semantics. Draft in
+ * local state, committed on blur/Enter — never one history entry per keystroke.
+ */
+function KeyframeTimeInput({
+  objId,
+  time,
+  duration,
+  onChange,
+}: {
+  objId: string;
+  time: number;
+  duration: number;
+  onChange: (newTime: number) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = () => {
+    if (draft === null) return;
+    const raw = Number(draft);
+    setDraft(null);
+    if (!Number.isFinite(raw)) return;
+    const t = Math.min(duration, Math.max(0, raw));
+    if (t !== time) onChange(t);
+  };
+  return (
+    <input
+      type="number"
+      data-testid={`kf-time-${objId}-${time}`}
+      className="kf-time-input"
+      min={0}
+      max={duration}
+      step={duration > 0 ? duration / 100 : 0.01}
+      value={draft !== null ? draft : time.toFixed(2)}
+      onFocus={() => setDraft(String(time))}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+      }}
+      title="Edit keyframe time (moves this keyframe; replaces any occupant at that time)"
+    />
+  );
+}
+
 export function Inspector() {
   const scene = useSceneStore((s) => s.scene);
   const selectedObjId = useSceneStore((s) => s.selectedObjId);
@@ -146,9 +191,15 @@ export function Inspector() {
           <ul className="kf-list">
             {(keyframes[obj.id] ?? []).map((k, i) => (
               <li key={k.time} className={k.time === currentTime ? 'now' : ''}>
+                <KeyframeTimeInput
+                  objId={obj.id}
+                  time={k.time}
+                  duration={scene.timeline.duration}
+                  onChange={(t) => updateKeyframe(obj.id, k.time, { time: t })}
+                />
                 <button
                   type="button"
-                  className="kf-time"
+                  className="kf-jump"
                   data-testid={`kf-jump-${i}`}
                   title="Jump playhead to this keyframe"
                   onClick={() => {
@@ -156,7 +207,7 @@ export function Inspector() {
                     selectKeyframeUnified(obj.id, k.time);
                   }}
                 >
-                  {k.time.toFixed(2)}s
+                  ⤵
                 </button>
                 <select
                   data-testid={`kf-easing-${i}`}

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useSceneStore } from '../../scene/store';
 import { usePlaybackStore } from '../playbackStore';
 import { useTimelineSelection } from '../selection';
@@ -22,6 +23,7 @@ export function KeyframeEditor() {
   const selectedKeyframeTime = useTimelineSelection((s) => s.selectedKeyframeTime);
   const objects = useSceneStore((s) => s.scene.objects);
   const keyframes = useSceneStore((s) => s.scene.keyframes);
+  const duration = useSceneStore((s) => s.scene.timeline.duration);
   const currentTime = usePlaybackStore((s) => s.currentTime);
   const setKeyframeAtTime = useSceneStore((s) => s.setKeyframeAtTime);
   const updateKeyframe = useSceneStore((s) => s.updateKeyframe);
@@ -33,6 +35,19 @@ export function KeyframeEditor() {
     obj && kfTime !== null
       ? keyframes[obj.id]?.find((k) => k.time === kfTime)
       : undefined;
+
+  const [timeDraft, setTimeDraft] = useState<string | null>(null);
+  const commitTime = () => {
+    if (timeDraft === null || !obj || kfTime === null) {
+      setTimeDraft(null);
+      return;
+    }
+    const raw = Number(timeDraft);
+    setTimeDraft(null);
+    if (!Number.isFinite(raw)) return;
+    const t = Math.min(duration, Math.max(0, raw));
+    if (t !== kfTime) updateKeyframe(obj.id, kfTime, { time: t });
+  };
 
   return (
     <div className="keyframe-editor" data-testid="keyframe-editor">
@@ -65,6 +80,25 @@ export function KeyframeEditor() {
       >
         Move to playhead
       </button>
+      <label className="kf-easing">
+        Time
+        <input
+          type="number"
+          data-testid="kf-time-edit"
+          disabled={!selectedKf}
+          min={0}
+          max={duration}
+          step={duration > 0 ? duration / 100 : 0.01}
+          value={timeDraft !== null ? timeDraft : selectedKf?.time.toFixed(2) ?? ''}
+          onFocus={() => setTimeDraft(selectedKf?.time.toFixed(2) ?? '')}
+          onChange={(e) => setTimeDraft(e.target.value)}
+          onBlur={commitTime}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          }}
+          title="Edit keyframe time (moves this keyframe; replaces any occupant at that time)"
+        />
+      </label>
       <label className="kf-easing">
         Easing
         <select
