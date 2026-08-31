@@ -9,6 +9,9 @@ import type {
   CameraState,
   ControlPoint,
   Easing,
+  EffectInstance,
+  EffectInstanceId,
+  EffectKind,
   Faction,
   Keyframe,
   LayerId,
@@ -34,6 +37,7 @@ import {
 } from './sceneSystem';
 import type { Project } from './types';
 import { createSceneObject } from '../objects/factory';
+import { BURST_DURATION } from '../objects/effects';
 import {
   canReparent,
   composeTransform,
@@ -48,7 +52,12 @@ import type {
   FormationPattern,
 } from './types';
 import type { ImportAssetOptions, ImportMapOptions } from '../assets/types';
-import { importAssetFromFile, importMapAsset, generateAssetId } from '../assets/import';
+import {
+  importAssetFromFile,
+  importMapAsset,
+  generateAssetId,
+  removeBackgroundFromAssetSrc,
+} from '../assets/import';
 import {
   buildCameraPreset,
   type CameraPresetFocus,
@@ -465,6 +474,14 @@ export interface SceneState {
   setAutoKeyframe: (v: boolean) => void;
   /** Count of keyframes written by the last Auto-KF gesture (for UI feedback). */
   lastAutoKfCount: number;
+  /**
+   * Background-remover target: the asset card currently clicked in the Assets
+   * panel. Store-root UI state (like `activeTool`) so the canvas toolbar's
+   * Remove BG control and the panel's card highlight share the same target.
+   * Never serialized into the scene.
+   */
+  bgTargetAssetId: AssetId | null;
+  setBgTargetAssetId: (id: AssetId | null) => void;
 
   // ---- History primitives ----
   /** Apply a discrete mutation as a single undoable transaction. */
@@ -543,6 +560,23 @@ export interface SceneState {
   /** Drag helper: nudge an object by a delta (no extra snapshot). */
   moveObjectBy: (id: ObjId, dx: number, dy: number) => void;
 
+  // ---- Battle FX (collision-triggered effect instances, §BATTLE FX) ----
+  /**
+   * Scan every red-vs-blue unit pair over [from..to] and materialize ONE
+   * impact burst (+ a lingering smoke) at the FIRST time the interpolated
+   * world positions come within `threshold` world units. Deterministic:
+   * samples the canonical interpolator on a per-frame grid, so the same
+   * clashes appear in editor preview and Remotion export. One transaction =
+   * one undo step. Returns the created instance summaries.
+   */
+  detectBattleEffects: (opts?: {
+    threshold?: number;
+    from?: number;
+    to?: number;
+    impact?: EffectKind;
+    linger?: EffectKind;
+  }) => { id: EffectInstanceId; time: number; kind: EffectKind }[];
+
   // ---- Keyframes (single source of truth: scene.keyframes, PRD §65/§99) ----
   /** Insert (or replace at the same time) a keyframe; array kept sorted by time. */
   addKeyframe: (objId: ObjId, keyframe: Keyframe) => void;
@@ -569,6 +603,17 @@ export interface SceneState {
     time: number,
     which: 'cpIn' | 'cpOut',
     cp: ControlPoint | null
+  ) => void;
+  /**
+   * SESSION-CONTRACT position edit for waypoint dragging (Request 1): patch
+   * the keyframe's transform x/y WITHOUT pushing history. Caller MUST wrap in
+   * beginInteraction/endInteraction for ONE undoable gesture (same contract as
+   * updateTransform / setKeyframeCp).
+   */
+  setKeyframeTransform: (
+    objId: ObjId,
+    time: number,
+    transform: Partial<Transform>
   ) => void;
 
   // ---- Layers ----
@@ -755,6 +800,20 @@ export interface SceneState {
      * Returns the new asset id (null when `id` is unknown).
      */
     duplicateAsset: (id: AssetId) => AssetId | null;
+    /**
+     * Chroma-key background removal (P0 extension): processes `id`'s image on
+     * an offscreen canvas, replacing every pixel within `tolerance` of
+     * `colorKey` with transparency, then creates a NEW derived asset (new id,
+     * `(BG removed)` name, transparent PNG `src`) mirrored across every scene
+     * in ONE undoable transaction. The original asset bytes are untouched
+     * (PRD §43). Non-map assets only. Returns the new asset id, or null when
+     * the source is unknown / a map / processing fails.
+     */
+    removeAssetBackground: (
+      id: AssetId,
+      colorKey: string,
+      tolerance: number,
+    ) => Promise<AssetId | null>;
   }
 
 export const useSceneStore = create<SceneState>()(
@@ -770,6 +829,7 @@ export const useSceneStore = create<SceneState>()(
   activeTool: 'select',
   autoKeyframe: false,
   lastAutoKfCount: 0,
+  bgTargetAssetId: null,
 
     transaction: (fn, label) => {
       let result: ReturnType<typeof fn>;
@@ -1068,6 +1128,17 @@ export const useSceneStore = create<SceneState>()(
         if (!k) return;
         if (cp === null) delete k[which];
         else k[which] = { dx: cp.dx, dy: cp.dy };
+      });
+    },
+
+    setKeyframeTransform: (objId, time, transform) => {
+      // No snapshot: session contract for waypoint dragging (see interface doc).
+      set((state) => {
+        const list = state.scene.keyframes[objId];
+        if (!list) return;
+        const k = list.find((o) => o.time === time);
+        if (!k) return;
+        k.transform = mergeTransform(k.transform, transform);
       });
     },
 
@@ -1487,6 +1558,12 @@ export const useSceneStore = create<SceneState>()(
       });
     },
 
+    setBgTargetAssetId: (id) => {
+      set((state) => {
+        state.bgTargetAssetId = id;
+      });
+    },
+
     updateCamera: (updater) => {
       set((state) => {
         state.scene.camera = updater(state.scene.camera);
@@ -1832,6 +1909,95 @@ export const useSceneStore = create<SceneState>()(
         }
       });
       return copy.id;
+    },
+
+    removeAssetBackground: async (id, colorKey, tolerance) => {
+      const s = get();
+      const src = s.scene.assets[id];
+      if (!src || src.kind === 'map') return null;
+      let cleanSrc: string;
+      try {
+        cleanSrc = await removeBackgroundFromAssetSrc(src.src, colorKey, tolerance);
+      } catch {
+        return null;
+      }
+      const clean: Asset = {
+        ...src,
+        id: generateAssetId(src.kind),
+        name: `${src.name} (BG removed)`,
+        src: cleanSrc,
+      };
+      set((state) => {
+        pushHistory(state);
+        state.scene.assets[clean.id] = clean;
+        for (const sc of Object.values(state.inactiveScenes)) {
+          sc.assets[clean.id] = clean;
+        }
+      });
+      return clean.id;
+    },
+
+    detectBattleEffects: (opts) => {
+      const scene = get().scene;
+      const threshold = opts?.threshold ?? 120;
+      const from = opts?.from ?? 0;
+      const to = opts?.to ?? scene.timeline.duration;
+      const impact = opts?.impact ?? 'impact';
+      const linger = opts?.linger ?? 'smoke';
+      const fps = Math.max(1, Math.round(scene.timeline.fps));
+      const step = 1 / fps;
+      const n = Math.max(2, Math.ceil((to - from) / step));
+      const units = Object.values(scene.objects).filter(
+        (o) => o.type === 'unit' && (o.faction === 'red' || o.faction === 'blue')
+      );
+      const reds = units.filter((o) => o.faction === 'red');
+      const blues = units.filter((o) => o.faction === 'blue');
+      const created: EffectInstance[] = [];
+      for (const r of reds) {
+        for (const b of blues) {
+          let clash: { t: number; x: number; y: number } | null = null;
+          for (let i = 0; i < n; i++) {
+            const t = from + i * step;
+            const rw = getObjectWorldTransformAtTime(scene, r.id, t);
+            const bw = getObjectWorldTransformAtTime(scene, b.id, t);
+            const dx = rw.x - bw.x;
+            const dy = rw.y - bw.y;
+            if (Math.hypot(dx, dy) <= threshold) {
+              clash = { t, x: (rw.x + bw.x) / 2, y: (rw.y + bw.y) / 2 };
+              break;
+            }
+          }
+          if (clash) {
+            created.push(
+              {
+                id: createId('fx'),
+                kind: impact,
+                x: clash.x,
+                y: clash.y,
+                startTime: clash.t,
+                duration: BURST_DURATION[impact],
+              },
+              {
+                id: createId('fx'),
+                kind: linger,
+                x: clash.x,
+                y: clash.y,
+                startTime: clash.t,
+                duration: BURST_DURATION[linger],
+              }
+            );
+          }
+        }
+      }
+      if (created.length === 0) return [];
+      set((state) => {
+        pushHistory(state);
+        if (!state.scene.effects) state.scene.effects = {};
+        for (const inst of created) {
+          state.scene.effects[inst.id] = inst;
+        }
+      });
+      return created.map((c) => ({ id: c.id, time: c.startTime, kind: c.kind }));
     },
   }))
 );

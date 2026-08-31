@@ -56,3 +56,56 @@ export function effectRings(kind: EffectKind, time: number): EffectRing[] {
     };
   });
 }
+
+// ---------------------------------------------------------------------------
+// §BATTLE FX (P0 extension) — one-shot INSTANCE bursts. Same deterministic
+// ring math above, windowed to a finite lifetime so a burst spawns, expands,
+// fades and is gone instead of looping forever.
+// ---------------------------------------------------------------------------
+
+/** World-space radius multiplier origin for an instance's rings (both doors). */
+export const INSTANCE_BASE_RADIUS = 64;
+
+/** Default per-kind burst lifetime (seconds) used by the Battle FX trigger. */
+export const BURST_DURATION: Record<EffectKind, number> = {
+  smoke: 1.8,
+  dust: 1.2,
+  impact: 0.6,
+  fire: 0.8,
+  glow: 0.9,
+};
+
+function clamp01(n: number): number {
+  return n < 0 ? 0 : n > 1 ? 1 : n;
+}
+
+/** True while an instance is visible: inside its [startTime, start+duration] window. */
+export function instanceActive(
+  t: number,
+  startTime: number,
+  duration: number
+): boolean {
+  return t >= startTime && t <= startTime + Math.max(duration, 1e-6);
+}
+
+/**
+ * Burst ring data at a LOCAL time inside the instance's lifetime
+ * (localTime = t - startTime). Wraps effectRings and scales alpha by an
+ * in-out envelope (fade in over the first 20%, hold, fade out over the last
+ * 40%). At localTime >= duration the envelope is 0, so one-shot bursts never
+ * loop. Pure (kind, localTime, duration) math — identical in both doors.
+ */
+export function effectBurst(
+  kind: EffectKind,
+  localTime: number,
+  duration: number
+): EffectRing[] {
+  const life = Math.max(duration, 1e-6);
+  const p = clamp01(localTime / life);
+  const envelope =
+    p < 0.2 ? p / 0.2 : p > 0.6 ? Math.max(0, 1 - (p - 0.6) / 0.4) : 1;
+  return effectRings(kind, localTime).map((ring) => ({
+    radiusFactor: ring.radiusFactor,
+    alpha: ring.alpha * envelope,
+  }));
+}

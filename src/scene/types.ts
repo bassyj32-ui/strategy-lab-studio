@@ -31,6 +31,28 @@ export type Faction = 'red' | 'blue' | 'neutral';
  */
 export type EffectKind = 'smoke' | 'dust' | 'impact' | 'fire' | 'glow';
 
+export type EffectInstanceId = string;
+
+/**
+ * §BATTLE FX (P0 extension, boss-approved): a ONE-SHOT procedural burst that
+ * lives on the scene timeline as DATA (SSOT). Unlike the static per-object
+ * `effect` loop (§50), an instance has a world position, a start time and a
+ * duration — it spawns, expands and fades once, then is gone. Rendered by BOTH
+ * doors (editor preview + Remotion export) from the same pure ring math in
+ * objects/effects.ts, so preview and export stay byte-identical.
+ */
+export interface EffectInstance {
+  id: EffectInstanceId;
+  kind: EffectKind;
+  /** WORLD coordinates — instances live in world space, like the camera. */
+  x: number;
+  y: number;
+  /** Timeline second the burst begins. */
+  startTime: number;
+  /** Total lifetime in seconds (fade in → hold → fade out). */
+  duration: number;
+}
+
 export interface AssetMetadata {
   aspectRatio: number;        // width / height, derived at import (immutable)
   defaultScale: number;       // suggested placement scale, 1 = 100%
@@ -293,6 +315,13 @@ export interface Scene {
    * getCameraAtTime while `camera` remains the live editing base.
    */
   cameraTrack?: CameraKeyframe[];
+  /**
+   * §BATTLE FX: one-shot effect bursts on this scene's timeline. OPTIONAL so
+   * pre-feature scenes stay byte-identical (absent === no bursts). Instances
+   * are data, never baked into assets; both render doors evaluate them at
+   * time t when startTime <= t <= startTime + duration.
+   */
+  effects?: Record<EffectInstanceId, EffectInstance>;
   /**
    * OPTIONAL cinematic edge-darkening (P2 "Decisive Move", PRD §38). Purely
    * a presentation flag: painted as a deterministic radial gradient in the

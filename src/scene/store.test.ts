@@ -1464,3 +1464,77 @@ describe('undoLastAIChange', () => {
     expect(s().past[s().past.length - 1].label).toBe('AI Change #2');
   });
 });
+
+describe('battle FX (collision-triggered effect instances, §BATTLE FX)', () => {
+  beforeEach(reset);
+
+  const placeUnit = (faction: 'red' | 'blue', x: number, y: number): ObjId => {
+    const id = s().createObjectOfType('unit', { x, y, faction });
+    return id;
+  };
+
+  it('materializes impact + smoke at the midpoint when opposing units are within range', () => {
+    placeUnit('red', 1000, 500);
+    placeUnit('blue', 1010, 505); // ~11.18 world units apart (< 120 default)
+    const pastBefore = s().past.length;
+    const result = s().detectBattleEffects();
+    // impact + linger smoke, both at the same first-sample time.
+    expect(result).toHaveLength(2);
+    expect(result[0].kind).toBe('impact');
+    expect(result[1].kind).toBe('smoke');
+    expect(result[0].time).toBe(0); // static pair → first sample
+    expect(result[1].time).toBe(result[0].time);
+    const effects = s().scene.effects;
+    expect(effects).toBeDefined();
+    expect(Object.keys(effects!)).toHaveLength(2);
+    for (const inst of Object.values(effects!)) {
+      expect(inst.x).toBeCloseTo(1005, 0);
+      expect(inst.y).toBeCloseTo(502.5, 0);
+      expect(inst.startTime).toBe(0);
+    }
+    // ONE undo step reverts the whole burst.
+    s().undo();
+    expect(s().scene.effects).toBeUndefined();
+    expect(s().past.length).toBe(pastBefore);
+  });
+
+  it('returns [] and writes nothing when units never come within range', () => {
+    placeUnit('red', 0, 0);
+    placeUnit('blue', 2000, 0);
+    const pastBefore = s().past.length;
+    const result = s().detectBattleEffects();
+    expect(result).toEqual([]);
+    expect(s().scene.effects).toBeUndefined();
+    expect(s().past.length).toBe(pastBefore);
+  });
+
+  it('ignores same-faction pairs and non-unit objects', () => {
+    placeUnit('red', 100, 100);
+    placeUnit('red', 102, 100); // same faction — no clash
+    s().createObjectOfType('marker', { x: 100, y: 103 }); // not a unit
+    expect(s().detectBattleEffects()).toEqual([]);
+  });
+
+  it('respects the threshold option', () => {
+    placeUnit('red', 0, 0);
+    placeUnit('blue', 200, 0);
+    // Wide threshold catches it; narrow misses it.
+    expect(s().detectBattleEffects({ threshold: 300 })).toHaveLength(2);
+    s().undo();
+    expect(s().detectBattleEffects({ threshold: 50 })).toEqual([]);
+  });
+
+  it('detects a mid-timeline clash from converging keyframes', () => {
+    const red = placeUnit('red', 0, 0);
+    const blue = placeUnit('blue', 400, 0);
+    s().addKeyframe(red, { time: 0, transform: { x: 0, y: 0, rotation: 0, scale: 1, opacity: 1 } });
+    s().addKeyframe(red, { time: 5, transform: { x: 300, y: 0, rotation: 0, scale: 1, opacity: 1 } });
+    s().addKeyframe(blue, { time: 0, transform: { x: 400, y: 0, rotation: 0, scale: 1, opacity: 1 } });
+    s().addKeyframe(blue, { time: 5, transform: { x: 100, y: 0, rotation: 0, scale: 1, opacity: 1 } });
+    const result = s().detectBattleEffects();
+    expect(result).toHaveLength(2);
+    // They cross near t=2.5 (300+400 - … linear); clash time > 0.
+    expect(result[0].time).toBeGreaterThan(0);
+    expect(result[0].time).toBeLessThan(5);
+  });
+});

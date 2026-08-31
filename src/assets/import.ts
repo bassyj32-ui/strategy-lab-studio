@@ -117,3 +117,74 @@ export async function importMapAsset(
     },
   };
 }
+
+/**
+ * Parses a `#rrggbb` or `#rgb` hex color into an RGB triplet used as the
+ * color-key for background removal. Accepts lowercase/uppercase.
+ */
+export function parseColorKey(color: string): { r: number; g: number; b: number } {
+  const hex = color.trim().replace(/^#/, '');
+  const full =
+    hex.length === 3
+      ? hex
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : hex;
+  const value = Number.parseInt(full, 16);
+  if (!/^[0-9a-fA-F]{6}$/.test(full) || Number.isNaN(value)) {
+    throw new Error(`Invalid color key "${color}" (expected #rrggbb)`);
+  }
+  return { r: (value >> 16) & 0xff, g: (value >> 8) & 0xff, b: value & 0xff };
+}
+
+/**
+ * Chroma-key background removal on an asset's `src` (data:/blob:/http URL).
+ * Loads the image onto an offscreen canvas and sets every pixel within
+ * `tolerance` (per-channel, 0–255) of the `colorKey` to fully transparent.
+ * Returns a new PNG data: URL. The source `src` is never mutated (PRD §43).
+ *
+ * Single-color key only — no feathered fringes/anti-alias cleanup (that is a
+ * P1 polish). Intended for clean green-screen / magenta-key imports.
+ */
+export async function removeBackgroundFromAssetSrc(
+  src: string,
+  colorKey: string,
+  tolerance: number,
+): Promise<string> {
+  const { width, height } = await readImageDimensions(src);
+  const t = Math.max(0, Math.min(255, tolerance));
+  const key = parseColorKey(colorKey);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) throw new Error('Canvas 2D context unavailable');
+  await new Promise<void>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve();
+    };
+    img.onerror = () => reject(new Error('Failed to load image for background removal'));
+    img.src = src;
+  });
+
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const px = imageData.data;
+  for (let i = 0; i < px.length; i += 4) {
+    const r = px[i];
+    const g = px[i + 1];
+    const b = px[i + 2];
+    if (
+      Math.abs(r - key.r) <= t &&
+      Math.abs(g - key.g) <= t &&
+      Math.abs(b - key.b) <= t
+    ) {
+      px[i + 3] = 0; // fully transparent
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
+  return canvas.toDataURL('image/png');
+}

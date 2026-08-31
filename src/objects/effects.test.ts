@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { effectRings, effectColor, META } from './effects';
+import {
+  effectRings,
+  effectColor,
+  effectBurst,
+  instanceActive,
+  INSTANCE_BASE_RADIUS,
+  BURST_DURATION,
+  META,
+} from './effects';
 import type { EffectKind } from '../scene/types';
 
 const KINDS: EffectKind[] = ['smoke', 'dust', 'impact', 'fire', 'glow'];
@@ -64,5 +72,50 @@ describe('effects (§50 procedural overlays)', () => {
     expect(effectRings('impact', 0)).toHaveLength(2);
     expect(effectRings('fire', 0)).toHaveLength(2);
     expect(effectRings('glow', 0)).toHaveLength(1);
+  });
+});
+
+describe('effects (battle FX instances, §BATTLE FX)', () => {
+  it('every kind has a positive burst duration and base radius', () => {
+    for (const kind of KINDS) {
+      expect(BURST_DURATION[kind]).toBeGreaterThan(0);
+    }
+    expect(INSTANCE_BASE_RADIUS).toBeGreaterThan(0);
+  });
+
+  it('instanceActive respects the window boundaries', () => {
+    expect(instanceActive(0.5, 0.5, 0.6)).toBe(true);
+    expect(instanceActive(1.1, 0.5, 0.6)).toBe(true);
+    expect(instanceActive(0.49, 0.5, 0.6)).toBe(false); // before start
+    expect(instanceActive(1.1001, 0.5, 0.6)).toBe(false); // after end
+  });
+
+  it('effectBurst is deterministic and fades to silence at/beyond duration', () => {
+    for (const kind of KINDS) {
+      const d = BURST_DURATION[kind];
+      expect(effectBurst(kind, 0.3, d)).toEqual(effectBurst(kind, 0.3, d));
+      for (const ring of effectBurst(kind, d, d)) {
+        expect(ring.alpha).toBeLessThanOrEqual(1e-9);
+      }
+      for (const ring of effectBurst(kind, d + 1, d)) {
+        expect(ring.alpha).toBeLessThanOrEqual(1e-9);
+      }
+    }
+  });
+
+  it('effectBurst alpha never exceeds the ring math peak', () => {
+    for (const kind of KINDS) {
+      const d = BURST_DURATION[kind];
+      for (let i = 0; i < 64; i++) {
+        const t = (i / 64) * d;
+        const burst = effectBurst(kind, t, d);
+        const raw = effectRings(kind, t);
+        expect(burst).toHaveLength(raw.length);
+        for (let j = 0; j < burst.length; j++) {
+          expect(burst[j].alpha).toBeLessThanOrEqual(raw[j].alpha + 1e-9);
+          expect(burst[j].radiusFactor).toBeCloseTo(raw[j].radiusFactor, 6);
+        }
+      }
+    }
   });
 });
