@@ -167,8 +167,9 @@ export function parseRemotionProgress(buffer, carry = {}) {
       continue;
     }
 
-    // e.g. "Rendering frame 12/300"
-    const m = line.match(/Rendering frame\s+(\d+)\s*\/\s*(\d+)/i);
+    // e.g. "Rendering frame 12/300" (older) or "Rendered 12/300" / "Rendered 12/60" (remotion 4.x)
+    let m = line.match(/Rendering frame\s+(\d+)\s*\/\s*(\d+)/i);
+    if (!m) m = line.match(/Rendered\s+(\d+)\s*\/\s*(\d+)/i);
     if (m) {
       // Progress is flowing — clear any stale error flag so a prior benign
       // error line can't keep blocking the stream.
@@ -180,6 +181,19 @@ export function parseRemotionProgress(buffer, carry = {}) {
       c.maxFrame = Math.max(c.maxFrame, f);
       c.progress = t > 0 ? f / t : 0;
       c.stage = 'rendering';
+      continue;
+    }
+    // e.g. "Encoded 37/60"
+    const enc = line.match(/Encoded\s+(\d+)\s*\/\s*(\d+)/i);
+    if (enc) {
+      c.error = null;
+      const f = parseInt(enc[1], 10);
+      const t = parseInt(enc[2], 10);
+      c.frame = f;
+      c.total = t;
+      c.maxFrame = Math.max(c.maxFrame, f);
+      c.progress = t > 0 ? f / t : 0;
+      c.stage = 'encoding';
       continue;
     }
 
@@ -254,7 +268,7 @@ export async function startExport({ scene, mode, emit } = {}) {
 
   emit?.({ type: 'start', mode, outputPath, totalFrames });
 
-  child.stderr?.on('data', (chunk) => {
+  const onProgressChunk = (chunk) => {
     const text = chunk.toString();
     // Cap accumulated stderr so long renders can't grow memory unbounded
     // (minor #8).
@@ -267,7 +281,9 @@ export async function startExport({ scene, mode, emit } = {}) {
       progress: carry.progress,
       stage: carry.stage,
     });
-  });
+  };
+  child.stderr?.on('data', onProgressChunk);
+  child.stdout?.on('data', onProgressChunk);
 
   child.on('close', (code) => {
     if (!activeJob || activeJob.child !== child) return;
@@ -350,18 +366,22 @@ export function createExportHandlers() {
       body += chunk.toString();
     });
     req.on('end', () => {
+      console.log('[exportBridge] end body', body.length, 'bytes');
       if (responded) return;
       let parsed;
       try {
         parsed = JSON.parse(body || '{}');
-      } catch {
+      } catch (e) {
+        console.log('[exportBridge] invalid JSON', e.message);
         responded = true;
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Invalid JSON body' }));
         return;
       }
       const { scene, mode } = parsed;
+      console.log('[exportBridge] parsed mode', mode, 'scene', scene?.id, 'objects', scene?.objects ? Object.keys(scene.objects).length : 0, 'timeline', scene?.timeline);
       if (!scene || !mode) {
+        console.log('[exportBridge] missing scene or mode');
         responded = true;
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'scene and mode are required' }));
@@ -394,9 +414,13 @@ export function createExportHandlers() {
     req.on('error', () => {
       /* ignore transport errors; close handler will clean up */
     });
-    req.on('close', () => {
-      // Client disconnected — abort the render.
-      cancelExport();
+    // IMPORTANT: do NOT use req.on('close') — Node fires IncomingMessage
+    // 'close' immediately after 'end' (request body fully consumed), even
+    // though the response (SSE) is still open. That would cancel every
+    // export right after start. Listen on res instead and only cancel if
+    // the response was aborted before a terminal event.
+    res.on('close', () => {
+      if (!res.writableEnded) cancelExport();
     });
   }
 

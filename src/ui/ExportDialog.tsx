@@ -90,13 +90,15 @@ export function ExportDialog({
   };
 
   const statusText =
-    status === 'done'
-      ? 'Done'
-      : status === 'error'
-        ? `Error: ${error}`
-        : status === 'cancelled'
-          ? 'Cancelled'
-          : stage || 'Rendering…';
+    status === 'idle'
+      ? 'Ready — press Export to start'
+      : status === 'done'
+        ? 'Done'
+        : status === 'error'
+          ? `Error: ${error}`
+          : status === 'cancelled'
+            ? 'Cancelled'
+            : stage || 'Rendering…';
 
   return (
     <div style={overlayStyle} onClick={handleClose}>
