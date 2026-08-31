@@ -837,3 +837,37 @@ describe('title cards in drawScene', () => {
     expect(run()).toBe(run());
   });
 });
+
+describe('battle FX instances (§BATTLE FX)', () => {
+  const withInstance = (startTime: number, duration: number): Scene => {
+    const scene = makeScene();
+    scene.effects = {
+      fx1: {
+        id: 'fx1',
+        kind: 'impact',
+        x: 960,
+        y: 540,
+        startTime,
+        duration,
+      },
+    };
+    return scene;
+  };
+
+  it('paints burst rings at the instance position while active', () => {
+    const { ctx, raw } = makeCtx();
+    drawScene(ctx, withInstance(0, 0.6), 0.2, 30, { w: 1920, h: 1080 }, {});
+    expect(raw.fillStyleHistory).toContain('#f5a83c'); // impact colour
+    // Ring arcs drawn near the instance position (960, 540).
+    const ringArcs = (raw.arc as ReturnType<typeof vi.fn>).mock.calls.filter(
+      (c) => (c[0] as number) > 900 && (c[1] as number) > 500
+    );
+    expect(ringArcs.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('paints nothing for an inactive (outside-window) instance', () => {
+    const { ctx, raw } = makeCtx();
+    drawScene(ctx, withInstance(10, 0.6), 0.2, 30, { w: 1920, h: 1080 }, {});
+    expect(raw.fillStyleHistory).not.toContain('#f5a83c');
+  });
+});

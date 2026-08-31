@@ -52,6 +52,10 @@ export function AssetsPanel() {
   // UX repair pass: duplicate-asset action + search filter + delete
   // feedback that names the referencing units.
   const duplicateAsset = useSceneStore((s) => s.duplicateAsset);
+  // Background-remover TARGET selection (the toolbar's Remove BG control reads
+  // the same store-root id; card clicks only point it at this asset).
+  const bgTargetAssetId = useSceneStore((s) => s.bgTargetAssetId);
+  const setBgTargetAssetId = useSceneStore((s) => s.setBgTargetAssetId);
   // Subscribed so delete-guard tooltips refresh when units are placed/removed.
   const activeScene = useSceneStore((s) => s.scene);
   const inactiveScenes = useSceneStore((s) => s.inactiveScenes);
@@ -343,8 +347,9 @@ export function AssetsPanel() {
             return (
             <div
               key={asset.id}
-              className="asset-card"
+              className={`asset-card${bgTargetAssetId === asset.id ? ' selected' : ''}`}
               data-testid={`asset-${asset.id}`}
+              onClick={() => setBgTargetAssetId(asset.id)}
               draggable
               onDragStart={(e: DragEvent<HTMLDivElement>) => {
                 e.dataTransfer.setData(ASSET_DND_MIME, asset.id);

@@ -13,7 +13,13 @@ import {
   labelOffsetY,
   badgeOffsetY,
 } from '../objects/annotations';
-import { effectRings, effectColor } from '../objects/effects';
+import {
+  effectRings,
+  effectColor,
+  effectBurst,
+  instanceActive,
+  INSTANCE_BASE_RADIUS,
+} from '../objects/effects';
 import { sortForRender } from '../objects/depth';
 import { arrowStyleSpec } from '../objects/arrowStyles';
 import {
@@ -316,6 +322,30 @@ export function drawScene(
         }
       }
     }
+  }
+
+  // 4b. Battle FX (collision-triggered effect instances). Deterministic burst
+  // rings in WORLD space under the BASE camera, painted after objects so they
+  // read as foreground flashes; each instance only shows inside its window.
+  if (scene.effects) {
+    for (const inst of Object.values(scene.effects)) {
+      if (!instanceActive(t, inst.startTime, inst.duration)) continue;
+      const screen = applyCamera(
+        { x: inst.x, y: inst.y, rotation: 0, scale: 1, opacity: 1 },
+        camera,
+        scene.worldSize,
+        videoSize
+      );
+      const baseR = INSTANCE_BASE_RADIUS * screen.scale;
+      for (const ring of effectBurst(inst.kind, t - inst.startTime, inst.duration)) {
+        ctx.beginPath();
+        ctx.arc(screen.x, screen.y, baseR * ring.radiusFactor, 0, Math.PI * 2);
+        ctx.globalAlpha = screen.opacity * ring.alpha;
+        ctx.fillStyle = effectColor(inst.kind);
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
   }
 
   // 5. Cinematic vignette (PRD §38, scene-level flag). Deterministic radial

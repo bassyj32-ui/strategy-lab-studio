@@ -6,17 +6,23 @@ import { useSceneStore } from '../scene/store';
 import { createDefaultScene } from '../scene/factory';
 
 // The real import reads image dimensions via the DOM `Image` element, which is
-// unavailable in jsdom. Mock ONLY importAssetFromFile; everything else
-// (generateAssetId used by duplicateAsset) stays real (UX pass ④).
+// unavailable in jsdom. Mock ONLY importAssetFromFile + the canvas-based
+// background remover; everything else stays real (UX pass ④).
 vi.mock('../assets/import', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('../assets/import')>();
-  return { ...actual, importAssetFromFile: vi.fn() };
+  return {
+    ...actual,
+    importAssetFromFile: vi.fn(),
+    removeBackgroundFromAssetSrc: vi.fn(),
+  };
 });
 
-import { importAssetFromFile } from '../assets/import';
+import { importAssetFromFile, removeBackgroundFromAssetSrc } from '../assets/import';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mockImport = importAssetFromFile as any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockRemoveBg = removeBackgroundFromAssetSrc as any;
 
 afterEach(() => {
   cleanup();
@@ -73,6 +79,7 @@ class MockDataTransfer {
 
 beforeEach(() => {
   mockImport.mockReset();
+  mockRemoveBg.mockReset();
   act(() => {
     useSceneStore.setState({ scene: createDefaultScene(), past: [], future: [] });
   });
@@ -237,6 +244,51 @@ describe('AssetsPanel', () => {
       render(<AssetsPanel />);
       expect(screen.getByTestId('place-unit-u1')).toBeTruthy();
       expect(screen.getByTestId('place-unit-m1')).toBeTruthy();
+    });
+  });
+
+  describe('background remover target selection (toolbar control)', () => {
+    /** Map assets are explicitly excluded from background removal. */
+    const mapAsset = {
+      id: 'map-1',
+      kind: 'map' as const,
+      name: 'terrain',
+      src: 'data:image/png;base64,mmmm',
+      width: 64,
+      height: 64,
+      metadata: { aspectRatio: 1, defaultScale: 1 },
+    };
+
+    it('clicking a card targets it (store-root id) and highlights it as selected', () => {
+      act(() => {
+        useSceneStore.getState().registerAssets([seedAsset, mapAsset]);
+      });
+      render(<AssetsPanel />);
+      expect(screen.getByTestId('asset-flag-1').className).not.toContain('selected');
+
+      // Clicking a normal image asset targets it.
+      fireEvent.click(screen.getByTestId('asset-flag-1'));
+      expect(useSceneStore.getState().bgTargetAssetId).toBe('flag-1');
+      expect(screen.getByTestId('asset-flag-1').className).toContain('selected');
+
+      // Clicking the map asset also targets it — the toolbar still disables
+      // the control (map assets are never keyed).
+      fireEvent.click(screen.getByTestId('asset-map-1'));
+      expect(useSceneStore.getState().bgTargetAssetId).toBe('map-1');
+      expect(screen.getByTestId('asset-map-1').className).toContain('selected');
+      expect(screen.getByTestId('asset-flag-1').className).not.toContain('selected');
+    });
+
+    it('map assets are never passed to the remover (guard in store)', async () => {
+      act(() => {
+        useSceneStore.getState().registerAsset(mapAsset);
+      });
+      const store = useSceneStore.getState();
+      const newId = await store.removeAssetBackground('map-1', '#00ff00', 30);
+      expect(newId).toBeNull();
+      expect(mockRemoveBg).not.toHaveBeenCalled();
+      // No copy created.
+      expect(Object.keys(useSceneStore.getState().scene.assets)).toEqual(['map-1']);
     });
   });
 
