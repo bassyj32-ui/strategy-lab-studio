@@ -70,6 +70,11 @@ import { CameraPathOverlay } from './CameraPathOverlay';
 import { WaypointHandles } from './WaypointHandles';
 import { GroupOverlay } from './GroupOverlay';
 import { EffectOverlay } from './EffectOverlay';
+import { ShapeGuideOverlay } from './ShapeGuideOverlay';
+import { MarqueeOverlay } from './MarqueeOverlay';
+import { worldRectFromPoints, objectsInWorldRect } from './marquee';
+import type { WorldRect } from './marquee';
+import { isSpaceDown, bindSpaceHold } from '../ui/spaceKey';
 import { ASSET_DND_MIME } from '../ui/AssetsPanel';
 import { SelectionHud } from '../ui/SelectionHud';
 import {
@@ -501,6 +506,8 @@ export function CanvasStage() {
   const scene = useSceneStore((s) => s.scene);
   const selectedObjId = useSceneStore((s) => s.selectedObjId);
   const setSelected = useSceneStore((s) => s.setSelected);
+  const selectedIds = useSceneStore((s) => s.selectedIds);
+  const setSelectedIds = useSceneStore((s) => s.setSelectedIds);
   const createObjectOfType = useSceneStore((s) => s.createObjectOfType);
   // Existing spine action — the HUD routes through it; no store changes.
   const updateCamera = useSceneStore((s) => s.updateCamera);
@@ -595,6 +602,38 @@ export function CanvasStage() {
   // this flag handleStageClick would immediately clear the selection we just
   // made for the brand-new arrow.
   const suppressNextClickRef = useRef(false);
+
+  // ---- Marquee box-select (empty-canvas drag; Space+drag / middle = pan) ----
+  // Plain left-drag on empty canvas draws a rubber-band box; on release the
+  // objects whose world anchors fall inside are selected as a unit (roots, so
+  // grouped members select the whole group). The box itself renders via
+  // <MarqueeOverlay>; gesture state lives here.
+  const marqueeStartRef = useRef<{ x: number; y: number } | null>(null);
+  const marqueeMovedRef = useRef(false);
+  const [marqueeRect, setMarqueeRect] = useState<WorldRect | null>(null);
+
+  useEffect(() => bindSpaceHold(), []);
+
+  const clearMarquee = (): void => {
+    marqueeStartRef.current = null;
+    marqueeMovedRef.current = false;
+    setMarqueeRect(null);
+  };
+
+  const finalizeMarquee = (additive: boolean): void => {
+    const rect = marqueeRect;
+    clearMarquee();
+    if (!rect) return;
+    const hits = objectsInWorldRect(scene, rect, currentTime);
+    if (additive) {
+      // Union: everything already selected stays; new box hits join it.
+      const merged = Array.from(new Set([...selectedIds, ...hits]));
+      setSelectedIds(merged);
+    } else {
+      // Replace (Figma-style). An empty box deselects, like an empty-canvas click.
+      setSelectedIds(hits);
+    }
+  };
 
   /** Pointer position → world coords under the DISPLAYED camera (matches
    * what is on screen — the keyed view when a track drives the stage). */
@@ -731,6 +770,11 @@ export function CanvasStage() {
     // the gesture by clearing the current selection.
     if (panMovedRef.current) {
       panMovedRef.current = false;
+      return;
+    }
+    // A marquee box-select release ends with a click too — same rule.
+    if (marqueeMovedRef.current) {
+      marqueeMovedRef.current = false;
       return;
     }
     // Click on empty canvas (target === Stage) clears the selection AND
@@ -892,9 +936,20 @@ export function CanvasStage() {
               setArrowHead(world);
               return;
             }
-            // Only empty-canvas presses start a pan; object drags stay object
-            // drags.
-            if (e.target === e.target.getStage()) panHandlers.onPointerDown();
+            // Select tool. Empty-canvas presses start a marquee box-select;
+            // Space+drag or middle-mouse pans the camera instead. Object
+            // presses stay object drags.
+            if (e.target === e.target.getStage()) {
+              const world = pointerWorld();
+              const isPanGesture =
+                isSpaceDown() || (e.evt as MouseEvent).button === 1;
+              if (isPanGesture || !world) {
+                panHandlers.onPointerDown();
+              } else {
+                marqueeStartRef.current = world;
+                setMarqueeRect(worldRectFromPoints(world, world));
+              }
+            }
           }}
           onMouseMove={() => {
             // Path tool: show trailing cursor preview line.
@@ -908,18 +963,50 @@ export function CanvasStage() {
               if (world) setArrowHead(world);
               return;
             }
+            if (marqueeStartRef.current) {
+              const world = pointerWorld();
+              if (world) {
+                const rect = worldRectFromPoints(marqueeStartRef.current, world);
+                if (
+                  rect.maxX - rect.minX > 0.5 ||
+                  rect.maxY - rect.minY > 0.5
+                ) {
+                  marqueeMovedRef.current = true;
+                }
+                setMarqueeRect(rect);
+              }
+              return;
+            }
             panHandlers.onPointerMove();
           }}
-          onMouseUp={() => {
+          onMouseUp={(e) => {
             if (arrowTailRef.current) {
               finishArrowDraw();
               return;
             }
+            if (marqueeStartRef.current) {
+              finalizeMarquee((e.evt as MouseEvent).shiftKey);
+              return;
+            }
             panHandlers.onPointerUp();
           }}
-          onMouseLeave={() => {
+          onMouseLeave={(e) => {
             if (arrowTailRef.current) {
               finishArrowDraw();
+              return;
+            }
+            if (marqueeStartRef.current) {
+              // Leaving mid-drag finalizes what was boxed so far (less
+              // surprising than silently losing the gesture) — but only once
+              // the box actually grew. A spurious leave right after press
+              // (the marquee Layer mount re-renders Konva's content DOM, which
+              // can fire a synthetic mouseleave) must not swallow the gesture
+              // or fall through to pan; it just cancels.
+              if (marqueeMovedRef.current) {
+                finalizeMarquee((e.evt as MouseEvent).shiftKey);
+              } else {
+                clearMarquee();
+              }
               return;
             }
             panHandlers.onPointerUp();
@@ -1086,6 +1173,18 @@ export function CanvasStage() {
               <SelectionOutline obj={selected} world={selectedWorldT} asset={selectedAsset} />
             )}
           </Layer>
+
+          {/* Shapes-panel formation guide: ghosts for the targeted shape group. */}
+          <Layer listening={false}>
+            <ShapeGuideOverlay scene={scene} currentTime={currentTime} />
+          </Layer>
+
+          {/* Marquee box-select preview (while dragging on empty canvas). */}
+          {marqueeRect && (
+            <Layer listening={false}>
+              <MarqueeOverlay rect={marqueeRect} />
+            </Layer>
+          )}
 
           {/* Animated-camera trajectory preview (non-interactive, editor only). */}
           <Layer listening={false}>

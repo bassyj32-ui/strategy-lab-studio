@@ -180,7 +180,8 @@ export function selectionRoots(
 export function formationOffsets(
   pattern: FormationPattern,
   count: number,
-  spacing: number
+  spacing: number,
+  opts?: { radius?: number; orientation?: number },
 ): Vec2[] {
   if (count <= 0) return [];
   // Line/column/grid CENTER THE WHOLE FORMATION on the anchor point (the
@@ -225,6 +226,45 @@ export function formationOffsets(
         }
       }
       break;
+    }
+    case 'circle': {
+      if (count === 1) {
+        const r = opts?.radius ?? spacing;
+        offsets.push({ x: 0, y: -r });
+        break;
+      }
+      const r = opts?.radius ?? (spacing * count) / (2 * Math.PI);
+      for (let i = 0; i < count; i++) {
+        const angle = -Math.PI / 2 + (2 * Math.PI * i) / count;
+        offsets.push({ x: Math.cos(angle) * r, y: Math.sin(angle) * r });
+      }
+      break;
+    }
+    case 'crescent': {
+      if (count === 1) {
+        const r = opts?.radius ?? spacing;
+        offsets.push({ x: r, y: 0 });
+        break;
+      }
+      const r = opts?.radius ?? (spacing * count) / Math.PI;
+      // Bow opening toward +X, sweep ~0.9π centered on 0 radians.
+      const sweep = 0.9 * Math.PI;
+      for (let i = 0; i < count; i++) {
+        const t = count === 1 ? 0 : i / (count - 1);
+        const angle = -sweep / 2 + sweep * t;
+        offsets.push({ x: Math.cos(angle) * r, y: Math.sin(angle) * r });
+      }
+      break;
+    }
+  }
+  // Optional global orientation rotation (degrees).
+  if (opts?.orientation) {
+    const rad = (opts.orientation * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    for (let i = 0; i < offsets.length; i++) {
+      const o = offsets[i];
+      offsets[i] = { x: o.x * cos - o.y * sin, y: o.x * sin + o.y * cos };
     }
   }
   return offsets;

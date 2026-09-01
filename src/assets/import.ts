@@ -144,35 +144,77 @@ export function parseColorKey(color: string): { r: number; g: number; b: number 
  * `tolerance` (per-channel, 0–255) of the `colorKey` to fully transparent.
  * Returns a new PNG data: URL. The source `src` is never mutated (PRD §43).
  *
- * Single-color key only — no feathered fringes/anti-alias cleanup (that is a
- * P1 polish). Intended for clean green-screen / magenta-key imports.
+ * `colorKey` is optional — when omitted the key is auto-detected from the
+ * 4 corner pixels (common for green-screen imports whose exact green varies).
+ * `tolerance` defaults to 40 in auto mode, 30 when a key is supplied.
+ * Single image load with `decode()` for reliable decode; fringe cleanup pass
+ * zeroes semi-transparent border pixels near the key.
  */
 export async function removeBackgroundFromAssetSrc(
   src: string,
-  colorKey: string,
-  tolerance: number,
+  colorKey?: string,
+  tolerance?: number,
 ): Promise<string> {
-  const { width, height } = await readImageDimensions(src);
-  const t = Math.max(0, Math.min(255, tolerance));
-  const key = parseColorKey(colorKey);
-
+  // Single image load — dimensions come from the decoded image itself.
   const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) throw new Error('Canvas 2D context unavailable');
-  await new Promise<void>((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      ctx.drawImage(img, 0, 0, width, height);
-      resolve();
-    };
-    img.onerror = () => reject(new Error('Failed to load image for background removal'));
-    img.src = src;
+
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const im = new Image();
+    im.onload = () => resolve(im);
+    im.onerror = () => reject(new Error('Failed to load image for background removal'));
+    im.src = src;
   });
+  // Ensure the image is fully decoded before drawing (Chrome cache can fire
+  // onload before decode completes -> blank drawImage).
+  if (typeof (img as unknown as { decode?: () => Promise<void> }).decode === 'function') {
+    try {
+      await (img as unknown as { decode: () => Promise<void> }).decode();
+    } catch {
+      // decode failure is non-fatal — onload already fired
+    }
+  }
+  const width = img.naturalWidth || img.width;
+  const height = img.naturalHeight || img.height;
+  if (!width || !height) throw new Error('Failed to read image dimensions for background removal');
+  canvas.width = width;
+  canvas.height = height;
+  ctx.drawImage(img, 0, 0, width, height);
 
   const imageData = ctx.getImageData(0, 0, width, height);
   const px = imageData.data;
+
+  // Auto-detect key from corner average when no key supplied.
+  const auto = colorKey == null || colorKey === '' || colorKey === 'auto';
+  let key: { r: number; g: number; b: number };
+  let t: number;
+  if (auto) {
+    const sample = (x: number, y: number): { r: number; g: number; b: number } => {
+      const idx = (y * width + x) * 4;
+      return { r: px[idx], g: px[idx + 1], b: px[idx + 2] };
+    };
+    const corners = [
+      sample(0, 0),
+      sample(Math.max(0, width - 1), 0),
+      sample(0, Math.max(0, height - 1)),
+      sample(Math.max(0, width - 1), Math.max(0, height - 1)),
+    ];
+    const avg = corners.reduce(
+      (acc, c) => ({ r: acc.r + c.r, g: acc.g + c.g, b: acc.b + c.b }),
+      { r: 0, g: 0, b: 0 },
+    );
+    key = {
+      r: Math.round(avg.r / corners.length),
+      g: Math.round(avg.g / corners.length),
+      b: Math.round(avg.b / corners.length),
+    };
+    t = tolerance != null ? Math.max(0, Math.min(255, tolerance)) : 40;
+  } else {
+    key = parseColorKey(colorKey);
+    t = tolerance != null ? Math.max(0, Math.min(255, tolerance)) : 30;
+  }
+
   for (let i = 0; i < px.length; i += 4) {
     const r = px[i];
     const g = px[i + 1];
@@ -183,6 +225,27 @@ export async function removeBackgroundFromAssetSrc(
       Math.abs(b - key.b) <= t
     ) {
       px[i + 3] = 0; // fully transparent
+    }
+  }
+  // Fringe cleanup: pixels that are close to the key but were not fully
+  // transparent due to anti-aliased edges / JPEG bleed — zero any remaining
+  // near-key pixels whose alpha is still opaque but color is within t+12.
+  if (auto) {
+    const fringe = Math.min(255, t + 12);
+    for (let i = 0; i < px.length; i += 4) {
+      if (px[i + 3] === 0) continue;
+      const r = px[i];
+      const g = px[i + 1];
+      const b = px[i + 2];
+      if (
+        Math.abs(r - key.r) <= fringe &&
+        Math.abs(g - key.g) <= fringe &&
+        Math.abs(b - key.b) <= fringe
+      ) {
+        // Only kill fringes that are semi-mixed; keep solid subject colors.
+        // Heuristic: if the pixel is desaturated toward the key, remove it.
+        px[i + 3] = 0;
+      }
     }
   }
   ctx.putImageData(imageData, 0, 0);

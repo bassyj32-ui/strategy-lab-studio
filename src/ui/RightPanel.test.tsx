@@ -41,14 +41,16 @@ describe('RightPanel', () => {
     expect(screen.getByTestId('armies-tree')).toBeTruthy();
   });
 
-  it('switches to the AI tab; Layers is NOT its own tab anymore', () => {
+  it('switches to the Shapes tab (replaces the retired AI tab)', () => {
     render(<RightPanel />);
-    fireEvent.click(screen.getByTestId('tab-ai'));
-    expect(screen.getByTestId('ai-commander-panel')).toBeTruthy();
-    // Old tabs are gone: layers live INSIDE Armies, properties became Object.
+    fireEvent.click(screen.getByTestId('tab-shapes'));
+    expect(screen.getByTestId('shapes-panel')).toBeTruthy();
+    // Old tabs are gone: layers live INSIDE Armies, properties became Object,
+    // and the AI tab is retired in favor of deterministic formation shapes.
     expect(screen.queryByTestId('tab-layers')).toBeNull();
     expect(screen.queryByTestId('tab-properties')).toBeNull();
     expect(screen.queryByTestId('tab-assets')).toBeNull();
+    expect(screen.queryByTestId('tab-ai')).toBeNull();
   });
 
   it('Layers disclosure inside Armies reveals the layer editor', () => {

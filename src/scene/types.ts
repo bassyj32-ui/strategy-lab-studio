@@ -134,7 +134,7 @@ export interface TitleCardConfig {
 export type SceneObjectType = 'unit' | 'shape' | 'marker' | 'arrow' | 'group';
 
 /** Formation layouts supported by `createFormation` (pure layout math in objects/groups.ts). */
-export type FormationPattern = 'line' | 'column' | 'wedge' | 'grid';
+export type FormationPattern = 'line' | 'column' | 'wedge' | 'grid' | 'crescent' | 'circle';
 
 /**
  * Formation metadata stored on the PARENT group node only. Purely descriptive
@@ -147,6 +147,10 @@ export interface FormationMetadata {
   spacing: number;
   /** Number of child members spawned (excludes the group parent). */
   count: number;
+  /** Radius for crescent/circle patterns (local units). Absent = auto from spacing. */
+  radius?: number;
+  /** Rotation offset in degrees for the whole shape (0 = default orientation). */
+  orientation?: number;
 }
 
 export interface SceneObject {

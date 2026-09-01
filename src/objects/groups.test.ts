@@ -191,6 +191,49 @@ describe('formationOffsets', () => {
     expect(formationOffsets('line', 0, 10)).toEqual([]);
     expect(formationOffsets('grid', -2, 10)).toEqual([]);
   });
+
+  it('circle places members evenly around the anchor at the given radius', () => {
+    const offs = formationOffsets('circle', 4, 40, { radius: 50 });
+    expect(offs).toHaveLength(4);
+    for (const o of offs) {
+      const r = Math.hypot(o.x, o.y);
+      expect(r).toBeCloseTo(50, 5);
+    }
+    // Cancellation: the centroid stays near the anchor.
+    const cx = offs.reduce((m, o) => m + o.x, 0);
+    const cy = offs.reduce((m, o) => m + o.y, 0);
+    expect(Math.hypot(cx, cy)).toBeCloseTo(0, 4);
+  });
+
+  it('circle single member sits on the radius (no divide-by-zero arc)', () => {
+    const offs = formationOffsets('circle', 1, 40, { radius: 30 });
+    expect(offs).toHaveLength(1);
+    expect(Math.hypot(offs[0].x, offs[0].y)).toBeCloseTo(30, 5);
+  });
+
+  it('crescent bows toward +X and hugs a fixed radius', () => {
+    const offs = formationOffsets('crescent', 5, 40, { radius: 60 });
+    expect(offs).toHaveLength(5);
+    // Every point lies on the arc radius (constant radius away from anchor).
+    for (const o of offs) {
+      expect(Math.hypot(o.x, o.y)).toBeCloseTo(60, 5);
+    }
+    // Bow opens toward +X (largest x = leading horn); span symmetric in y.
+    const xs = offs.map((o) => o.x);
+    const ys = offs.map((o) => o.y);
+    expect(Math.max(...xs)).toBeGreaterThan(Math.abs(Math.min(...xs)));
+    expect(Math.abs(Math.min(...ys))).toBeCloseTo(Math.abs(Math.max(...ys)), 3);
+  });
+
+  it('orientation rotates the whole shape (crescent default -> 90deg)', () => {
+    const flat = formationOffsets('crescent', 3, 40, { radius: 50 });
+    const turned = formationOffsets('crescent', 3, 40, { radius: 50, orientation: 90 });
+    // 90 degrees: (x,y) -> (-y, x).
+    for (let i = 0; i < flat.length; i++) {
+      expect(turned[i].x).toBeCloseTo(-flat[i].y, 5);
+      expect(turned[i].y).toBeCloseTo(flat[i].x, 5);
+    }
+  });
 });
 
 describe('groupRootOf (CapCut drag law)', () => {

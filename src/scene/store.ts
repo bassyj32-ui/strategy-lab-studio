@@ -482,6 +482,12 @@ export interface SceneState {
    */
   bgTargetAssetId: AssetId | null;
   setBgTargetAssetId: (id: AssetId | null) => void;
+  /**
+   * Shapes panel target: the group currently selected for incremental adds.
+   * Store-root UI state, never serialized.
+   */
+  shapeTargetId: ObjId | null;
+  setShapeTargetId: (id: ObjId | null) => void;
 
   // ---- History primitives ----
   /** Apply a discrete mutation as a single undoable transaction. */
@@ -670,7 +676,7 @@ export interface SceneState {
      * Spawn a formation: one 'group' parent plus N pattern-placed children in
      * ONE undoable transaction (undo collapses the whole formation).
      */
-    createFormation: (
+     createFormation: (
       pattern: FormationPattern,
       opts?: {
         count?: number;
@@ -678,10 +684,26 @@ export interface SceneState {
         x?: number;
         y?: number;
         childType?: SceneObjectType;
+        radius?: number;
+        orientation?: number;
       }
     ) => { groupId: ObjId; childIds: ObjId[] };
     /** Move a group parent by a WORLD delta — children track automatically. */
     moveGroup: (groupId: ObjId, dx: number, dy: number) => void;
+    /**
+     * Shapes panel (replaces AI): create an empty shape group at (x,y)
+     * with formation metadata. One undo step. Returns group id.
+     */
+    createShapeGroup: (
+      pattern: FormationPattern,
+      opts?: { spacing?: number; radius?: number; orientation?: number; x?: number; y?: number },
+    ) => ObjId | null;
+    /**
+     * Add one unit (from an asset) to an existing shape group at its next
+     * slot (formationOffsets). One undo step. Faction from asset metadata.
+     * Returns new unit id.
+     */
+    addUnitToShape: (groupId: ObjId, assetId: AssetId) => ObjId | null;
     /**
      * Remove one object. Its children are RE-PARENTED to its parent (or
      * root), never orphaned or deleted (PRD §3/§8). Undoable.
@@ -809,10 +831,10 @@ export interface SceneState {
      * (PRD §43). Non-map assets only. Returns the new asset id, or null when
      * the source is unknown / a map / processing fails.
      */
-    removeAssetBackground: (
+     removeAssetBackground: (
       id: AssetId,
-      colorKey: string,
-      tolerance: number,
+      colorKey?: string,
+      tolerance?: number,
     ) => Promise<AssetId | null>;
   }
 
@@ -830,6 +852,7 @@ export const useSceneStore = create<SceneState>()(
   autoKeyframe: false,
   lastAutoKfCount: 0,
   bgTargetAssetId: null,
+  shapeTargetId: null,
 
     transaction: (fn, label) => {
       let result: ReturnType<typeof fn>;
@@ -1445,6 +1468,78 @@ export const useSceneStore = create<SceneState>()(
       });
     },
 
+    createShapeGroup: (pattern, opts) => {
+      let gid: ObjId | null = null;
+      set((state) => {
+        pushHistory(state);
+        const layerExists = state.scene.layers.some((l) => l.id === state.activeLayerId);
+        const layerId = layerExists ? state.activeLayerId : DEFAULT_LAYER_ID;
+        gid = createId('group');
+        const spacing = Math.max(1, opts?.spacing ?? 50);
+        const group = createSceneObject('group', {
+          id: gid,
+          layerId,
+          x: opts?.x ?? state.scene.worldSize.w / 2,
+          y: opts?.y ?? state.scene.worldSize.h / 2,
+        });
+        group.formation = {
+          pattern,
+          spacing,
+          count: 0,
+          radius: opts?.radius,
+          orientation: opts?.orientation,
+        };
+        state.scene.objects[gid] = group;
+        state.shapeTargetId = gid;
+      });
+      return gid;
+    },
+
+    addUnitToShape: (groupId, assetId) => {
+      const s = get();
+      const group = s.scene.objects[groupId];
+      const asset = s.scene.assets[assetId];
+      if (!group || group.type !== 'group' || !group.formation) return null;
+      if (!asset || asset.kind === 'map') return null;
+      let newId: ObjId | null = null;
+      set((state) => {
+        const g = state.scene.objects[groupId];
+        if (!g || g.type !== 'group' || !g.formation) return;
+        pushHistory(state);
+        const existing = directChildren(
+          state.scene.objects as unknown as Record<ObjId, SceneObject>,
+          groupId,
+        );
+        const nextCount = existing.length + 1;
+        const offs = formationOffsets(g.formation.pattern, nextCount, g.formation.spacing, {
+          radius: g.formation.radius,
+          orientation: g.formation.orientation,
+        });
+        const off = offs[offs.length - 1] ?? { x: 0, y: 0 };
+        // Group at world (gx,gy), children local offsets → world = gx+off, gy+off
+        // Convert world offset to local frame (handles rotated/scaled groups).
+        const worldX = g.transform.x + off.x;
+        const worldY = g.transform.y + off.y;
+        const local = worldPointToLocal(g.transform, worldX, worldY);
+        const layerExists = state.scene.layers.some((l) => l.id === state.activeLayerId);
+        const layerId = layerExists ? state.activeLayerId : DEFAULT_LAYER_ID;
+        newId = createId('unit');
+        const child = createSceneObject('unit', {
+          id: newId,
+          layerId,
+          x: local.x,
+          y: local.y,
+          assetId,
+          faction: asset.metadata?.faction,
+        });
+        child.parentId = groupId;
+        state.scene.objects[newId] = child;
+        // Update formation count (descriptive, mirrors actual children).
+        g.formation!.count = nextCount;
+      });
+      return newId;
+    },
+
     removeObject: (id) => {
       set((state) => {
         const obj = state.scene.objects[id];
@@ -1561,6 +1656,12 @@ export const useSceneStore = create<SceneState>()(
     setBgTargetAssetId: (id) => {
       set((state) => {
         state.bgTargetAssetId = id;
+      });
+    },
+
+    setShapeTargetId: (id) => {
+      set((state) => {
+        state.shapeTargetId = id;
       });
     },
 

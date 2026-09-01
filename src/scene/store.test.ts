@@ -537,6 +537,89 @@ describe('scene store', () => {
     });
   });
 
+  describe('shape groups (NEW — replaces AI tab formations)', () => {
+    it('createShapeGroup makes an empty group with formation metadata, one undo step', () => {
+      const before = s().past.length;
+      const gid = s().createShapeGroup('crescent', { spacing: 40, radius: 80, x: 100, y: 100 })!;
+      expect(gid).toBeTruthy();
+      const g = s().scene.objects[gid];
+      expect(g.type).toBe('group');
+      expect(g.formation?.pattern).toBe('crescent');
+      expect(g.formation?.radius).toBe(80);
+      expect(g.formation?.count).toBe(0);
+      expect(g.transform.x).toBe(100);
+      expect(g.transform.y).toBe(100);
+      expect(s().past.length).toBe(before + 1);
+      expect(s().shapeTargetId).toBe(gid);
+    });
+
+    it('addUnitToShape places units at successive formation offsets under the group', () => {
+      s().registerAssets([
+        {
+          id: 'sp1', kind: 'sprite' as const, name: 'hoplite',
+          src: 'data:image/png;base64,iVBORw0KGgo=', width: 1, height: 1,
+          metadata: { aspectRatio: 1, defaultScale: 1, category: 'Infantry' as const, faction: 'red' as const },
+        },
+        {
+          id: 'sp2', kind: 'sprite' as const, name: 'archer',
+          src: 'data:image/png;base64,iVBORw0KGgo=', width: 1, height: 1,
+          metadata: { aspectRatio: 1, defaultScale: 1, category: 'Infantry' as const, faction: 'blue' as const },
+        },
+      ]);
+      const gid = s().createShapeGroup('line', { spacing: 50, x: 0, y: 0 })!;
+      const u1 = s().addUnitToShape(gid, 'sp1')!;
+      const u2 = s().addUnitToShape(gid, 'sp2')!;
+      expect(u1).toBeTruthy();
+      expect(u2).toBeTruthy();
+      expect(s().scene.objects[u1].parentId).toBe(gid);
+      expect(s().scene.objects[u2].parentId).toBe(gid);
+      // First line member (count=1) at offset 0; second (count=2) lands at the
+      // centered edge member: centered(1,2) = +25 with spacing 50.
+      expect(s().scene.objects[u1].transform.x).toBeCloseTo(0);
+      expect(s().scene.objects[u2].transform.x).toBeCloseTo(25);
+      // Faction from the asset metadata is forwarded to the unit.
+      expect(s().scene.objects[u1].faction).toBe('red');
+      expect(s().scene.objects[u2].faction).toBe('blue');
+      // Formation count mirrors the real number of children.
+      expect(s().scene.objects[gid].formation?.count).toBe(2);
+    });
+
+    it('addUnitToShape is a single undoable step for BOTH units', () => {
+      s().registerAssets([
+        {
+          id: 'sp1', kind: 'sprite' as const, name: 'hoplite',
+          src: 'data:image/png;base64,iVBORw0KGgo=', width: 1, height: 1,
+          metadata: { aspectRatio: 1, defaultScale: 1, faction: 'red' as const },
+        },
+      ]);
+      const before = s().past.length;
+      const gid = s().createShapeGroup('line')!;
+      s().addUnitToShape(gid, 'sp1');
+      s().addUnitToShape(gid, 'sp1');
+      // createShapeGroup is one step; each add is one step.
+      expect(s().past.length).toBe(before + 3);
+      expect(Object.values(s().scene.objects).filter((o) => o.parentId === gid)).toHaveLength(2);
+      s().undo();
+      s().undo();
+      s().undo();
+      expect(s().scene.objects[gid]).toBeUndefined();
+      expect(Object.values(s().scene.objects).filter((o) => o.parentId === gid)).toHaveLength(0);
+    });
+
+    it('addUnitToShape returns null for an unknown/map asset or non-group target', () => {
+      s().registerAssets([
+        {
+          id: 'm1', kind: 'map' as const, name: 'map', src: 'data:image/png;base64,iVBORw0KGgo=', width: 1, height: 1,
+        },
+      ]);
+      const gid = s().createShapeGroup('wedge')!;
+      expect(s().addUnitToShape(gid as never, 'm1')).toBeNull();
+      expect(s().addUnitToShape('nope' as never, 'sp1' as never)).toBeNull();
+      const unitId = s().createObjectOfType('unit');
+      expect(s().addUnitToShape(unitId, 'sp1' as never)).toBeNull();
+    });
+  });
+
   describe('layers', () => {
     it('addLayer appends a visible layer with a higher order', () => {
       s().addLayer('Test');

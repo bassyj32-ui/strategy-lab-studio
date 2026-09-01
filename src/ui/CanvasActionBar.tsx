@@ -59,8 +59,9 @@ export function CanvasActionBar() {
   const [spacing, setSpacing] = useState(50);
   const [childType, setChildType] = useState<SceneObjectType>('unit');
   // Background-remover picker state (popover lives in the toolbar).
+  // 'auto' = sample the 4 corners (default — fixes green-screen variance).
   const [bgOpen, setBgOpen] = useState(false);
-  const [bgColorKey, setBgColorKey] = useState('#00ff00');
+  const [bgColorKey, setBgColorKey] = useState('auto');
   const [bgTolerance, setBgTolerance] = useState(30);
   const [bgBusy, setBgBusy] = useState(false);
 
@@ -166,7 +167,12 @@ export function CanvasActionBar() {
     if (!bgTarget) return;
     setBgBusy(true);
     try {
-      const newId = await removeAssetBackground(bgTarget.id, bgColorKey, bgTolerance);
+      const auto = bgColorKey === 'auto';
+      const newId = await removeAssetBackground(
+        bgTarget.id,
+        auto ? undefined : bgColorKey,
+        auto ? undefined : bgTolerance,
+      );
       if (newId) {
         // Read the fresh copy's name from the store — the selector snapshot
         // above predates the transaction that just created it.
@@ -363,6 +369,16 @@ export function CanvasActionBar() {
               </button>
             </div>
             <div className="bg-keys" aria-label="Background color key">
+              <button
+                type="button"
+                data-testid="bg-key-auto"
+                className={`bg-key-chip${bgColorKey === 'auto' ? ' active' : ''}`}
+                aria-pressed={bgColorKey === 'auto'}
+                title="Auto-detect from the image corners (recommended for green screens)"
+                onClick={() => setBgColorKey('auto')}
+              >
+                Auto
+              </button>
               {BG_KEY_PRESETS.map((p) => (
                 <button
                   key={p.color}
@@ -383,7 +399,7 @@ export function CanvasActionBar() {
               <input
                 type="color"
                 data-testid="bg-color"
-                value={bgColorKey}
+                value={bgColorKey === 'auto' ? '#00ff00' : bgColorKey}
                 onChange={(e) => setBgColorKey(e.target.value)}
               />
             </label>

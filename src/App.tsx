@@ -25,6 +25,12 @@ export function App() {
   const [restoredAt, setRestoredAt] = useState<number | null>(null);
   // Timeline footer height in vh (DAW-style draggable divider, default 34).
   const [timelineH, setTimelineH] = useState(34);
+  // Left library width (px) — draggable, persisted. Default 360 (was 250).
+  const LEFT_W_KEY = 'sls-left-w';
+  const [leftW, setLeftW] = useState(() => {
+    const raw = Number(localStorage.getItem(LEFT_W_KEY));
+    return Number.isFinite(raw) ? Math.min(520, Math.max(280, raw)) : 360;
+  });
   // Big-screen preview: when true the SAME <PreviewPanel> instance is moved
   // into a fullscreen overlay (never mounted twice -> one Player, one clock).
   const [previewBig, setPreviewBig] = useState(false);
@@ -56,6 +62,29 @@ export function App() {
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
+  /** Drag the vertical divider between left library and canvas (280–520px, persisted). */
+  const startLeftResize = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = leftW;
+    const onMove = (ev: PointerEvent) => {
+      const next = startW + (ev.clientX - startX);
+      setLeftW(Math.min(520, Math.max(280, next)));
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      // Persist the final width (read fresh from closure via next frame).
+      // Use a microtask so leftW has settled.
+      setTimeout(() => {
+        const cur = (document.querySelector('.app-side.left') as HTMLElement | null)?.offsetWidth;
+        if (cur) localStorage.setItem(LEFT_W_KEY, String(Math.min(520, Math.max(280, cur))));
+      }, 0);
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -156,13 +185,21 @@ export function App() {
       )}
       <AutoKfToast />
       <div className="app-main">
-        <div className="app-side left">
+        <div className="app-side left" style={{ width: leftW }}>
           {/* Asset library is the left column now (owner workflow: everything
-              is an imported sprite); the old Toolbar's canvas actions moved
-              to the CanvasActionBar above the stage. */}
+               is an imported sprite); the old Toolbar's canvas actions moved
+               to the CanvasActionBar above the stage. */}
           <AssetsPanel />
           <ScenesPanel />
         </div>
+        <div
+          className="panel-resizer"
+          data-testid="panel-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          title="Drag to resize the library"
+          onPointerDown={startLeftResize}
+        />
         <div className="canvas-center">
           <CanvasActionBar />
           <div className="canvas-scroll">
