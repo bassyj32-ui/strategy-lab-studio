@@ -50,9 +50,8 @@ describe('CanvasActionBar (relocated Toolbar actions)', () => {
       'ungroup',
       'path-tool',
       'formation-pattern',
-      'formation-child-type',
-      'formation-count',
       'formation-spacing',
+      'formation-unit-count',
       'create-formation',
       'remove-bg-btn',
       'battle-fx-btn',
@@ -117,18 +116,62 @@ describe('CanvasActionBar (relocated Toolbar actions)', () => {
     expect(screen.getByTestId('toolbar-status').textContent).toContain('Grouped');
   });
 
-  it('Create Formation spawns a group at map centre and selects it', () => {
+  it('Arrange Selected Units button is disabled when fewer than 2 units selected', () => {
     render(<CanvasActionBar />);
-    fireEvent.click(screen.getByTestId('create-formation'));
+    const btn = screen.getByTestId('create-formation') as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    expect(btn.textContent).toBe('Arrange Selected Units');
+    expect(screen.getByTestId('formation-unit-count').textContent).toBe('Selected Units: 0');
+  });
+
+  it('Arrange Selected Units button enables when 2+ units are selected and arranges them', () => {
     const st = useSceneStore.getState();
-    const objs = Object.values(st.scene.objects);    expect(objs.length).toBeGreaterThan(0);
-    expect(st.selectedObjId).not.toBeNull();
-    // Formation children are parented under one root.
-    const roots = objs.filter((o) => o.parentId == null);
-    expect(roots.length).toBe(1);
-    expect(roots[0].id).toBe(st.selectedObjId);
+    act(() => {
+      st.addObject({
+        id: 'u1',
+        type: 'unit',
+        transform: { x: 100, y: 100, rotation: 0, scale: 1, opacity: 1 },
+        layerId: st.activeLayerId,
+      });
+      st.addObject({
+        id: 'u2',
+        type: 'unit',
+        transform: { x: 200, y: 100, rotation: 0, scale: 1, opacity: 1 },
+        layerId: st.activeLayerId,
+      });
+      st.addObject({
+        id: 'u3',
+        type: 'unit',
+        transform: { x: 150, y: 200, rotation: 0, scale: 1, opacity: 1 },
+        layerId: st.activeLayerId,
+      });
+    });
+
+    const { rerender } = render(<CanvasActionBar />);
+    const btn = screen.getByTestId('create-formation') as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+
+    act(() => {
+      useSceneStore.setState({ selectedIds: ['u1', 'u2', 'u3'] });
+    });
+    rerender(<CanvasActionBar />);
+    expect(btn.disabled).toBe(false);
+    expect(screen.getByTestId('formation-unit-count').textContent).toBe('Selected Units: 3');
+
+    fireEvent.click(btn);
+    const st2 = useSceneStore.getState();
+    // A group should have been created and selected.
+    expect(st2.selectedObjId).not.toBeNull();
+    const group = st2.scene.objects[st2.selectedObjId!];
+    expect(group?.type).toBe('group');
+    expect(group?.formation?.pattern).toBe('line');
+    // All three units should be reparented under the group.
+    const children = Object.values(st2.scene.objects).filter(
+      (o) => o.parentId === group.id,
+    );
+    expect(children).toHaveLength(3);
     expect(screen.getByTestId('toolbar-status').textContent).toContain(
-      'Created line formation'
+      'Arranged units into line formation',
     );
   });
 

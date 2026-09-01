@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { useSceneStore } from '../scene/store';
-import type { SceneObjectType, FormationPattern } from '../scene/types';
+import type { FormationPattern } from '../scene/types';
 import { ExportDialog } from './ExportDialog';
 // Placing a formation must also SELECT it (both stores) so the Inspector and
 // timeline immediately target the new object.
@@ -34,8 +34,7 @@ export function CanvasActionBar() {
   const selectedIds = useSceneStore((s) => s.selectedIds);
   const groupObject = useSceneStore((s) => s.groupObject);
   const ungroupObject = useSceneStore((s) => s.ungroupObject);
-  const createFormation = useSceneStore((s) => s.createFormation);
-  const worldSize = useSceneStore((s) => s.scene.worldSize);
+  const arrangeSelectedIntoFormation = useSceneStore((s) => s.arrangeSelectedIntoFormation);
   const objects = useSceneStore((s) => s.scene.objects);
   const undo = useSceneStore((s) => s.undo);
   const redo = useSceneStore((s) => s.redo);
@@ -55,9 +54,7 @@ export function CanvasActionBar() {
   const [status, setStatus] = useState<string | null>(null);
   const [showExport, setShowExport] = useState(false);
   const [pattern, setPattern] = useState<FormationPattern>('line');
-  const [count, setCount] = useState(5);
   const [spacing, setSpacing] = useState(50);
-  const [childType, setChildType] = useState<SceneObjectType>('unit');
   // Background-remover picker state (popover lives in the toolbar).
   // 'auto' = sample the 4 corners (default — fixes green-screen variance).
   const [bgOpen, setBgOpen] = useState(false);
@@ -74,6 +71,12 @@ export function CanvasActionBar() {
   // Smooth path: need a selected object with at least two position keyframes.
   const canSmooth =
     selectedObjId != null && (keyframes[selectedObjId] ?? []).length >= 2;
+
+  // Count valid unit objects in the current selection.
+  const validUnitCount = selectedIds.filter(
+    (id) => objects[id]?.type === 'unit',
+  ).length;
+  const canArrangeFormation = validUnitCount >= 2;
 
   const handleMapFile = async (e: ChangeEvent<HTMLInputElement>) => {
     // Reset first so re-selecting the same file still fires onChange.
@@ -136,18 +139,12 @@ export function CanvasActionBar() {
     }
   };
 
-  // Spawn a formation at the map centre on the active layer (one undoable txn).
-  const handleCreateFormation = () => {
-    const { groupId } = createFormation(pattern, {
-      count,
-      spacing,
-      childType,
-      x: worldSize.w / 2,
-      y: worldSize.h / 2,
-    });
+  // Arrange EXISTING selected units into a formation (one undoable txn).
+  const handleArrangeFormation = () => {
+    const groupId = arrangeSelectedIntoFormation(pattern, { spacing });
     if (groupId) {
       selectObjectUnified(groupId);
-      setStatus(`Created ${pattern} formation`);
+      setStatus(`Arranged units into ${pattern} formation`);
     }
   };
 
@@ -446,29 +443,6 @@ export function CanvasActionBar() {
           </select>
         </label>
         <label>
-          Child{' '}
-          <select
-            data-testid="formation-child-type"
-            value={childType}
-            onChange={(e) => setChildType(e.target.value as SceneObjectType)}
-          >
-            <option value="unit">Unit</option>
-            <option value="shape">Shape</option>
-            <option value="marker">Marker</option>
-          </select>
-        </label>
-        <label>
-          Count{' '}
-          <input
-            type="number"
-            data-testid="formation-count"
-            min={1}
-            value={count}
-            onChange={(e) => setCount(Math.max(1, Number(e.target.value) || 1))}
-            style={{ width: 56 }}
-          />
-        </label>
-        <label>
           Spacing{' '}
           <input
             type="number"
@@ -479,12 +453,21 @@ export function CanvasActionBar() {
             style={{ width: 56 }}
           />
         </label>
+        <span className="formation-info" data-testid="formation-unit-count">
+          Selected Units: {validUnitCount}
+        </span>
         <button
           type="button"
           data-testid="create-formation"
-          onClick={handleCreateFormation}
+          disabled={!canArrangeFormation}
+          title={
+            canArrangeFormation
+              ? 'Arrange selected units into formation'
+              : 'Select at least 2 units to arrange'
+          }
+          onClick={handleArrangeFormation}
         >
-          Create Formation
+          Arrange Selected Units
         </button>
       </span>
 

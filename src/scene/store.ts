@@ -688,6 +688,16 @@ export interface SceneState {
         orientation?: number;
       }
     ) => { groupId: ObjId; childIds: ObjId[] };
+    /**
+     * Arrange EXISTING selected units into a formation. Creates a group parent
+     * at the centroid, reparents selected units under it, and positions them
+     * at formation offsets. One undoable transaction. Returns group id or null
+     * when fewer than 2 valid units are selected.
+     */
+    arrangeSelectedIntoFormation: (
+      pattern: FormationPattern,
+      opts?: { spacing?: number; radius?: number; orientation?: number },
+    ) => ObjId | null;
     /** Move a group parent by a WORLD delta — children track automatically. */
     moveGroup: (groupId: ObjId, dx: number, dy: number) => void;
     /**
@@ -1458,6 +1468,89 @@ export const useSceneStore = create<SceneState>()(
         }
       });
       return { groupId: groupId!, childIds };
+    },
+
+    arrangeSelectedIntoFormation: (pattern, opts) => {
+      const spacing = Math.max(1, opts?.spacing ?? 50);
+      let groupId: ObjId | null = null;
+      set((state) => {
+        // 1. Filter selectedIds to only 'unit' type objects that exist.
+        const objects = state.scene.objects;
+        const unitIds = state.selectedIds.filter(
+          (id) => objects[id]?.type === 'unit',
+        );
+        if (unitIds.length < 2) return; // need at least 2 units
+
+        // Snapshot for undo BEFORE any mutations.
+        pushHistory(state);
+
+        // 2. Resolve world transforms for all selected units.
+        const worldTransforms = unitIds.map((id) => ({
+          id,
+          world: resolveWorldTransform(
+            objects as unknown as Record<ObjId, SceneObject>,
+            id,
+          ),
+        }));
+
+        // 3. Calculate centroid of selection.
+        const cx =
+          worldTransforms.reduce((sum, t) => sum + t.world.x, 0) /
+          worldTransforms.length;
+        const cy =
+          worldTransforms.reduce((sum, t) => sum + t.world.y, 0) /
+          worldTransforms.length;
+
+        // 4. Create group at centroid.
+        const layerExists = state.scene.layers.some(
+          (l) => l.id === state.activeLayerId,
+        );
+        const layerId = layerExists ? state.activeLayerId : DEFAULT_LAYER_ID;
+        groupId = createId('group');
+        state.scene.objects[groupId] = createSceneObject('group', {
+          id: groupId,
+          layerId,
+          x: cx,
+          y: cy,
+        });
+
+        // 5. Set formation metadata on the group.
+        state.scene.objects[groupId].formation = {
+          pattern,
+          spacing,
+          count: unitIds.length,
+          radius: opts?.radius,
+          orientation: opts?.orientation,
+        };
+
+        // 6. Compute formation offsets.
+        const offsets = formationOffsets(pattern, unitIds.length, spacing, {
+          radius: opts?.radius,
+          orientation: opts?.orientation,
+        });
+
+        // 7. Reparent each unit and set local transform to formation slot.
+        for (let i = 0; i < unitIds.length; i++) {
+          const id = unitIds[i];
+          const off = offsets[i];
+
+          // Reparent (converts world to local, rebases keyframes).
+          attachUnderParent(state.scene, id, groupId);
+
+          // Overwrite local transform with formation slot offset.
+          // Group is at identity rotation/scale → local offset == world offset.
+          const obj = state.scene.objects[id];
+          obj.transform.x = off.x;
+          obj.transform.y = off.y;
+          obj.transform.rotation = 0;
+          obj.transform.scale = 1;
+        }
+
+        // 8. Select the new group.
+        state.selectedIds = [groupId];
+        state.selectedObjId = groupId;
+      });
+      return groupId;
     },
 
     moveGroup: (groupId, dx, dy) => {

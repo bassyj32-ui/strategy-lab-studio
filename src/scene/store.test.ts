@@ -620,6 +620,124 @@ describe('scene store', () => {
     });
   });
 
+  describe('arrangeSelectedIntoFormation', () => {
+    const addUnits = () => {
+      s().addObject({
+        id: 'u1',
+        type: 'unit',
+        transform: { x: 100, y: 100, rotation: 0, scale: 1, opacity: 1 },
+        layerId: DEFAULT_LAYER_ID,
+      });
+      s().addObject({
+        id: 'u2',
+        type: 'unit',
+        transform: { x: 200, y: 100, rotation: 0, scale: 1, opacity: 1 },
+        layerId: DEFAULT_LAYER_ID,
+      });
+      s().addObject({
+        id: 'u3',
+        type: 'unit',
+        transform: { x: 150, y: 200, rotation: 0, scale: 1, opacity: 1 },
+        layerId: DEFAULT_LAYER_ID,
+      });
+    };
+
+    it('creates group at centroid of selected units', () => {
+      addUnits();
+      useSceneStore.setState({ selectedIds: ['u1', 'u2', 'u3'] });
+      const gid = s().arrangeSelectedIntoFormation('line', { spacing: 50 });
+      expect(gid).toBeTruthy();
+      const group = s().scene.objects[gid!];
+      expect(group.type).toBe('group');
+      // Centroid of (100,100), (200,100), (150,200) = (150, 133.33)
+      expect(group.transform.x).toBeCloseTo(150);
+      expect(group.transform.y).toBeCloseTo(133.33);
+    });
+
+    it('reparents units under the group', () => {
+      addUnits();
+      useSceneStore.setState({ selectedIds: ['u1', 'u2', 'u3'] });
+      const gid = s().arrangeSelectedIntoFormation('line')!;
+      for (const id of ['u1', 'u2', 'u3']) {
+        expect(s().scene.objects[id].parentId).toBe(gid);
+      }
+    });
+
+    it('sets formation metadata on group', () => {
+      addUnits();
+      useSceneStore.setState({ selectedIds: ['u1', 'u2', 'u3'] });
+      const gid = s().arrangeSelectedIntoFormation('wedge', { spacing: 60 })!;
+      const f = s().scene.objects[gid].formation;
+      expect(f?.pattern).toBe('wedge');
+      expect(f?.spacing).toBe(60);
+      expect(f?.count).toBe(3);
+    });
+
+    it('positions units at correct formation offsets', () => {
+      addUnits();
+      useSceneStore.setState({ selectedIds: ['u1', 'u2', 'u3'] });
+      const gid = s().arrangeSelectedIntoFormation('line', { spacing: 50 })!;
+      // Line with 3 units, spacing 50: offsets are [-50,0], [0,0], [50,0]
+      // Units are reparented, so local x/y are relative to group.
+      const u1 = s().scene.objects['u1'];
+      const u2 = s().scene.objects['u2'];
+      const u3 = s().scene.objects['u3'];
+      // Check they are at formation offsets (relative to group centroid).
+      // Since units were at arbitrary positions, we check relative positioning.
+      expect(u1.transform.y).toBeCloseTo(0);
+      expect(u2.transform.y).toBeCloseTo(0);
+      expect(u3.transform.y).toBeCloseTo(0);
+      // X offsets should be -50, 0, +50 relative to centroid.
+      expect(u2.transform.x).toBeCloseTo(0);
+      expect(u1.transform.x).toBeLessThan(u2.transform.x);
+      expect(u3.transform.x).toBeGreaterThan(u2.transform.x);
+      expect(gid).toBeTruthy();
+    });
+
+    it('preserves assetId on each unit', () => {
+      s().addObject({
+        id: 'ua',
+        type: 'unit',
+        assetId: 'sprite-1' as never,
+        transform: { x: 0, y: 0, rotation: 0, scale: 1, opacity: 1 },
+        layerId: DEFAULT_LAYER_ID,
+      });
+      s().addObject({
+        id: 'ub',
+        type: 'unit',
+        assetId: 'sprite-2' as never,
+        transform: { x: 100, y: 0, rotation: 0, scale: 1, opacity: 1 },
+        layerId: DEFAULT_LAYER_ID,
+      });
+      useSceneStore.setState({ selectedIds: ['ua', 'ub'] });
+      s().arrangeSelectedIntoFormation('column');
+      expect(s().scene.objects['ua'].assetId).toBe('sprite-1');
+      expect(s().scene.objects['ub'].assetId).toBe('sprite-2');
+    });
+
+    it('does nothing when fewer than 2 units selected', () => {
+      addUnits();
+      useSceneStore.setState({ selectedIds: ['u1'] });
+      const before = s().past.length;
+      const gid = s().arrangeSelectedIntoFormation('line');
+      expect(gid).toBeNull();
+      expect(s().past.length).toBe(before);
+    });
+
+    it('single undo transaction', () => {
+      addUnits();
+      useSceneStore.setState({ selectedIds: ['u1', 'u2', 'u3'] });
+      const before = s().past.length;
+      s().arrangeSelectedIntoFormation('grid');
+      expect(s().past.length).toBe(before + 1);
+      // Undo restores everything.
+      s().undo();
+      expect(s().scene.objects['u1'].parentId).toBeUndefined();
+      expect(s().scene.objects['u2'].parentId).toBeUndefined();
+      expect(s().scene.objects['u3'].parentId).toBeUndefined();
+    });
+  });
+
   describe('layers', () => {
     it('addLayer appends a visible layer with a higher order', () => {
       s().addLayer('Test');
