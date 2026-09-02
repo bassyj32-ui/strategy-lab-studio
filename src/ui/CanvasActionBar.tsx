@@ -6,6 +6,7 @@ import { ExportDialog } from './ExportDialog';
 // Placing a formation must also SELECT it (both stores) so the Inspector and
 // timeline immediately target the new object.
 import { selectObjectUnified } from '../timeline/selection';
+import { groupRootOf } from '../objects/groups';
 
 /**
  * Preset color keys for the background remover — the commander imports simple
@@ -43,6 +44,7 @@ export function CanvasActionBar() {
   const activeTool = useSceneStore((s) => s.activeTool);
   const setTool = useSceneStore((s) => s.setTool);
   const selectedObjId = useSceneStore((s) => s.selectedObjId);
+  const setSelected = useSceneStore((s) => s.setSelected);
   const keyframes = useSceneStore((s) => s.scene.keyframes);
   // Background remover: the toolbar control targets the asset card selected in
   // the Assets panel (shared store-root id). Non-map assets only.
@@ -77,6 +79,12 @@ export function CanvasActionBar() {
     (id) => objects[id]?.type === 'unit',
   ).length;
   const canArrangeFormation = validUnitCount >= 2;
+
+  // Move Group: enabled when the selection is a child of a group (not the root).
+  const selectedIsGroupedChild =
+    selectedObjId != null &&
+    objects[selectedObjId]?.parentId != null &&
+    groupRootOf(objects, selectedObjId) !== selectedObjId;
 
   const handleMapFile = async (e: ChangeEvent<HTMLInputElement>) => {
     // Reset first so re-selecting the same file still fires onChange.
@@ -137,6 +145,13 @@ export function CanvasActionBar() {
         return;
       }
     }
+  };
+
+  // Select the parent group so the user can drag to move the whole group.
+  const handleMoveGroup = () => {
+    if (!selectedObjId) return;
+    const rootId = groupRootOf(objects, selectedObjId);
+    setSelected(rootId);
   };
 
   // Arrange EXISTING selected units into a formation (one undoable txn).
@@ -304,6 +319,15 @@ export function CanvasActionBar() {
         onClick={handleUngroup}
       >
         Ungroup
+      </button>
+      <button
+        type="button"
+        data-testid="move-group"
+        disabled={!selectedIsGroupedChild}
+        title="Select the parent group so you can drag to move it"
+        onClick={handleMoveGroup}
+      >
+        Move Group
       </button>
 
       <span className="action-sep" aria-hidden="true" />

@@ -40,7 +40,7 @@ beforeEach(() => {
 });
 
 describe('CanvasActionBar (relocated Toolbar actions)', () => {
-  it('renders map/save/export, group/ungroup, path tool and the formation builder', () => {
+  it('renders map/save/export, group/ungroup, move-group, path tool and the formation builder', () => {
     render(<CanvasActionBar />);
     for (const id of [
       'import-map',
@@ -48,6 +48,7 @@ describe('CanvasActionBar (relocated Toolbar actions)', () => {
       'export-video',
       'group',
       'ungroup',
+      'move-group',
       'path-tool',
       'formation-pattern',
       'formation-spacing',
@@ -114,6 +115,76 @@ describe('CanvasActionBar (relocated Toolbar actions)', () => {
     const childId = parent.id === 'a' ? 'b' : 'a';
     expect(st.scene.objects[childId].parentId).toBe(parent.id);
     expect(screen.getByTestId('toolbar-status').textContent).toContain('Grouped');
+  });
+
+  it('Move Group button is disabled when no grouped child is selected', () => {
+    // Add a root object (no parent) and select it before rendering.
+    const s = useSceneStore.getState();
+    act(() => {
+      s.addObject({
+        id: 'root1',
+        type: 'unit',
+        transform: { x: 0, y: 0, rotation: 0, scale: 1, opacity: 1 },
+        layerId: s.activeLayerId,
+      });
+      useSceneStore.setState({ selectedIds: ['root1'], selectedObjId: 'root1' });
+    });
+    const { rerender } = render(<CanvasActionBar />);
+    const btn = screen.getByTestId('move-group') as HTMLButtonElement;
+    // Root object (no parentId) — not a grouped child, button disabled.
+    expect(btn.disabled).toBe(true);
+
+    // Deselect — still disabled.
+    act(() => {
+      useSceneStore.setState({ selectedIds: [], selectedObjId: null });
+    });
+    rerender(<CanvasActionBar />);
+    expect(
+      (screen.getByTestId('move-group') as HTMLButtonElement).disabled
+    ).toBe(true);
+  });
+
+  it('Move Group button enables when a grouped child is selected and selects the group root', () => {
+    const s = useSceneStore.getState();
+    // Create two objects and group them.
+    act(() => {
+      s.addObject({
+        id: 'gm1',
+        type: 'unit',
+        transform: { x: 10, y: 20, rotation: 0, scale: 1, opacity: 1 },
+        layerId: s.activeLayerId,
+      });
+      s.addObject({
+        id: 'gm2',
+        type: 'unit',
+        transform: { x: 60, y: 20, rotation: 0, scale: 1, opacity: 1 },
+        layerId: s.activeLayerId,
+      });
+      useSceneStore.setState({ selectedIds: ['gm1', 'gm2'] });
+    });
+
+    const { rerender } = render(<CanvasActionBar />);
+    fireEvent.click(screen.getByTestId('group'));
+
+    // After grouping, one of the objects is the parent and the other is the child.
+    const st = useSceneStore.getState();
+    const parentId = st.selectedObjId!;
+    const childId = parentId === 'gm1' ? 'gm2' : 'gm1';
+    expect(st.scene.objects[childId].parentId).toBe(parentId);
+
+    // Select the child — Move Group should be enabled.
+    act(() => {
+      useSceneStore.setState({ selectedIds: [childId], selectedObjId: childId });
+    });
+    rerender(<CanvasActionBar />);
+    expect(
+      (screen.getByTestId('move-group') as HTMLButtonElement).disabled
+    ).toBe(false);
+
+    // Click Move Group — selection should jump to the group root.
+    fireEvent.click(screen.getByTestId('move-group'));
+    const st2 = useSceneStore.getState();
+    expect(st2.selectedObjId).toBe(parentId);
   });
 
   it('Arrange Selected Units button is disabled when fewer than 2 units selected', () => {
