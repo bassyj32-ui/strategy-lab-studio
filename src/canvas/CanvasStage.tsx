@@ -64,6 +64,7 @@ import {
   ZOOM_STEP,
   useCameraPan,
 } from '../camera';
+import { AudioEngine } from '../audio/audioEngine';
 import { layerCamera, parallaxLayerTransform } from '../camera/parallax';
 import { CameraHud } from './CameraHud';
 import { useMapImage } from './useMapImage';
@@ -587,6 +588,23 @@ export function CanvasStage() {
     navTimerRef.current = setTimeout(() => setNavigating(false), 400);
   };
   const currentTime = usePlaybackStore((s) => s.currentTime);
+  const isPlaying = usePlaybackStore((s) => s.isPlaying);
+
+  // Audio engine: syncs HTMLAudioElement instances with the timeline.
+  const engineRef = useRef<AudioEngine | null>(null);
+  if (!engineRef.current) engineRef.current = new AudioEngine();
+  useEffect(() => {
+    const engine = engineRef.current!;
+    engine.sync(
+      scene.audioTracks ?? [],
+      scene.assets,
+      currentTime,
+      isPlaying,
+    );
+  }, [scene.audioTracks, scene.assets, currentTime, isPlaying]);
+  useEffect(() => {
+    return () => engineRef.current?.dispose();
+  }, []);
   const keyedCamera = useMemo(
     () => getCameraAtTime(scene, currentTime),
     [scene, currentTime]

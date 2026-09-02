@@ -10,6 +10,7 @@ import { TransportControls } from './TransportControls';
 import { Ruler } from './Ruler';
 import { KeyframeTrack } from './KeyframeTrack';
 import { CameraTrack } from './CameraTrack';
+import { AudioTrackRow } from './AudioTrackRow';
 import { KeyframeEditor } from './KeyframeEditor';
 import { CAMERA_PRESETS, type CameraPresetKind } from '../../camera/presets';
 
@@ -144,6 +145,7 @@ export function TimelinePanel() {
   usePlaybackEngine();
 
   const ids = Object.keys(objects);
+  const audioTracks = useSceneStore((s) => s.scene.audioTracks ?? []);
 
   return (
     <div className="timeline-panel" data-testid="timeline-panel" onKeyDown={onPanelKeyDown}>
@@ -292,7 +294,10 @@ export function TimelinePanel() {
           <KeyframeTrack key={id} objId={id} />
         ))}
         <CameraTrack />
-        {ids.length === 0 ? (
+        {audioTracks.map((track) => (
+          <AudioTrackRow key={track.id} track={track} />
+        ))}
+        {ids.length === 0 && audioTracks.length === 0 ? (
           <div className="empty-note" data-testid="empty-coaching">
             Place a unit, select it, then Add keyframe at playhead.
           </div>

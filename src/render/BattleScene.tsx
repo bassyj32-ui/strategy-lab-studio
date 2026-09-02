@@ -7,6 +7,7 @@ import {
   continueRender,
   getRemotionEnvironment,
 } from 'remotion';
+import { Audio } from '@remotion/media';
 import type { BattleSceneProps, AssetImageMap } from './types';
 import { loadSceneImages, assertExportIntegrity } from './assets';
 import { drawScene } from './draw';
@@ -76,11 +77,28 @@ export const BattleScene: FC<BattleSceneProps> = ({ scene, exportMode }) => {
   }, [scene, frame, loaded, width, height, fps, exportMode]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      width={width}
-      height={height}
-      style={{ width: '100%', height: '100%' }}
-    />
+    <>
+      <canvas
+        ref={canvasRef}
+        width={width}
+        height={height}
+        style={{ width: '100%', height: '100%' }}
+      />
+      {/* Audio tracks: invisible elements that Remotion muxes into the MP4. */}
+      {(scene.audioTracks ?? []).map((track) => {
+        const asset = scene.assets[track.assetId];
+        if (!asset) return null;
+        return (
+          <Audio
+            key={track.id}
+            src={asset.src}
+            volume={track.volume}
+            from={Math.round(track.startTime * fps)}
+            loop={track.loop}
+            showInTimeline={false}
+          />
+        );
+      })}
+    </>
   );
 };

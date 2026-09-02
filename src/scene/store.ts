@@ -4,6 +4,7 @@ import { current, type Draft } from 'immer';
 import type {
   Asset,
   AssetId,
+  AudioTrack,
   BrandConfig,
   CameraKeyframe,
   CameraState,
@@ -50,6 +51,7 @@ import {
 } from '../objects/groups';
 import type {
   FormationPattern,
+  TrainFollowConfig,
 } from './types';
 import type { ImportAssetOptions, ImportMapOptions } from '../assets/types';
 import {
@@ -715,6 +717,12 @@ export interface SceneState {
      */
     addUnitToShape: (groupId: ObjId, assetId: AssetId) => ObjId | null;
     /**
+     * Configure train/snake follow on a parent object. When set, children
+     * traverse the referenced path with per-child distance offsets. Pass null
+     * to remove. One undoable transaction.
+     */
+    setTrainFollow: (parentId: ObjId, config: TrainFollowConfig | null) => void;
+    /**
      * Remove one object. Its children are RE-PARENTED to its parent (or
      * root), never orphaned or deleted (PRD §3/§8). Undoable.
      */
@@ -842,10 +850,18 @@ export interface SceneState {
      * the source is unknown / a map / processing fails.
      */
      removeAssetBackground: (
-      id: AssetId,
-      colorKey?: string,
-      tolerance?: number,
-    ) => Promise<AssetId | null>;
+       id: AssetId,
+       colorKey?: string,
+       tolerance?: number,
+     ) => Promise<AssetId | null>;
+
+    // ---- Audio tracks (battle SFX, ambience) ----
+    /** Add an audio track to the scene. Undoable. */
+    addAudioTrack: (track: AudioTrack) => void;
+    /** Remove an audio track by id. Undoable. */
+    removeAudioTrack: (trackId: string) => void;
+    /** Patch audio track properties. Undoable. */
+    updateAudioTrack: (trackId: string, patch: Partial<Omit<AudioTrack, 'id' | 'assetId'>>) => void;
   }
 
 export const useSceneStore = create<SceneState>()(
@@ -1633,6 +1649,19 @@ export const useSceneStore = create<SceneState>()(
       return newId;
     },
 
+    setTrainFollow: (groupId, config) => {
+      set((state) => {
+        const g = state.scene.objects[groupId];
+        if (!g) return;
+        pushHistory(state);
+        if (config) {
+          g.trainFollow = { ...config };
+        } else {
+          delete g.trainFollow;
+        }
+      });
+    },
+
     removeObject: (id) => {
       set((state) => {
         const obj = state.scene.objects[id];
@@ -2192,6 +2221,34 @@ export const useSceneStore = create<SceneState>()(
         }
       });
       return created.map((c) => ({ id: c.id, time: c.startTime, kind: c.kind }));
+    },
+
+    // ---- Audio tracks ----
+    addAudioTrack: (track) => {
+      set((state) => {
+        pushHistory(state);
+        if (!state.scene.audioTracks) state.scene.audioTracks = [];
+        state.scene.audioTracks.push(track);
+      });
+    },
+
+    removeAudioTrack: (trackId) => {
+      set((state) => {
+        pushHistory(state);
+        if (!state.scene.audioTracks) return;
+        state.scene.audioTracks = state.scene.audioTracks.filter(
+          (t) => t.id !== trackId,
+        );
+      });
+    },
+
+    updateAudioTrack: (trackId, patch) => {
+      set((state) => {
+        pushHistory(state);
+        const track = state.scene.audioTracks?.find((t) => t.id === trackId);
+        if (!track) return;
+        Object.assign(track, patch);
+      });
     },
   }))
 );

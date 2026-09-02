@@ -2,13 +2,15 @@ import { useState } from 'react';
 import { Inspector } from './Inspector';
 import { ArmiesPanel } from './ArmiesPanel';
 import { ShapesPanel } from './ShapesPanel';
+import { AudioPanel } from './AudioPanel';
 
-type TabKey = 'armies' | 'object' | 'shapes';
+type TabKey = 'armies' | 'object' | 'shapes' | 'audio';
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'armies', label: 'Armies' },
   { key: 'object', label: 'Object' },
   { key: 'shapes', label: 'Shapes' },
+  { key: 'audio', label: 'Audio' },
 ];
 
 /**
@@ -43,6 +45,7 @@ export function RightPanel() {
         {tab === 'armies' && <ArmiesPanel />}
         {tab === 'object' && <Inspector />}
         {tab === 'shapes' && <ShapesPanel />}
+        {tab === 'audio' && <AudioPanel />}
       </div>
     </div>
   );

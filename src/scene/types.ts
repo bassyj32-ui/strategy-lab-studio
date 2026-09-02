@@ -13,7 +13,7 @@ export interface WorldSize {
   h: number;
 }
 
-export type AssetKind = 'map' | 'sprite' | 'image';
+export type AssetKind = 'map' | 'sprite' | 'image' | 'audio';
 
 export type AssetCategory =
   | 'Infantry' | 'Cavalry' | 'Archers' | 'Elephants'
@@ -66,8 +66,9 @@ export interface Asset {
   kind: AssetKind;
   name: string;
   src: string;                // object URL (blob:) or data URL; never rewritten
-  width: number;              // intrinsic px; immutable
-  height: number;             // intrinsic px; immutable
+  width: number;              // intrinsic px; immutable (0 for audio)
+  height: number;             // intrinsic px; immutable (0 for audio)
+  duration?: number;          // seconds; only meaningful for audio assets
   metadata?: AssetMetadata;   // optional (maps may not carry category/faction)
 }
 
@@ -153,6 +154,21 @@ export interface FormationMetadata {
   orientation?: number;
 }
 
+/**
+ * TRAIN/SNAKE CONFIGURATION: stored on a parent group node. Children follow
+ * a shared path (the keyframes of `pathObjId`) with per-child distance offsets.
+ */
+export interface TrainFollowConfig {
+  /** Object ID whose keyframes define the shared path. */
+  pathObjId: ObjId;
+  /** Distance (world units) between adjacent children along the path. */
+  spacing: number;
+  /** Speed multiplier relative to the path's time span (1 = normal). */
+  speed: number;
+  /** Whether children rotate to face the path direction. */
+  rotationFollow: boolean;
+}
+
 export interface SceneObject {
   id: ObjId;
   type: SceneObjectType;
@@ -167,6 +183,8 @@ export interface SceneObject {
   parentId?: ObjId;
   /** FORMATION-ONLY: set on the parent group node created by createFormation. */
   formation?: FormationMetadata;
+  /** TRAIN/SNAKE: children follow a shared path with distance offsets. */
+  trainFollow?: TrainFollowConfig;
   /**
    * ARROW-ONLY: shaft length in LOCAL units (tail at local origin, tip at
    * (length, 0)). Placement/orientation live entirely in `transform`, so
@@ -302,6 +320,20 @@ export interface CameraKeyframe {
   easing?: Easing;
 }
 
+/**
+ * AUDIO TRACK: a positioned audio clip on the scene's timeline. Each track
+ * references an audio asset and places it at a specific start time with
+ * volume/loop controls. Absent audioTracks on Scene = silent (byte-identical).
+ */
+export interface AudioTrack {
+  id: string;
+  assetId: AssetId;
+  startTime: number;   // timeline second when playback begins
+  volume: number;      // 0..1
+  loop: boolean;
+  name?: string;       // display label in timeline
+}
+
 export interface Scene {
   id: string;
   name: string;
@@ -347,6 +379,12 @@ export interface Scene {
   /** §96 SIGNATURE ENDING space ('THE LESSON'). Same mechanism as openingCard. */
   closingCard?: TitleCardConfig;
   timeline: Timeline;
+  /**
+   * OPTIONAL audio tracks (battle SFX, ambience, narration). Absent = silent
+   * scene (byte-identical to pre-audio). Each track references an audio asset
+   * and positions it on the timeline.
+   */
+  audioTracks?: AudioTrack[];
 }
 
 // ---------------------------------------------------------------------------
