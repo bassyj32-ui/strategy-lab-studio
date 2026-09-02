@@ -39,6 +39,7 @@ import {
   resolveWorldTransform,
   composeTransform,
   worldPointToLocal,
+  groupRootOf,
 } from '../objects/groups';
 import { getObjectWorldTransformAtTime } from '../timeline/selectors';
 import type {
@@ -216,6 +217,8 @@ function SelectionGizmos({
   const beginInteraction = useSceneStore((s) => s.beginInteraction);
   const endInteraction = useSceneStore((s) => s.endInteraction);
   const updateTransform = useSceneStore((s) => s.updateTransform);
+  const moveGroup = useSceneStore((s) => s.moveGroup);
+  const objects = useSceneStore((s) => s.scene.objects);
 
   const frame = parentFrame ?? {
     x: 0,
@@ -240,6 +243,7 @@ function SelectionGizmos({
   const scaleDragRef = useRef<{ startDist: number; startScale: number } | null>(
     null
   );
+  const moveDragRef = useRef<{ startWx: number; startWy: number } | null>(null);
 
   const cursor = (c: string) => ({
     onMouseEnter: (e: KonvaEventObject<MouseEvent>) => {
@@ -341,6 +345,38 @@ function SelectionGizmos({
           updateTransform(obj.id, { rotation: normalizeDeg(deg) });
         }}
         onDragEnd={() => endInteraction()}
+      />
+
+      {/* Move handle: draggable circle at the anchor for repositioning. */}
+      <Circle
+        data-testid="gizmo-move"
+        x={anchorLocal.x}
+        y={anchorLocal.y}
+        radius={7 * k}
+        fill={GIZMO_COLOR}
+        stroke="#0b1020"
+        strokeWidth={2 * k}
+        draggable
+        {...cursor('grab')}
+        onDragStart={() => {
+          const w = pointerWorld();
+          if (w) moveDragRef.current = { startWx: w.x, startWy: w.y };
+          beginInteraction();
+        }}
+        onDragMove={() => {
+          const base = moveDragRef.current;
+          const w = pointerWorld();
+          if (!base || !w) return;
+          const dx = w.x - base.startWx;
+          const dy = w.y - base.startWy;
+          const rootId = groupRootOf(objects, obj.id);
+          moveGroup(rootId, dx, dy);
+          moveDragRef.current = { startWx: w.x, startWy: w.y };
+        }}
+        onDragEnd={() => {
+          moveDragRef.current = null;
+          endInteraction();
+        }}
       />
     </>
   );

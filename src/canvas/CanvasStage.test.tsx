@@ -136,3 +136,43 @@ describe('CanvasStage drop → object placement', () => {
     expect(created!.assetId).toBeUndefined();
   });
 });
+
+describe('CanvasStage selection gizmos', () => {
+  it('renders move handle (gizmo-move) when an object is selected', () => {
+    act(() => {
+      const st = useSceneStore.getState();
+      st.addObject({
+        id: 'sel1',
+        type: 'unit',
+        transform: { x: 100, y: 100, rotation: 0, scale: 1, opacity: 1 },
+        layerId: st.activeLayerId,
+      });
+      useSceneStore.setState({ selectedIds: ['sel1'], selectedObjId: 'sel1' });
+    });
+    const { container } = render(<CanvasStage />);
+    // The gizmo-move circle should be in the DOM (rendered as a div by mock).
+    expect(container.querySelector('[data-testid="gizmo-move"]')).toBeTruthy();
+  });
+
+  it('renders move handle for a grouped child (moves the group root)', () => {
+    act(() => {
+      const st = useSceneStore.getState();
+      st.addObject({
+        id: 'grp',
+        type: 'group',
+        transform: { x: 200, y: 200, rotation: 0, scale: 1, opacity: 1 },
+        layerId: st.activeLayerId,
+      });
+      st.addObject({
+        id: 'child1',
+        type: 'unit',
+        transform: { x: 210, y: 210, rotation: 0, scale: 1, opacity: 1 },
+        layerId: st.activeLayerId,
+        parentId: 'grp',
+      });
+      useSceneStore.setState({ selectedIds: ['child1'], selectedObjId: 'child1' });
+    });
+    const { container } = render(<CanvasStage />);
+    expect(container.querySelector('[data-testid="gizmo-move"]')).toBeTruthy();
+  });
+});
