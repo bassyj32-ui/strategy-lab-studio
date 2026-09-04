@@ -88,8 +88,7 @@ describe('timeline actions (scene-store keyframe CRUD)', () => {
     expect(after.length).toBe(0);
   });
 
-  it('addKeyframe / updateKeyframe / removeKeyframe are each undoable', () => {
-    addKeyframe('u1', { time: 3, transform: T(30) });
+  it('addKeyframe / updateKeyframe / removeKeyframe are each undoable', () => {    addKeyframe('u1', { time: 3, transform: T(30) });
     useSceneStore.getState().undo();
     expect((useSceneStore.getState().scene.keyframes['u1'] ?? []).length).toBe(0);
 

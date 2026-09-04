@@ -66,6 +66,21 @@ export function GroupOverlay({ scene, currentTime }: GroupOverlayProps) {
 
         return (
           <React.Fragment key={group.id}>
+            {group.clusterGlow && (
+              <Rect
+                x={rectX}
+                y={rectY}
+                width={rectW}
+                height={rectH}
+                fillEnabled={false}
+                stroke={group.clusterGlow.color}
+                strokeWidth={2 * k}
+                shadowColor={group.clusterGlow.color}
+                shadowBlur={group.clusterGlow.radius * k}
+                shadowOpacity={0.6}
+                listening={false}
+              />
+            )}
             <Rect
               x={rectX}
               y={rectY}

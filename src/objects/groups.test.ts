@@ -12,6 +12,7 @@ import {
   worldDeltaToLocal,
   worldPointToLocal,
   groupRootOf,
+  snakeConfigForGroup,
 } from './groups';
 import type { ObjId } from '../scene/types';
 
@@ -259,5 +260,71 @@ describe('groupRootOf (CapCut drag law)', () => {
     } as never;
     // Terminates; returns SOME member of the cycle.
     expect(['x', 'y'] as ObjId[]).toContain(groupRootOf(objects, 'x' as ObjId));
+  });
+});
+
+describe('snakeConfigForGroup', () => {
+  function groupObj(id: string, spacing?: number): SceneObject {
+    return {
+      id,
+      type: 'group',
+      transform: { x: 0, y: 0, rotation: 0, scale: 1, opacity: 1 },
+      layerId: 'layer_1',
+      ...(spacing ? { formation: { pattern: 'line', spacing, count: 2 } } : {}),
+    };
+  }
+
+  it('returns null for a non-group object', () => {
+    const objects = { u: obj('u') };
+    expect(snakeConfigForGroup(objects.u, objects)).toBeNull();
+  });
+
+  it('returns null for a group with fewer than 2 children', () => {
+    const g = groupObj('g');
+    const objects: Record<string, SceneObject> = { g, c: obj('c', { x: 10 }, 'g') };
+    expect(snakeConfigForGroup(objects.g, objects)).toBeNull();
+  });
+
+  it('returns null when the object is missing', () => {
+    expect(snakeConfigForGroup(undefined, {})).toBeNull();
+  });
+
+  it('uses the formation spacing and points at the group itself', () => {
+    const g = groupObj('g', 40);
+    const objects: Record<string, SceneObject> = {
+      g,
+      a: obj('a', { x: -20 }, 'g'),
+      b: obj('b', { x: 20 }, 'g'),
+    };
+    const cfg = snakeConfigForGroup(objects.g, objects);
+    expect(cfg).not.toBeNull();
+    expect(cfg!.pathObjId).toBe('g');
+    expect(cfg!.spacing).toBe(40);
+    expect(cfg!.speed).toBe(1);
+    expect(cfg!.rotationFollow).toBe(true);
+  });
+
+  it('derives spacing from the median neighbour gap for ad-hoc groups', () => {
+    const g = groupObj('g');
+    const objects: Record<string, SceneObject> = {
+      g,
+      a: obj('a', { x: 0 }, 'g'),
+      b: obj('b', { x: 100 }, 'g'),
+      c: obj('c', { x: 300 }, 'g'),
+    };
+    const cfg = snakeConfigForGroup(objects.g, objects);
+    // gaps: 100 (a→b), 200 (b→c) → median 100.
+    expect(cfg!.spacing).toBe(100);
+  });
+
+  it('floors absurdly small spacings so troops do not stack', () => {
+    const g = groupObj('g', 2);
+    const objects: Record<string, SceneObject> = {
+      g,
+      a: obj('a', {}, 'g'),
+      b: obj('b', {}, 'g'),
+    };
+    const cfg = snakeConfigForGroup(objects.g, objects);
+    expect(cfg!.spacing).toBeGreaterThanOrEqual(8);
   });
 });

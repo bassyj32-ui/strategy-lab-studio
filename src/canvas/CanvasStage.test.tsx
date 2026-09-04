@@ -11,10 +11,64 @@ import { createDefaultScene } from '../scene/factory';
 // handler touches, so we can exercise the asset→unit placement path.
 vi.mock('react-konva', async () => {
   const R = await import('react');
+  // Konva-only props that React would warn about as unknown DOM attributes.
+  // Strip them before they reach the plain-div stand-ins.
+  const STRIP = new Set([
+    'x',
+    'y',
+    'rotation',
+    'opacity',
+    'draggable',
+    'width',
+    'height',
+    'fill',
+    'stroke',
+    'strokeWidth',
+    'points',
+    'closed',
+    'dash',
+    'image',
+    'align',
+    'fontSize',
+    'fontStyle',
+    'text',
+    'radiusX',
+    'radiusY',
+    'scaleX',
+    'scaleY',
+    'offsetX',
+    'offsetY',
+    'verticalAlign',
+    'onDragMove',
+    'onDragStart',
+    'onDragEnd',
+    'onTap',
+    'onDblClick',
+    'strokeScaleEnabled',
+    'hitStrokeWidth',
+    'shadowColor',
+    'shadowBlur',
+    'shadowOffsetX',
+    'shadowOffsetY',
+    'shadowZoom',
+    'wantShadow',
+    'listening',
+    'fillEnabled',
+    'cornerRadius',
+    'lineCap',
+  ]);
+  const clean = (props: Record<string, unknown>) => {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(props)) {
+      if (!STRIP.has(k)) out[k] = v;
+    }
+    return out;
+  };
   const make = (tag: string) =>
-    R.forwardRef((props: Record<string, unknown>, ref: unknown) =>
-      R.createElement(tag, { ...props, ref }, props.children as ReactNode)
-    );
+    R.forwardRef((props: Record<string, unknown>, ref: unknown) => {
+      const { children, ...rest } = props;
+      return R.createElement(tag, { ...clean(rest), ref }, children as ReactNode);
+    });
   const comps: Record<string, unknown> = {
     Stage: R.forwardRef((props: Record<string, unknown>, ref: unknown) => {
       // Provide the imperative handle CanvasStage reads during a drop.
@@ -174,5 +228,34 @@ describe('CanvasStage selection gizmos', () => {
     });
     const { container } = render(<CanvasStage />);
     expect(container.querySelector('[data-testid="gizmo-move"]')).toBeTruthy();
+  });
+
+  it('does not emit React unknown-prop warnings for Konva-only props', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      act(() => {
+        const st = useSceneStore.getState();
+        st.addObject({
+          id: 'sel1',
+          type: 'unit',
+          transform: { x: 100, y: 100, rotation: 0, scale: 1, opacity: 1 },
+          layerId: st.activeLayerId,
+        });
+        useSceneStore.setState({ selectedIds: ['sel1'], selectedObjId: 'sel1' });
+      });
+      render(<CanvasStage />);
+      const unknownPropCalls = spy.mock.calls.filter((args) =>
+        args.some(
+          (a) =>
+            typeof a === 'string' &&
+            (a.includes('Unknown event handler') ||
+              a.includes('React does not recognize') ||
+              a.includes('Invalid DOM property'))
+        )
+      );
+      expect(unknownPropCalls).toEqual([]);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

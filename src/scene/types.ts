@@ -135,7 +135,7 @@ export interface TitleCardConfig {
 export type SceneObjectType = 'unit' | 'shape' | 'marker' | 'arrow' | 'group';
 
 /** Formation layouts supported by `createFormation` (pure layout math in objects/groups.ts). */
-export type FormationPattern = 'line' | 'column' | 'wedge' | 'grid' | 'crescent' | 'circle';
+export type FormationPattern = 'line' | 'column' | 'wedge' | 'grid' | 'crescent' | 'circle' | 'scatter';
 
 /**
  * Formation metadata stored on the PARENT group node only. Purely descriptive
@@ -152,6 +152,8 @@ export interface FormationMetadata {
   radius?: number;
   /** Rotation offset in degrees for the whole shape (0 = default orientation). */
   orientation?: number;
+  /** SCATTER-ONLY: random displacement radius (local units). Absent = 0. */
+  jitter?: number;
 }
 
 /**
@@ -200,6 +202,17 @@ export interface SceneObject {
   arrowStyle?: ArrowStyle;
   /** §50 EFFECT SYSTEM: optional procedural overlay (see EffectKind). */
   effect?: EffectKind;
+  /**
+   * DISC-ONLY (viral battle-map style): solid fill color for asset-less units.
+   * When set, renders a filled circle instead of the gray "U" placeholder.
+   * Both render doors (ObjectNode + draw.ts) must match. Absent = placeholder.
+   */
+  discColor?: string;
+  /**
+   * CLUSTER GLOW (viral battle-map style): soft glow around the group's AABB.
+   * Set on a group node. Both render doors must match. Absent = no cluster glow.
+   */
+  clusterGlow?: { color: string; radius: number };
   /**
    * DEPTH (PRD §48): optional z-order within the layer. Higher renders later
    * (on top); absent behaves as 0 with stable insertion order preserved.

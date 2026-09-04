@@ -80,7 +80,7 @@ const MAX_HISTORY = 100;
  * Canvas tool (store-root UI state, never undoable). `select` is the default
  * pan/select behaviour; `arrow` turns background drags into arrow drawing.
  */
-export type EditorTool = 'select' | 'arrow' | 'path';
+export type EditorTool = 'select' | 'arrow' | 'path' | 'freehand';
 
 /**
  * One undo step = the WHOLE project at that moment (active scene + every
@@ -123,6 +123,24 @@ function scenesEqual(a: Scene, b: Scene): boolean {
  * endInteraction into keyframes at the playhead — one undoable step total.
  */
 const autoKfDirty = new Set<ObjId>();
+
+/**
+ * Coalesced-gesture depth (non-reactive). `beginInteraction` pushes ONE
+ * snapshot for the OUTERMOST gesture only; every session-contract writer
+ * below (updateTransform, updateObjectProps, moveObjectBy, moveObjectsBy,
+ * moveGroup, setKeyframeCp, setKeyframeTransform) pushes its OWN history
+ * entry when called OUTSIDE a gesture — so an Inspector-style direct call
+ * (e.g. the depth ↑/↓ chips, which never open a gesture) still undoes in ONE
+ * step — and pushes NOTHING inside one, so a drag with N writes stays ONE
+ * undo step. Never serialized, never part of Scene.
+ */
+let interactionDepth = 0;
+const inInteraction = () => interactionDepth > 0;
+/** Test-only: reset gesture depth between tests (a leaked begin must not poison the next test). */
+export function __resetInteractionForTests(): void {
+  interactionDepth = 0;
+  autoKfDirty.clear();
+}
 
 /**
  * Re-parent `childId` under `newParentId` (or root), converting its transform
@@ -491,6 +509,14 @@ export interface SceneState {
   shapeTargetId: ObjId | null;
   setShapeTargetId: (id: ObjId | null) => void;
 
+  /**
+   * Pending path waypoint from double-click on an ObjectNode during path
+   * drawing. CanvasStage consumes this and pushes it to pathPointsRef.
+   * Transient UI state, never serialized.
+   */
+  pendingPathWaypoint: { x: number; y: number } | null;
+  setPendingPathWaypoint: (pt: { x: number; y: number } | null) => void;
+
   // ---- History primitives ----
   /** Apply a discrete mutation as a single undoable transaction. */
   transaction: <T>(fn: (scene: Scene) => T, label?: string) => T;
@@ -540,8 +566,9 @@ export interface SceneState {
   updateTransform: (id: ObjId, partial: Partial<Transform>) => void;
   /**
    * Patch non-transform object props (ARROW length/color + COMMANDER
-   * label/faction/confidence). No snapshot: call within a begin/endInteraction
-   * edit session (Inspector fields do).
+   * label/faction/confidence). Session contract: inside a begin/endInteraction
+   * edit session (Inspector fields) this writes with no extra snapshot; a
+   * DIRECT call (depth chips) pushes its own snapshot — always ONE undo step.
    */
   updateObjectProps: (
     id: ObjId,
@@ -565,7 +592,7 @@ export interface SceneState {
       z?: number | null;
     }
   ) => void;
-  /** Drag helper: nudge an object by a delta (no extra snapshot). */
+  /** Drag helper: nudge an object by a delta (session contract — see updateTransform). */
   moveObjectBy: (id: ObjId, dx: number, dy: number) => void;
 
   // ---- Battle FX (collision-triggered effect instances, §BATTLE FX) ----
@@ -589,6 +616,16 @@ export interface SceneState {
   /** Insert (or replace at the same time) a keyframe; array kept sorted by time. */
   addKeyframe: (objId: ObjId, keyframe: Keyframe) => void;
   /**
+   * Batch path write for drawn movements (Draw Path / Draw Movement): upsert
+   * many keyframes at once and OPTIONALLY arm train/snake follow on the same
+   * object — all inside ONE undoable snapshot, so a drawn march (path +
+   * snake config) undoes as a single step instead of one entry per waypoint.
+   */
+  applyPathKeyframes: (
+    objId: ObjId,
+    keyframes: Array<Pick<Keyframe, 'time' | 'transform'>>,
+    opts?: { trainFollow?: TrainFollowConfig }
+  ) => void;
   /** Capture the object's CURRENT base transform as a keyframe at `time`. */
   setKeyframeAtTime: (objId: ObjId, time: number) => void;
   /**
@@ -609,10 +646,10 @@ export interface SceneState {
   /**
    * Set/clear a bezier control point on the keyframe at `time`.
    * `which='cpOut'` shapes the segment STARTING here; `'cpIn'` the one
-   * ENDING here; `null` clears (back to linear). SESSION CONTRACT exactly like
-   * `updateTransform`: NO snapshot — wrap a handle drag in
-   * beginInteraction/endInteraction for ONE undoable gesture, or call inside
-   * `transaction` for a discrete undoable set/clear.
+   * ENDING here; `null` clears (back to linear). SESSION CONTRACT: wrap a
+   * handle drag in beginInteraction/endInteraction for ONE undoable gesture;
+   * a discrete direct call (double-click clear) pushes its own snapshot —
+   * always ONE undo step, never nested inside transaction().
    */
   setKeyframeCp: (
     objId: ObjId,
@@ -622,9 +659,9 @@ export interface SceneState {
   ) => void;
   /**
    * SESSION-CONTRACT position edit for waypoint dragging (Request 1): patch
-   * the keyframe's transform x/y WITHOUT pushing history. Caller MUST wrap in
-   * beginInteraction/endInteraction for ONE undoable gesture (same contract as
-   * updateTransform / setKeyframeCp).
+   * the keyframe's transform x/y. Inside a begin/endInteraction gesture this
+   * writes with no extra snapshot; a direct call pushes its own snapshot —
+   * always ONE undo step.
    */
   setKeyframeTransform: (
     objId: ObjId,
@@ -706,7 +743,7 @@ export interface SceneState {
      */
     arrangeSelectedIntoFormation: (
       pattern: FormationPattern,
-      opts?: { spacing?: number; radius?: number; orientation?: number },
+      opts?: { spacing?: number; radius?: number; orientation?: number; jitter?: number },
     ) => ObjId | null;
     /** Move a group parent by a WORLD delta — children track automatically. */
     moveGroup: (groupId: ObjId, dx: number, dy: number) => void;
@@ -745,13 +782,21 @@ export interface SceneState {
      */
     duplicateObject: (id: ObjId) => ObjId | null;
     /**
-     * Gesture helper (no snapshot): move several SELECTION ROOTS by one WORLD
-     * delta. Each object's delta is converted into its own parent frame.
+     * Gesture helper (session contract — see updateTransform): move several
+     * SELECTION ROOTS by one WORLD delta. Each object's delta is converted
+     * into its own parent frame.
      */
     moveObjectsBy: (ids: ObjId[], dx: number, dy: number) => void;
 
     // ---- Camera (single source of truth: Scene.camera, PRD §87) ----
-    /** Writes a NEW camera state derived by `updater`; never mutates in place. */
+    /**
+     * Writes a NEW camera state derived by `updater`; never mutates in place.
+     * DELIBERATELY NON-UNDOABLE (PRD §87: the camera is navigation state, not
+     * scene content — panning/zooming must never consume undo steps). undo()
+     * and redo() therefore PRESERVE the live camera when the restore stays in
+     * the same scene (see the sameScene guard there); switching scenes keeps
+     * the incoming scene's own saved camera.
+     */
     updateCamera: (updater: (cam: CameraState) => CameraState) => void;
 
     // ---- Camera track (per-scene animated camera; see cameraTrack.ts) ----
@@ -887,6 +932,7 @@ export const useSceneStore = create<SceneState>()(
   lastAutoKfCount: 0,
   bgTargetAssetId: null,
   shapeTargetId: null,
+  pendingPathWaypoint: null,
 
     transaction: (fn, label) => {
       let result: ReturnType<typeof fn>;
@@ -915,15 +961,25 @@ export const useSceneStore = create<SceneState>()(
     },
 
     beginInteraction: () => {
+      // A stale dirty set must never leak into the next gesture (e.g. a
+      // direct write while auto-KF was on, with no endInteraction to flush
+      // it). Clear on BEGIN as well as on END.
+      autoKfDirty.clear();
+      interactionDepth += 1;
+      if (interactionDepth > 1) return; // nested: outermost snapshot stands
       set((state) => {
         pushHistory(state);
       });
     },
 
     endInteraction: () => {
+      if (interactionDepth > 0) interactionDepth -= 1;
+      if (interactionDepth > 0) return; // nested: outermost end owns the flush
       set((state) => {
         const last = state.past[state.past.length - 1]?.scene;
         if (last && scenesEqual(last, state.scene)) {
+          // No-op gesture (focus without change, zero-delta drag): drop the
+          // snapshot so history does not grow.
           state.past.pop();
           autoKfDirty.clear();
           return;
@@ -949,8 +1005,10 @@ export const useSceneStore = create<SceneState>()(
             count++;
           }
           state.lastAutoKfCount = count;
-          autoKfDirty.clear();
         }
+        // Always clear: with auto-KF off (or nothing moved) there is no flush,
+        // but the ids must not leak into the NEXT gesture's endInteraction.
+        autoKfDirty.clear();
       });
     },
 
@@ -1048,20 +1106,25 @@ export const useSceneStore = create<SceneState>()(
     },
 
     updateTransform: (id, partial) => {
-      // No snapshot: this is called within a begin/endInteraction edit session.
+      // Session contract: inside a begin/endInteraction gesture this writes
+      // with NO extra snapshot (the gesture owns the one entry); called
+      // DIRECTLY (Inspector chips, tests) it pushes its own snapshot so the
+      // write still undoes in ONE step.
       set((state) => {
         const obj = state.scene.objects[id];
         if (!obj) return;
+        if (!inInteraction()) pushHistory(state);
         obj.transform = mergeTransform(obj.transform, partial);
         if (state.autoKeyframe) autoKfDirty.add(id);
       });
     },
 
     updateObjectProps: (id, props) => {
-      // No snapshot: same coalesced-session contract as updateTransform.
+      // Same session contract as updateTransform (see above).
       set((state) => {
         const obj = state.scene.objects[id];
         if (!obj) return;
+        if (!inInteraction()) pushHistory(state);
         if (props.length !== undefined) obj.length = props.length;
         if (props.color !== undefined) obj.color = props.color;
         // §32 arrow style: falsy (empty select value / undefined) clears back
@@ -1097,10 +1160,12 @@ export const useSceneStore = create<SceneState>()(
     },
 
     moveObjectBy: (id, dx, dy) => {
-      // No snapshot: used inside a begin/endInteraction drag.
+      // Session contract (see updateTransform): no snapshot inside a gesture,
+      // own snapshot on a direct call.
       set((state) => {
         const obj = state.scene.objects[id];
         if (!obj) return;
+        if (!inInteraction()) pushHistory(state);
         obj.transform = mergeTransform(obj.transform, {
           x: obj.transform.x + dx,
           y: obj.transform.y + dy,
@@ -1119,6 +1184,27 @@ export const useSceneStore = create<SceneState>()(
         else {
           list.push(kf);
           list.sort((a, b) => a.time - b.time);
+        }
+      });
+    },
+
+    applyPathKeyframes: (objId, keyframes, opts) => {
+      set((state) => {
+        pushHistory(state);
+        const list =
+          state.scene.keyframes[objId] ?? (state.scene.keyframes[objId] = []);
+        for (const kf of keyframes) {
+          const k = { time: kf.time, transform: { ...kf.transform } };
+          const idx = list.findIndex((x) => x.time === kf.time);
+          if (idx >= 0) list[idx] = k;
+          else {
+            list.push(k);
+            list.sort((a, b) => a.time - b.time);
+          }
+        }
+        if (opts?.trainFollow) {
+          const g = state.scene.objects[objId];
+          if (g) g.trainFollow = { ...opts.trainFollow };
         }
       });
     },
@@ -1198,25 +1284,29 @@ export const useSceneStore = create<SceneState>()(
     },
 
     setKeyframeCp: (objId, time, which, cp) => {
-      // No snapshot: session contract (see interface doc). Callers provide the
-      // undo boundary via begin/endInteraction or transaction.
+      // Session contract (see updateTransform): gesture drags wrap in
+      // begin/endInteraction for ONE undoable gesture; a discrete direct call
+      // (e.g. double-click clear) pushes its own snapshot for ONE undo step.
       set((state) => {
         const list = state.scene.keyframes[objId];
         if (!list) return;
         const k = list.find((o) => o.time === time);
         if (!k) return;
+        if (!inInteraction()) pushHistory(state);
         if (cp === null) delete k[which];
         else k[which] = { dx: cp.dx, dy: cp.dy };
       });
     },
 
     setKeyframeTransform: (objId, time, transform) => {
-      // No snapshot: session contract for waypoint dragging (see interface doc).
+      // Session contract (see setKeyframeCp): waypoint drags wrap in
+      // begin/endInteraction; direct calls push their own snapshot.
       set((state) => {
         const list = state.scene.keyframes[objId];
         if (!list) return;
         const k = list.find((o) => o.time === time);
         if (!k) return;
+        if (!inInteraction()) pushHistory(state);
         k.transform = mergeTransform(k.transform, transform);
       });
     },
@@ -1567,12 +1657,14 @@ export const useSceneStore = create<SceneState>()(
           count: unitIds.length,
           radius: opts?.radius,
           orientation: opts?.orientation,
+          jitter: opts?.jitter,
         };
 
         // 6. Compute formation offsets.
         const offsets = formationOffsets(pattern, unitIds.length, spacing, {
           radius: opts?.radius,
           orientation: opts?.orientation,
+          jitter: opts?.jitter,
         });
 
         // 7. Reparent each unit and set local transform to formation slot.
@@ -1602,8 +1694,13 @@ export const useSceneStore = create<SceneState>()(
     moveGroup: (groupId, dx, dy) => {
       set((state) => {
         if (!state.scene.objects[groupId]) return;
-        pushHistory(state);
+        // Session-aware: the gizmo/object drag gesture already opened a
+        // begin/endInteraction session (which owns the ONE snapshot), so a
+        // per-dragmove push here would flood history with one entry per
+        // mouse event. Only push when called directly (cap bar / tests).
+        if (!inInteraction()) pushHistory(state);
         applyWorldDelta(state.scene, groupId, dx, dy);
+        if (state.autoKeyframe) autoKfDirty.add(groupId);
       });
     },
 
@@ -1773,12 +1870,14 @@ export const useSceneStore = create<SceneState>()(
     },
 
     moveObjectsBy: (ids, dx, dy) => {
-      // No snapshot: gesture helper — caller owns begin/endInteraction.
+      // Session contract (see updateTransform): gesture helper — no snapshot
+      // inside a begin/endInteraction drag, own snapshot on a direct call.
       set((state) => {
-        const roots = selectionRoots(
-          state.scene.objects as unknown as Record<ObjId, SceneObject>,
-          ids
-        );
+        const objects = state.scene
+          .objects as unknown as Record<ObjId, SceneObject>;
+        const roots = selectionRoots(objects, ids);
+        if (roots.length === 0) return;
+        if (!inInteraction()) pushHistory(state);
         for (const root of roots) {
           applyWorldDelta(state.scene, root, dx, dy);
           if (state.autoKeyframe) autoKfDirty.add(root);
@@ -1814,6 +1913,12 @@ export const useSceneStore = create<SceneState>()(
     setShapeTargetId: (id) => {
       set((state) => {
         state.shapeTargetId = id;
+      });
+    },
+
+    setPendingPathWaypoint: (pt) => {
+      set((state) => {
+        state.pendingPathWaypoint = pt;
       });
     },
 

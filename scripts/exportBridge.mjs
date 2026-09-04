@@ -366,22 +366,24 @@ export function createExportHandlers() {
       body += chunk.toString();
     });
     req.on('end', () => {
-      console.log('[exportBridge] end body', body.length, 'bytes');
+      // Noisy per-request bodies stay behind DEBUG (never log scene payloads
+      // in normal operation).
+      if (process.env.DEBUG) console.log('[exportBridge] end body', body.length, 'bytes');
       if (responded) return;
       let parsed;
       try {
         parsed = JSON.parse(body || '{}');
       } catch (e) {
-        console.log('[exportBridge] invalid JSON', e.message);
+        if (process.env.DEBUG) console.log('[exportBridge] invalid JSON', e.message);
         responded = true;
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Invalid JSON body' }));
         return;
       }
       const { scene, mode } = parsed;
-      console.log('[exportBridge] parsed mode', mode, 'scene', scene?.id, 'objects', scene?.objects ? Object.keys(scene.objects).length : 0, 'timeline', scene?.timeline);
+      if (process.env.DEBUG) console.log('[exportBridge] parsed mode', mode, 'scene', scene?.id, 'objects', scene?.objects ? Object.keys(scene.objects).length : 0, 'timeline', scene?.timeline);
       if (!scene || !mode) {
-        console.log('[exportBridge] missing scene or mode');
+        if (process.env.DEBUG) console.log('[exportBridge] missing scene or mode');
         responded = true;
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'scene and mode are required' }));

@@ -40,6 +40,7 @@ import {
   composeTransform,
   worldPointToLocal,
   groupRootOf,
+  snakeConfigForGroup,
 } from '../objects/groups';
 import { getObjectWorldTransformAtTime } from '../timeline/selectors';
 import type {
@@ -91,6 +92,7 @@ import {
   snapDeg,
   stalkWorld,
 } from './gizmo';
+import { simplifyPath } from '../objects/simplifyPath';
 
 // The MVP-1 editor preview is a low-res proxy: show the 1920x1080 world at
 // half scale so it fits typical screens (performance budget: MacBook Air M1).
@@ -717,6 +719,10 @@ export function CanvasStage() {
   const pathPointsRef = useRef<Array<{ x: number; y: number }>>([]);
   const [pathCursor, setPathCursor] = useState<{ x: number; y: number } | null>(null);
 
+  // Freehand draw: hold + drag to draw a movement path.
+  const freehandPointsRef = useRef<Array<{ x: number; y: number }>>([]);
+  const [freehandPreview, setFreehandPreview] = useState<Array<{ x: number; y: number }> | null>(null);
+
   const finishPathDraw = (): void => {
     const points = pathPointsRef.current;
     pathPointsRef.current = [];
@@ -724,15 +730,20 @@ export function CanvasStage() {
     if (points.length < 2) return; // Need ≥2 points for a path.
     suppressNextClickRef.current = true;
 
-    // Apply path as position keyframes to the selected object.
+    // Apply path as position keyframes to the selected object. When the
+    // selection is (or belongs to) a formation/group, the WHOLE unit follows:
+    // keyframes land on the group root in world space, and if it has 2+
+    // members a snake config is armed so soldiers string out along the drawn
+    // road one-behind-another instead of sliding as one rigid block.
     if (selected) {
+      const store = useSceneStore.getState();
+      const objects = scene.objects;
+      const rootId = groupRootOf(objects, selected.id);
+      const root = objects[rootId];
+      const useWholeUnit = !!root && (root.type === 'group' || rootId !== selected.id);
+      const target = useWholeUnit && root ? root : selected;
       const duration = Math.max(scene.timeline.duration, 1);
-      const id = selected.id;
-      const addKf = useSceneStore.getState().addKeyframe;
-      // Distance-proportional timing: each leg's share of the timeline is
-      // proportional to its length, so the object crosses at a constant
-      // speed (boss-approved). Zero-length legs (duplicate points) get the
-      // even-spacing fallback so time still advances.
+      const span = duration;
       const legs: number[] = [];
       let total = 0;
       for (let i = 1; i < points.length; i++) {
@@ -740,28 +751,95 @@ export function CanvasStage() {
         legs.push(len);
         total += len;
       }
+      const kfs: Array<Pick<Keyframe, 'time' | 'transform'>> = [];
       for (let i = 0; i < points.length; i++) {
         let t: number;
         if (total > 0 && i > 0) {
           let cum = 0;
           for (let j = 0; j < i; j++) cum += legs[j];
-          t = (cum / total) * duration;
+          t = (cum / total) * span;
         } else {
-          t = (i / (points.length - 1)) * duration;
+          t = (i / (points.length - 1)) * span;
         }
-        addKf(id, {
+        kfs.push({
           time: Math.round(t * 100) / 100,
           transform: {
             x: points[i].x,
             y: points[i].y,
-            rotation: selected.transform.rotation,
-            scale: selected.transform.scale,
-            opacity: selected.transform.opacity,
+            rotation: target.transform.rotation,
+            scale: target.transform.scale,
+            opacity: target.transform.opacity,
           },
         });
       }
+      const snake = useWholeUnit ? snakeConfigForGroup(target, objects) : null;
+      store.applyPathKeyframes(
+        target.id,
+        kfs,
+        snake ? { trainFollow: snake } : undefined
+      );
       // Feedback: show toast with keyframe count.
-      useSceneStore.setState({ lastAutoKfCount: points.length });
+      useSceneStore.setState({ lastAutoKfCount: kfs.length });
+    }
+    setTool('select');
+  };
+
+  /** Freehand draw: simplify stroke → generate keyframes → auto-smooth. */
+  const finishFreehandDraw = (): void => {
+    const rawPoints = freehandPointsRef.current;
+    freehandPointsRef.current = [];
+    setFreehandPreview(null);
+    if (rawPoints.length < 2) return;
+    suppressNextClickRef.current = true;
+
+    // Simplify: reduce dense freehand points to ~10-20 waypoints.
+    const points = simplifyPath(rawPoints, 15);
+
+    // Apply as position keyframes (reuse the same logic as finishPathDraw).
+    if (selected) {
+      const store = useSceneStore.getState();
+      const objects = scene.objects;
+      const rootId = groupRootOf(objects, selected.id);
+      const root = objects[rootId];
+      const useWholeUnit = !!root && (root.type === 'group' || rootId !== selected.id);
+      const target = useWholeUnit && root ? root : selected;
+      const duration = Math.max(scene.timeline.duration, 1);
+      const span = duration;
+      const legs: number[] = [];
+      let total = 0;
+      for (let i = 1; i < points.length; i++) {
+        const len = dist(points[i - 1], points[i]);
+        legs.push(len);
+        total += len;
+      }
+      const kfs: Array<Pick<Keyframe, 'time' | 'transform'>> = [];
+      for (let i = 0; i < points.length; i++) {
+        let t: number;
+        if (total > 0 && i > 0) {
+          let cum = 0;
+          for (let j = 0; j < i; j++) cum += legs[j];
+          t = (cum / total) * span;
+        } else {
+          t = (i / (points.length - 1)) * span;
+        }
+        kfs.push({
+          time: Math.round(t * 100) / 100,
+          transform: {
+            x: points[i].x,
+            y: points[i].y,
+            rotation: target.transform.rotation,
+            scale: target.transform.scale,
+            opacity: target.transform.opacity,
+          },
+        });
+      }
+      const snake = useWholeUnit ? snakeConfigForGroup(target, objects) : null;
+      store.applyPathKeyframes(
+        target.id,
+        kfs,
+        snake ? { trainFollow: snake } : undefined
+      );
+      useSceneStore.setState({ lastAutoKfCount: kfs.length });
     }
     setTool('select');
   };
@@ -932,6 +1010,16 @@ export function CanvasStage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [activeTool, setTool]);
 
+  // Consume pending path waypoint from ObjectNode double-click during path
+  // drawing. The waypoint is set on the store by ObjectNode.handleDblClick.
+  useEffect(() => {
+    const pt = useSceneStore.getState().pendingPathWaypoint;
+    if (pt && activeTool === 'path') {
+      pathPointsRef.current.push(pt);
+      useSceneStore.getState().setPendingPathWaypoint(null);
+    }
+  });
+
   const verticalLines: ReactNode[] = [];
   for (let gx = GRID_STEP; gx < worldSize.w; gx += GRID_STEP) {
     verticalLines.push(
@@ -972,6 +1060,15 @@ export function CanvasStage() {
           onDblTap={handleStageDblClick}
           onWheel={handleWheel}
           onMouseDown={(e) => {
+            // Freehand tool: background press starts a draw gesture.
+            if (activeTool === 'freehand') {
+              if (e.target !== e.target.getStage()) return;
+              const world = pointerWorld();
+              if (!world) return;
+              freehandPointsRef.current = [world];
+              setFreehandPreview([world]);
+              return;
+            }
             // Path tool: background click adds a waypoint.
             if (activeTool === 'path') {
               if (e.target !== e.target.getStage()) return;
@@ -1006,6 +1103,18 @@ export function CanvasStage() {
             }
           }}
           onMouseMove={() => {
+            // Freehand tool: append points during drag.
+            if (activeTool === 'freehand' && freehandPointsRef.current.length > 0) {
+              const world = pointerWorld();
+              if (!world) return;
+              const pts = freehandPointsRef.current;
+              const last = pts[pts.length - 1];
+              // Skip if too close (< 5 world units) to avoid excessive density.
+              if (dist(last, world) < 5) return;
+              pts.push(world);
+              setFreehandPreview([...pts]);
+              return;
+            }
             // Path tool: show trailing cursor preview line.
             if (activeTool === 'path' && pathPointsRef.current.length > 0) {
               const world = pointerWorld();
@@ -1034,6 +1143,11 @@ export function CanvasStage() {
             panHandlers.onPointerMove();
           }}
           onMouseUp={(e) => {
+            // Freehand tool: finalize the drawn path.
+            if (activeTool === 'freehand' && freehandPointsRef.current.length > 0) {
+              finishFreehandDraw();
+              return;
+            }
             if (arrowTailRef.current) {
               finishArrowDraw();
               return;
@@ -1208,6 +1322,20 @@ export function CanvasStage() {
                   />
                 )}
               </Group>
+            )}
+          </Layer>
+
+          {/* Freehand-draw preview: solid blue line following the stroke. */}
+          <Layer listening={false}>
+            {activeTool === 'freehand' && freehandPreview && freehandPreview.length >= 2 && (
+              <Line
+                points={freehandPreview.flatMap((p) => [p.x, p.y])}
+                stroke="#4d8dff"
+                strokeWidth={3}
+                opacity={0.7}
+                lineCap="round"
+                lineJoin="round"
+              />
             )}
           </Layer>
 

@@ -30,6 +30,8 @@ export interface CreateObjectOpts {
   color?: string;
   /** ARROW-ONLY (§32 branding): signature style tag. Absent = 'attack'. */
   arrowStyle?: ArrowStyle;
+  /** DISC-ONLY: solid fill color for asset-less units. Absent = placeholder. */
+  discColor?: string;
 }
 
 /** Default arrow shaft length in world units (tail → tip). */
@@ -80,6 +82,7 @@ export function createUnit(opts: CreateObjectOpts): SceneObject {
     faction: opts.faction,
     transform: withTransform(opts),
     layerId: opts.layerId,
+    ...(opts.discColor ? { discColor: opts.discColor } : {}),
   };
 }
 

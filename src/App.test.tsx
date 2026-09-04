@@ -84,11 +84,10 @@ describe('App persistence (reload data-loss regression)', () => {
     await waitFor(() => {
       expect(useSceneStore.getState().scene.name).toBe('Cannae');
     });
-    // …and only a small "Start fresh" toast confirms it (no blocking banner).
-    // Own waitFor: the zustand store commit and the React toast state can
-    // land in separate renders under load.
+    // …and only a small "Start fresh" option confirms it (no blocking banner).
+    // The Resume tab appears in the right panel when a session is restored.
     await waitFor(() => {
-      expect(screen.getByTestId('session-toast')).toBeTruthy();
+      expect(screen.getByTestId('tab-resume')).toBeTruthy();
     });
   });
 
@@ -106,13 +105,14 @@ describe('App persistence (reload data-loss regression)', () => {
     });
     render(<App />);
     await waitFor(() => {
-      expect(screen.getByTestId('session-toast')).toBeTruthy();
+      expect(screen.getByTestId('tab-resume')).toBeTruthy();
     });
 
+    fireEvent.click(screen.getByTestId('tab-resume'));
     fireEvent.click(screen.getByTestId('session-toast-fresh'));
     expect(clearAutosave).toHaveBeenCalled();
     await waitFor(() => {
-      expect(screen.queryByTestId('session-toast')).toBeNull();
+      expect(screen.queryByTestId('tab-resume')).toBeNull();
     });
     expect(useSceneStore.getState().scene.name).toBe(createDefaultScene().name);
     expect(useSceneStore.getState().inactiveScenes).toEqual({});

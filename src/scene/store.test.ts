@@ -1738,4 +1738,202 @@ describe('battle FX (collision-triggered effect instances, §BATTLE FX)', () => 
     expect(result[0].time).toBeGreaterThan(0);
     expect(result[0].time).toBeLessThan(5);
   });
+
+  describe('setTrainFollow', () => {
+    it('sets trainFollow config on a group', () => {
+      const g = s().createObjectOfType('group');
+      const cfg = { pathObjId: 'path_1', spacing: 50, speed: 1, rotationFollow: false };
+      s().setTrainFollow(g, cfg);
+      expect(s().scene.objects[g].trainFollow).toEqual(cfg);
+    });
+
+    it('removes trainFollow config when null', () => {
+      const g = s().createObjectOfType('group');
+      s().setTrainFollow(g, { pathObjId: 'path_1', spacing: 50, speed: 1, rotationFollow: false });
+      s().setTrainFollow(g, null);
+      expect(s().scene.objects[g].trainFollow).toBeUndefined();
+    });
+
+    it('is undoable', () => {
+      const g = s().createObjectOfType('group');
+      s().setTrainFollow(g, { pathObjId: 'p', spacing: 30, speed: 2, rotationFollow: true });
+      expect(s().scene.objects[g].trainFollow).toBeDefined();
+      s().undo();
+      expect(s().scene.objects[g].trainFollow).toBeUndefined();
+      s().redo();
+      expect(s().scene.objects[g].trainFollow).toBeDefined();
+    });
+
+    it('ignores nonexistent objects', () => {
+      s().setTrainFollow('nonexistent' as ObjId, { pathObjId: 'p', spacing: 30, speed: 1, rotationFollow: false });
+      expect(s().scene.objects['nonexistent' as ObjId]).toBeUndefined();
+    });
+  });
+
+  describe('applyPathKeyframes (drawn march batch)', () => {
+    const T = (x: number) => ({ x, y: 0, rotation: 0, scale: 1, opacity: 1 });
+
+    it('writes N keyframes + snake config in ONE undoable snapshot', () => {
+      const g = s().createObjectOfType('group');
+      const lenBefore = s().past.length;
+      const snake = { pathObjId: g, spacing: 40, speed: 1, rotationFollow: true };
+      s().applyPathKeyframes(
+        g,
+        [
+          { time: 0, transform: T(0) },
+          { time: 5, transform: T(500) },
+        ],
+        { trainFollow: snake }
+      );
+      // One history entry for the whole march (keyframes + snake arming).
+      expect(s().past.length).toBe(lenBefore + 1);
+      const kfs = s().scene.keyframes[g];
+      expect(kfs).toHaveLength(2);
+      expect(kfs.map((k) => k.time)).toEqual([0, 5]);
+      expect(s().scene.objects[g].trainFollow).toEqual(snake);
+      // A single undo reverts the whole march.
+      s().undo();
+      expect(s().scene.keyframes[g]).toBeUndefined();
+      expect(s().scene.objects[g].trainFollow).toBeUndefined();
+    });
+
+    it('keeps the array sorted and replaces keyframes at colliding times', () => {
+      const g = s().createObjectOfType('group');
+      s().applyPathKeyframes(g, [
+        { time: 0, transform: T(0) },
+        { time: 4, transform: T(400) },
+      ]);
+      s().applyPathKeyframes(g, [
+        { time: 2, transform: T(200) },
+        { time: 4, transform: T(999) },
+      ]);
+      const kfs = s().scene.keyframes[g];
+      expect(kfs.map((k) => k.time)).toEqual([0, 2, 4]);
+      expect(kfs[2].transform.x).toBe(999);
+    });
+
+    it('arms nothing when opts are omitted (plain single-object path)', () => {
+      const g = s().createObjectOfType('group');
+      s().applyPathKeyframes(g, [
+        { time: 0, transform: T(0) },
+        { time: 5, transform: T(500) },
+      ]);
+      expect(s().scene.objects[g].trainFollow).toBeUndefined();
+    });
+  });
+
+  describe('train follow selector', () => {
+    it('positions children along a path with spacing', () => {
+      const pathObj = s().createObjectOfType('unit', { x: 0, y: 0 });
+      s().addKeyframe(pathObj, { time: 0, transform: { x: 0, y: 0, rotation: 0, scale: 1, opacity: 1 } });
+      s().addKeyframe(pathObj, { time: 2, transform: { x: 200, y: 0, rotation: 0, scale: 1, opacity: 1 } });
+
+      const group = s().groupObject([
+        s().createObjectOfType('unit', { x: 10, y: 0 }),
+        s().createObjectOfType('unit', { x: 20, y: 0 }),
+      ]);
+      expect(group).not.toBeNull();
+
+      s().setTrainFollow(group!, {
+        pathObjId: pathObj,
+        spacing: 50,
+        speed: 1,
+        rotationFollow: false,
+      });
+
+      const children = s().scene.objects
+        ? Object.values(s().scene.objects).filter((o) => o.parentId === group)
+        : [];
+      expect(children.length).toBe(1);
+
+      usePlaybackStore.setState({ currentTime: 0 });
+      const t0 = getObjectWorldTransformAtTime(s().scene, children[0].id, 0);
+      expect(t0.x).toBeCloseTo(0, 0);
+
+      usePlaybackStore.setState({ currentTime: 1 });
+      const t1 = getObjectWorldTransformAtTime(s().scene, children[0].id, 1);
+      expect(t1.x).toBeGreaterThan(0);
+      expect(t1.x).toBeLessThan(200);
+    });
+
+    it('rotation follows path tangent when enabled', () => {
+      const pathObj = s().createObjectOfType('unit', { x: 0, y: 0 });
+      s().addKeyframe(pathObj, { time: 0, transform: { x: 0, y: 0, rotation: 0, scale: 1, opacity: 1 } });
+      s().addKeyframe(pathObj, { time: 1, transform: { x: 0, y: 100, rotation: 0, scale: 1, opacity: 1 } });
+
+      const child = s().createObjectOfType('unit', { x: 0, y: 0 });
+      const g = s().createObjectOfType('group');
+      s().setSelectedIds([g, child]);
+      s().groupObject([g, child]);
+
+      s().setTrainFollow(g, {
+        pathObjId: pathObj,
+        spacing: 0,
+        speed: 1,
+        rotationFollow: true,
+      });
+
+      usePlaybackStore.setState({ currentTime: 0.5 });
+      const t = getObjectWorldTransformAtTime(s().scene, child, 0.5);
+      expect(t.rotation).toBeCloseTo(90, 0);
+    });
+  });
+
+  describe('audio tracks', () => {
+    const track = {
+      id: 'track-1',
+      assetId: 'asset-1',
+      startTime: 0,
+      volume: 0.8,
+      loop: false,
+      name: 'Sword Clash',
+    };
+
+    it('addAudioTrack adds a track to the scene', () => {
+      s().addAudioTrack(track);
+      expect(s().scene.audioTracks).toHaveLength(1);
+      expect(s().scene.audioTracks![0].id).toBe('track-1');
+    });
+
+    it('addAudioTrack is undoable', () => {
+      s().addAudioTrack(track);
+      expect(s().scene.audioTracks).toHaveLength(1);
+      s().undo();
+      expect(s().scene.audioTracks ?? []).toHaveLength(0);
+    });
+
+    it('removeAudioTrack removes by id', () => {
+      s().addAudioTrack(track);
+      s().addAudioTrack({ ...track, id: 'track-2' });
+      expect(s().scene.audioTracks).toHaveLength(2);
+      s().removeAudioTrack('track-1');
+      expect(s().scene.audioTracks).toHaveLength(1);
+      expect(s().scene.audioTracks![0].id).toBe('track-2');
+    });
+
+    it('removeAudioTrack is undoable', () => {
+      s().addAudioTrack(track);
+      s().removeAudioTrack('track-1');
+      expect(s().scene.audioTracks ?? []).toHaveLength(0);
+      s().undo();
+      expect(s().scene.audioTracks).toHaveLength(1);
+    });
+
+    it('updateAudioTrack patches properties', () => {
+      s().addAudioTrack(track);
+      s().updateAudioTrack('track-1', { volume: 0.5, loop: true });
+      const updated = s().scene.audioTracks![0];
+      expect(updated.volume).toBe(0.5);
+      expect(updated.loop).toBe(true);
+      expect(updated.name).toBe('Sword Clash'); // unchanged
+    });
+
+    it('updateAudioTrack is undoable', () => {
+      s().addAudioTrack(track);
+      s().updateAudioTrack('track-1', { volume: 0.5 });
+      expect(s().scene.audioTracks![0].volume).toBe(0.5);
+      s().undo();
+      expect(s().scene.audioTracks![0].volume).toBe(0.8);
+    });
+  });
 });

@@ -57,6 +57,7 @@ export function CanvasActionBar() {
   const [showExport, setShowExport] = useState(false);
   const [pattern, setPattern] = useState<FormationPattern>('line');
   const [spacing, setSpacing] = useState(50);
+  const [jitter, setJitter] = useState(0);
   // Background-remover picker state (popover lives in the toolbar).
   // 'auto' = sample the 4 corners (default — fixes green-screen variance).
   const [bgOpen, setBgOpen] = useState(false);
@@ -156,7 +157,7 @@ export function CanvasActionBar() {
 
   // Arrange EXISTING selected units into a formation (one undoable txn).
   const handleArrangeFormation = () => {
-    const groupId = arrangeSelectedIntoFormation(pattern, { spacing });
+    const groupId = arrangeSelectedIntoFormation(pattern, { spacing, jitter });
     if (groupId) {
       selectObjectUnified(groupId);
       setStatus(`Arranged units into ${pattern} formation`);
@@ -343,6 +344,15 @@ export function CanvasActionBar() {
       </button>
       <button
         type="button"
+        data-testid="freehand-tool"
+        className={activeTool === 'freehand' ? 'active' : undefined}
+        title="Draw movement — hold and drag to draw a freehand path, release to finish"
+        onClick={() => setTool(activeTool === 'freehand' ? 'select' : 'freehand')}
+      >
+        {activeTool === 'freehand' ? '✓ Move' : 'Draw Movement'}
+      </button>
+      <button
+        type="button"
         data-testid="smooth-path"
         disabled={!canSmooth}
         title="Smooth path — add easing handles between waypoints so the object glides instead of snapping (keyframes marked Hold are kept sharp); one undo step"
@@ -464,6 +474,9 @@ export function CanvasActionBar() {
             <option value="column">Column</option>
             <option value="wedge">Wedge</option>
             <option value="grid">Grid</option>
+            <option value="crescent">Crescent</option>
+            <option value="circle">Circle</option>
+            <option value="scatter">Scatter</option>
           </select>
         </label>
         <label>
@@ -477,6 +490,19 @@ export function CanvasActionBar() {
             style={{ width: 56 }}
           />
         </label>
+        {(pattern === 'scatter') && (
+          <label>
+            Jitter{' '}
+            <input
+              type="number"
+              data-testid="formation-jitter"
+              min={0}
+              value={jitter}
+              onChange={(e) => setJitter(Math.max(0, Number(e.target.value) || 0))}
+              style={{ width: 56 }}
+            />
+          </label>
+        )}
         <span className="formation-info" data-testid="formation-unit-count">
           Selected Units: {validUnitCount}
         </span>

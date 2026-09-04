@@ -22,6 +22,7 @@ import {
 } from '../objects/effects';
 import { sortForRender } from '../objects/depth';
 import { arrowStyleSpec } from '../objects/arrowStyles';
+import { directChildren, groupBoundingBox } from '../objects/groups';
 import {
   TYPOGRAPHY,
   BRAND_ACCENT,
@@ -33,20 +34,14 @@ import {
   cardAlpha,
 } from '../scene/branding';
 import { UNIT_PLACEHOLDER } from '../scene/placeholder';
+import {
+  SHADOW_BLUR,
+  SHADOW_COLOR,
+  SHADOW_OFFSET_X,
+  SHADOW_OFFSET_Y,
+} from './shadows';
 
 const BACKGROUND = '#0b0e14';
-
-/**
- * Drop-shadow constants (owner-approved P1 pull-forward). All values are FIXED
- * constants — no randomness, no time-of-day, no per-object variation beyond
- * camera scale — so a shadowed frame is byte-identical across renders.
- * Offsets/blur multiply by screen scale so the shadow stays world-consistent
- * at any zoom (same rule as arrow lineWidth).
- */
-const SHADOW_COLOR = 'rgba(0, 0, 0, 0.45)';
-const SHADOW_BLUR = 12;
-const SHADOW_OFFSET_X = 4;
-const SHADOW_OFFSET_Y = 6;
 
 /** Options for `drawScene` (all optional; defaults reproduce MVP-1 behavior). */
 export interface DrawSceneOptions {
@@ -239,17 +234,26 @@ export function drawScene(
         // (REV-PASS FIX #1 parity). Paints the same gray "U" box the editor
         // shows, so a no-asset unit no longer drifts to a green square in the
         // export. Other placeholder types below are intentionally untouched.
-        const size = UNIT_PLACEHOLDER.size * screen.scale;
-        const r = UNIT_PLACEHOLDER.cornerRadius * screen.scale;
-        ctx.fillStyle = UNIT_PLACEHOLDER.color;
-        ctx.beginPath();
-        ctx.roundRect(-size / 2, -size / 2, size, size, r);
-        ctx.fill();
-        ctx.fillStyle = UNIT_PLACEHOLDER.labelColor;
-        ctx.font = `${UNIT_PLACEHOLDER.labelFontSize * screen.scale}px system-ui, sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(UNIT_PLACEHOLDER.label, 0, 0);
+        if (obj.discColor) {
+          // DISC-ONLY mode (viral battle-map style): solid filled circle.
+          const r = 36 * screen.scale;
+          ctx.beginPath();
+          ctx.arc(0, 0, r, 0, Math.PI * 2);
+          ctx.fillStyle = obj.discColor;
+          ctx.fill();
+        } else {
+          const size = UNIT_PLACEHOLDER.size * screen.scale;
+          const r = UNIT_PLACEHOLDER.cornerRadius * screen.scale;
+          ctx.fillStyle = UNIT_PLACEHOLDER.color;
+          ctx.beginPath();
+          ctx.roundRect(-size / 2, -size / 2, size, size, r);
+          ctx.fill();
+          ctx.fillStyle = UNIT_PLACEHOLDER.labelColor;
+          ctx.font = `${UNIT_PLACEHOLDER.labelFontSize * screen.scale}px system-ui, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(UNIT_PLACEHOLDER.label, 0, 0);
+        }
       } else {
         // shape / marker / group / arrow-less: unchanged 40px placeholder.
         const size = PLACEHOLDER_SIZE * screen.scale;
@@ -322,6 +326,26 @@ export function drawScene(
         }
       }
     }
+  }
+
+  // 4a. Cluster glow (viral battle-map style): soft glow around each group's
+  // AABB. Painted AFTER objects so it reads as a background aura.
+  for (const obj of Object.values(scene.objects)) {
+    if (!obj.clusterGlow || (obj.type !== 'group' && directChildren(scene.objects, obj.id).length === 0)) continue;
+    const bb = groupBoundingBox(scene.objects, obj.id, (id) => {
+      const wt = getObjectWorldTransformAtTime(scene, id, t);
+      return applyCamera(wt, camera, scene.worldSize, videoSize);
+    });
+    if (!bb) continue;
+    const pad = obj.clusterGlow.radius * 0.5;
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    ctx.shadowColor = obj.clusterGlow.color;
+    ctx.shadowBlur = obj.clusterGlow.radius;
+    ctx.strokeStyle = obj.clusterGlow.color;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(bb.minX - pad, bb.minY - pad, bb.maxX - bb.minX + pad * 2, bb.maxY - bb.minY + pad * 2);
+    ctx.restore();
   }
 
   // 4b. Battle FX (collision-triggered effect instances). Deterministic burst

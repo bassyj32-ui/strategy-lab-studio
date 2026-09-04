@@ -1,4 +1,11 @@
-import type { FormationPattern, ObjId, SceneObject, Transform, Vec2 } from '../scene/types';
+import type {
+  FormationPattern,
+  ObjId,
+  SceneObject,
+  TrainFollowConfig,
+  Transform,
+  Vec2,
+} from '../scene/types';
 
 /**
  * PURE hierarchy operations for groups / formations (P1 pull-forward).
@@ -148,6 +155,33 @@ export function descendants(
 }
 
 /**
+ * Axis-aligned bounding box of a group's direct children in world space.
+ * Returns null if the group has no children. Used by the cluster glow
+ * system (viral battle-map style) for a shared render utility across
+ * both ObjectNode (Konva) and draw.ts (Canvas2D) doors.
+ */
+export function groupBoundingBox(
+  objects: Record<ObjId, SceneObject>,
+  id: ObjId,
+  getWorld: (objId: ObjId) => { x: number; y: number },
+): { minX: number; minY: number; maxX: number; maxY: number } | null {
+  const children = directChildren(objects, id);
+  if (children.length === 0) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const c of children) {
+    const w = getWorld(c.id);
+    if (w.x < minX) minX = w.x;
+    if (w.y < minY) minY = w.y;
+    if (w.x > maxX) maxX = w.x;
+    if (w.y > maxY) maxY = w.y;
+  }
+  return { minX, minY, maxX, maxY };
+}
+
+/**
  * The "moveable roots" of a selection: selected objects none of whose
  * ancestors are ALSO selected. Moving these by one world delta moves exactly
  * the visual selection once — descendants follow through locality, and
@@ -181,7 +215,7 @@ export function formationOffsets(
   pattern: FormationPattern,
   count: number,
   spacing: number,
-  opts?: { radius?: number; orientation?: number },
+  opts?: { radius?: number; orientation?: number; jitter?: number },
 ): Vec2[] {
   if (count <= 0) return [];
   // Line/column/grid CENTER THE WHOLE FORMATION on the anchor point (the
@@ -256,6 +290,44 @@ export function formationOffsets(
       }
       break;
     }
+    case 'scatter': {
+      // Deterministic scatter: seeded PRNG from index produces jitter offsets.
+      // The seed ensures reproducibility across preview and export.
+      const jitter = opts?.jitter ?? 0;
+      if (jitter <= 0) {
+        // No jitter — fall back to grid layout.
+        const cols = Math.ceil(Math.sqrt(count));
+        const rows = Math.ceil(count / cols);
+        let placed = 0;
+        for (let row = 0; row < rows && placed < count; row++) {
+          for (let col = 0; col < cols && placed < count; col++) {
+            offsets.push({ x: centered(col, cols), y: centered(row, rows) });
+            placed++;
+          }
+        }
+      } else {
+        for (let i = 0; i < count; i++) {
+          // Mulberry32 seeded PRNG from index for determinism.
+          let seed = (i + 1) * 0x6d2b79f5;
+          seed = Math.imul(seed ^ (seed >>> 15), seed | 1);
+          seed ^= seed + Math.imul(seed ^ (seed >>> 7), seed | 61);
+          const rng = ((seed ^ (seed >>> 14)) >>> 0) / 4294967296;
+          // Second random for y.
+          let seed2 = (i + 1000) * 0x6d2b79f5;
+          seed2 = Math.imul(seed2 ^ (seed2 >>> 15), seed2 | 1);
+          seed2 ^= seed2 + Math.imul(seed2 ^ (seed2 >>> 7), seed2 | 61);
+          const rng2 = ((seed2 ^ (seed2 >>> 14)) >>> 0) / 4294967296;
+          // Map to [-jitter, +jitter] range.
+          const angle = rng * 2 * Math.PI;
+          const dist = rng2 * jitter;
+          offsets.push({
+            x: Math.cos(angle) * dist,
+            y: Math.sin(angle) * dist,
+          });
+        }
+      }
+      break;
+    }
   }
   // Optional global orientation rotation (degrees).
   if (opts?.orientation) {
@@ -277,4 +349,53 @@ export function formationOffsets(
 export function groupRootOf(objects: Record<ObjId, SceneObject>, id: ObjId): ObjId {
   const chain = ancestors(objects, id);
   return chain.length > 0 ? chain[0] : id;
+}
+
+/** Floor for snake spacing so a real marching column never collapses on itself. */
+const MIN_SNAKE_SPACING = 8;
+/** Fallback gap when a generic group has no measurable neighbour spacing. */
+const DEFAULT_SNAKE_SPACING = 50;
+
+/**
+ * Natural-march config for a formation/group following a drawn path: when the
+ * object IS a 'group' with ≥2 members, a drawn road becomes a SHARED path each
+ * soldier rides one-behind-another (train/snake), spacing = the formation's own
+ * gap (or the median neighbour gap for ad-hoc groups), rotating to face the
+ * march direction. Returns null for anything that should keep rigid movement.
+ */
+export function snakeConfigForGroup(
+  group: SceneObject | undefined,
+  objects: Record<ObjId, SceneObject>
+): TrainFollowConfig | null {
+  if (!group || group.type !== 'group') return null;
+  const kids = directChildren(objects, group.id);
+  if (kids.length < 2) return null;
+
+  let spacing: number;
+  if (group.formation?.spacing && group.formation.spacing > 0) {
+    spacing = group.formation.spacing;
+  } else {
+    const gaps: number[] = [];
+    for (let i = 1; i < kids.length; i++) {
+      gaps.push(
+        Math.hypot(
+          kids[i].transform.x - kids[i - 1].transform.x,
+          kids[i].transform.y - kids[i - 1].transform.y
+        )
+      );
+    }
+    if (gaps.length > 0) {
+      const sorted = [...gaps].sort((a, b) => a - b);
+      spacing = sorted[Math.floor((sorted.length - 1) / 2)];
+    } else {
+      spacing = DEFAULT_SNAKE_SPACING;
+    }
+  }
+
+  return {
+    pathObjId: group.id,
+    spacing: Math.max(spacing, MIN_SNAKE_SPACING),
+    speed: 1,
+    rotationFollow: true,
+  };
 }

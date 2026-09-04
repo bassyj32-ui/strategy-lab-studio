@@ -12,7 +12,6 @@ import { useSceneStore } from './scene/store';
 import { usePlaybackStore } from './timeline/playbackStore';
 import { createDefaultScene } from './scene/factory';
 import { saveAutosave, loadAutosave, clearAutosave, debounce } from './persistence/autosave';
-import { SessionToast } from './ui/SessionToast';
 import { AutoKfToast } from './ui/AutoKfToast';
 import { handleEditorShortcut, isTypingTarget } from './ui/shortcuts';
 
@@ -180,9 +179,6 @@ export function App() {
 
   return (
     <div className="app">
-      {restoredAt !== null && (
-        <SessionToast savedAt={restoredAt} onStartFresh={onStartFresh} />
-      )}
       <AutoKfToast />
       <div className="app-main">
         <div className="app-side left" style={{ width: leftW }}>
@@ -227,7 +223,7 @@ export function App() {
               <PreviewPanel />
             )}
           </div>
-          <RightPanel />
+          <RightPanel restoredAt={restoredAt} onStartFresh={onStartFresh} />
         </div>
       </div>
       {previewBig && (

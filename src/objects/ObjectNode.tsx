@@ -17,6 +17,12 @@ import { effectRings, effectColor } from './effects';
 import { arrowStyleSpec } from './arrowStyles';
 import { resolveFactionColors } from '../scene/branding';
 import { UNIT_PLACEHOLDER } from '../scene/placeholder';
+import {
+  SHADOW_BLUR,
+  SHADOW_COLOR,
+  SHADOW_OFFSET_X,
+  SHADOW_OFFSET_Y,
+} from '../render/shadows';
 // Unified selection: canvas clicks must reach BOTH the scene store (canvas
 // highlight + Inspector) and the timeline selection store (KeyframeEditor).
 import { selectObjectUnified } from '../timeline/selection';
@@ -30,12 +36,8 @@ export const ARROWHEAD_LENGTH = 18;
 export const ARROWHEAD_HALF_WIDTH = 11;
 
 // Editor preview shadows mirror the Remotion render (src/render/draw.ts) so
-// what the commander sees matches the export. Keep these four in sync with the
-// render constants (SHADOW_* in draw.ts).
-const SHADOW_COLOR = 'rgba(0, 0, 0, 0.45)';
-const SHADOW_BLUR = 12;
-const SHADOW_OFFSET_X = 4;
-const SHADOW_OFFSET_Y = 6;
+// what the commander sees matches the export. Values live in
+// src/render/shadows.ts — the single shared module both doors import.
 
 interface ObjectNodeProps {
   obj: SceneObject;
@@ -141,6 +143,10 @@ export function ObjectNode({
 
   const handleSelect = (e: KonvaEventObject<MouseEvent>) => {
     e.cancelBubble = true;
+    // While drawing (path / freehand / arrow), ignore object clicks so the
+    // drawing isn't lost when the cursor crosses another asset.
+    const tool = useSceneStore.getState().activeTool;
+    if (tool === 'path' || tool === 'freehand' || tool === 'arrow') return;
     // Shift-click ADDS TO / REMOVES FROM the multi-selection without
     // disturbing the primary. Plain click keeps the single choke point.
     if (e.evt?.shiftKey) {
@@ -158,8 +164,16 @@ export function ObjectNode({
 
   // Double-click a group MEMBER to enter solo-edit mode for its group:
   // members drag individually until an empty-canvas click exits.
+  // During path drawing: place a waypoint on the object instead.
   const handleDblClick = (e: KonvaEventObject<MouseEvent>) => {
     e.cancelBubble = true;
+    const tool = useSceneStore.getState().activeTool;
+    if (tool === 'path') {
+      // Place a waypoint at this object's world position so the commander
+      // can draw paths that cross over assets.
+      useSceneStore.getState().setPendingPathWaypoint({ x: world.x, y: world.y });
+      return;
+    }
     const rootId = groupRootOf(objects, obj.id);
     if (rootId !== obj.id) useSoloEditStore.getState().enter(rootId);
   };
@@ -200,7 +214,17 @@ export function ObjectNode({
   // over vector placeholders. Local units: the Group's scale already applies
   // camera/display scaling.
   let body: ReactNode;
-  if (img && asset) {
+  if (obj.discColor && obj.type === 'unit' && !img) {
+    // DISC-ONLY mode (viral battle-map style): solid filled circle.
+    const r = 36;
+    body = (
+      <Ellipse
+        radiusX={r}
+        radiusY={r}
+        fill={obj.discColor}
+      />
+    );
+  } else if (img && asset) {
     body = (
       <KonvaImage
         image={img}

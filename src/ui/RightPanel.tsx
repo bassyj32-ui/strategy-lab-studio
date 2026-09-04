@@ -2,27 +2,38 @@ import { useState } from 'react';
 import { Inspector } from './Inspector';
 import { ArmiesPanel } from './ArmiesPanel';
 import { ShapesPanel } from './ShapesPanel';
-import { AudioPanel } from './AudioPanel';
+import { LayersPanel } from './LayersPanel';
+// Audio UI is HIDDEN (not deleted): CapCut owns sound per PRD §92 — the panel
+// stays out of the mount so no blob: audio can be saved into a scene and break
+// export. src/audio/ + src/ui/AudioPanel.tsx remain intact for a future return.
+// import { AudioPanel } from './AudioPanel';
 
-type TabKey = 'armies' | 'object' | 'shapes' | 'audio';
+type TabKey = 'armies' | 'object' | 'shapes' | 'layers' | 'resume';
 
-const TABS: { key: TabKey; label: string }[] = [
-  { key: 'armies', label: 'Armies' },
-  { key: 'object', label: 'Object' },
-  { key: 'shapes', label: 'Shapes' },
-  { key: 'audio', label: 'Audio' },
-];
+interface RightPanelProps {
+  restoredAt?: number | null;
+  onStartFresh?: () => void;
+}
 
 /**
- * Tabbed right column (owner redesign): [ Armies ] [ Object ] [ Shapes ].
- * Armies (the army tree + layers disclosure) is the DEFAULT tab — it is the
- * commander's home base. Object = Inspector with keyframes first. Shapes
- * (NEW) replaces the retired AI tab — deterministic formation building.
- * Layers is no longer its own tab; it lives inside Armies as a collapsed
- * section. The Assets library remains in the LEFT column.
+ * Tabbed right column: [ Armies ] [ Object ] [ Shapes ] [ Layers ] [ Resume ].
+ * Armies is the DEFAULT tab — the commander's home base.
+ * Object = Inspector with keyframes first.
+ * Shapes = deterministic formation building.
+ * Layers = layer management with parallax depth sliders (promoted from
+ *   collapsed section inside Armies so it's always visible).
+ * Resume tab appears only when a previous session was auto-restored.
  */
-export function RightPanel() {
+export function RightPanel({ restoredAt, onStartFresh }: RightPanelProps) {
   const [tab, setTab] = useState<TabKey>('armies');
+
+  const TABS: { key: TabKey; label: string }[] = [
+    { key: 'armies', label: 'Armies' },
+    { key: 'object', label: 'Object' },
+    { key: 'shapes', label: 'Shapes' },
+    { key: 'layers', label: 'Layers' },
+    ...(restoredAt ? [{ key: 'resume' as TabKey, label: 'Resume' }] : []),
+  ];
 
   return (
     <div className="right-panel" data-testid="right-panel">
@@ -45,7 +56,20 @@ export function RightPanel() {
         {tab === 'armies' && <ArmiesPanel />}
         {tab === 'object' && <Inspector />}
         {tab === 'shapes' && <ShapesPanel />}
-        {tab === 'audio' && <AudioPanel />}
+        {tab === 'layers' && <LayersPanel />}
+        {tab === 'resume' && restoredAt && (
+          <div className="session-resume-card">
+            <p>Restored your work from {new Date(restoredAt).toLocaleString()}.</p>
+            <button
+              type="button"
+              data-testid="session-toast-fresh"
+              className="session-resume-btn"
+              onClick={onStartFresh}
+            >
+              Start fresh
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { useSceneStore } from '../scene/store';
 import { clearAutosave } from '../persistence/autosave';
+import { buildKalkaBattle } from '../scripts/buildKalkaBattle';
 
 /**
  * Read a picked file as text. `Blob.text()` is the modern path; the
@@ -240,6 +241,15 @@ export function ScenesPanel() {
           {error}
         </p>
       )}
+      <button
+        type="button"
+        data-testid="load-demo-battle"
+        className="scene-action-btn"
+        title="Load the Kalka River battle demo — Blue vs Red armies with camera animation"
+        onClick={() => buildKalkaBattle()}
+      >
+        Load Demo Battle
+      </button>
     </div>
   );
 }

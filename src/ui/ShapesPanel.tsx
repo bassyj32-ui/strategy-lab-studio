@@ -9,6 +9,7 @@ const PATTERNS: { key: FormationPattern; label: string }[] = [
   { key: 'grid', label: 'Grid' },
   { key: 'crescent', label: 'Crescent' },
   { key: 'circle', label: 'Circle' },
+  { key: 'scatter', label: 'Scatter' },
 ];
 
 /**

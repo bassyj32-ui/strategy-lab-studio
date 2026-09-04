@@ -93,6 +93,7 @@ export function Inspector() {
   const removeKeyframe = useSceneStore((s) => s.removeKeyframe);
   const autoKeyframe = useSceneStore((s) => s.autoKeyframe);
   const setAutoKeyframe = useSceneStore((s) => s.setAutoKeyframe);
+  const setTrainFollow = useSceneStore((s) => s.setTrainFollow);
   const currentTime = usePlaybackStore((s) => s.currentTime);
   const seek = usePlaybackStore((s) => s.seek);
 
@@ -399,6 +400,106 @@ export function Inspector() {
           <option value="glow">Glow</option>
         </select>
       </label>
+
+      {/* TRAIN/SNAKE FOLLOW: on a group, children traverse a shared path
+          with per-child distance offsets. */}
+      {obj.type === 'group' && (
+        <div className="train-follow-section" data-testid="train-follow-section">
+          <div className="inspector-subhead">Train / Snake Follow</div>
+          {obj.trainFollow ? (
+            <>
+              <label className="inspector-field">
+                <span>Path object</span>
+                <select
+                  data-testid="train-follow-path"
+                  value={obj.trainFollow.pathObjId}
+                  onChange={(e) =>
+                    setTrainFollow(obj.id, {
+                      ...obj.trainFollow!,
+                      pathObjId: e.target.value,
+                    })
+                  }
+                >
+                  {Object.values(scene.objects)
+                    .filter((o) => o.id !== obj.id)
+                    .map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name ?? `${o.type} · ${o.id.slice(-4)}`}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label className="inspector-field">
+                <span>Spacing</span>
+                <input
+                  type="number"
+                  data-testid="train-follow-spacing"
+                  min={1}
+                  step={10}
+                  value={obj.trainFollow.spacing}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    if (!Number.isFinite(v) || v < 1) return;
+                    setTrainFollow(obj.id, { ...obj.trainFollow!, spacing: v });
+                  }}
+                />
+              </label>
+              <label className="inspector-field">
+                <span>Speed</span>
+                <input
+                  type="number"
+                  data-testid="train-follow-speed"
+                  min={0.1}
+                  step={0.1}
+                  value={obj.trainFollow.speed}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    if (!Number.isFinite(v) || v <= 0) return;
+                    setTrainFollow(obj.id, { ...obj.trainFollow!, speed: v });
+                  }}
+                />
+              </label>
+              <label className="inspector-field">
+                <span>Rotate to path</span>
+                <input
+                  type="checkbox"
+                  data-testid="train-follow-rotation"
+                  checked={obj.trainFollow.rotationFollow}
+                  onChange={(e) =>
+                    setTrainFollow(obj.id, {
+                      ...obj.trainFollow!,
+                      rotationFollow: e.target.checked,
+                    })
+                  }
+                />
+              </label>
+              <button
+                type="button"
+                className="chip"
+                data-testid="train-follow-remove"
+                onClick={() => setTrainFollow(obj.id, null)}
+              >
+                Remove Train Follow
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              data-testid="train-follow-enable"
+              onClick={() =>
+                setTrainFollow(obj.id, {
+                  pathObjId: '',
+                  spacing: 50,
+                  speed: 1,
+                  rotationFollow: false,
+                })
+              }
+            >
+              Enable Train Follow
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Transform scrub fields DEMOTED below the keyframe list (owner
           redesign) — identity and animation first, numbers second. */}
