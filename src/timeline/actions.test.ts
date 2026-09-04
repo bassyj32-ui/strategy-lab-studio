@@ -5,6 +5,7 @@ import type { Transform } from '../scene/types';
 import {
   addKeyframe,
   setKeyframeAtTime,
+  keyframeSelectionAtTime,
   updateKeyframe,
   removeKeyframe,
 } from './actions';
@@ -103,5 +104,28 @@ describe('timeline actions (scene-store keyframe CRUD)', () => {
     useSceneStore.getState().undo();
     kfs = useSceneStore.getState().scene.keyframes['u1'];
     expect(kfs.map((k) => k.time)).toEqual([3]);
+  });
+
+  it('keyframeSelectionAtTime writes every valid id in ONE undo step, skips unknown ids', () => {
+    useSceneStore.getState().addObject({
+      id: 'u2',
+      type: 'unit',
+      transform: T(5),
+      layerId: useSceneStore.getState().activeLayerId,
+    });
+    const pastBefore = useSceneStore.getState().past.length;
+    const count = keyframeSelectionAtTime(['u1', 'u2', 'ghost'], 4);
+    expect(count).toBe(2);
+    const st = useSceneStore.getState();
+    expect(st.scene.keyframes['u1']?.map((k) => k.time)).toEqual([4]);
+    expect(st.scene.keyframes['u2']?.map((k) => k.time)).toEqual([4]);
+    expect(st.scene.keyframes['u2']?.[0].transform.x).toBe(5);
+    expect(st.past.length).toBe(pastBefore + 1); // one entry for both
+    st.undo();
+    const after = useSceneStore.getState().scene.keyframes;
+    expect(after['u1']).toBeUndefined();
+    expect(after['u2']).toBeUndefined();
+    expect(keyframeSelectionAtTime([], 4)).toBe(0);
+    expect(keyframeSelectionAtTime(['ghost'], 4)).toBe(0);
   });
 });

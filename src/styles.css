@@ -567,6 +567,16 @@ h3 {
   box-shadow: 0 0 6px var(--signal-dim);
   pointer-events: none;
 }
+/* Section preview window (In–Out range) shaded on the ruler. */
+.ruler-range {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: color-mix(in srgb, var(--signal) 18%, transparent);
+  border-left: 1px solid var(--signal-dim);
+  border-right: 1px solid var(--signal-dim);
+  pointer-events: none;
+}
 
 /* --- Keyframe tracks ------------------------------------------------ */
 .keyframe-track {

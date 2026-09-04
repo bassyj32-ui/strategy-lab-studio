@@ -1,4 +1,5 @@
 import { useSceneStore } from '../scene/store';
+import { usePlaybackStore } from '../timeline/playbackStore';
 
 /**
  * UX repair pass: global editor keyboard shortcuts.
@@ -7,6 +8,8 @@ import { useSceneStore } from '../scene/store';
  *   ⌘/Ctrl+G             group the current multi-selection
  *   ⌘/Ctrl+Shift+G       ungroup the selected object's parent group
  *   Delete / Backspace   remove the selected object (undoable)
+ *   K                    keyframe the whole selection at the playhead (one undo step)
+ *   , / .                jump to previous / next keyframe (selection, else all)
  *
  * Shortcuts NEVER fire while the user is typing in an input, textarea,
  * select or contentEditable element. Every action routes through existing
@@ -88,6 +91,48 @@ export function handleEditorShortcut(e: {
   if ((e.key === 'Delete' || e.key === 'Backspace') && s.selectedObjId) {
     e.preventDefault();
     s.removeObject(s.selectedObjId);
+    return true;
+  }
+
+  // Phase-1 speed keys (no modifier): K keyframes, ,/. jump between keyframes.
+  if (!mod && e.key.toLowerCase() === 'k') {
+    const ids =
+      s.selectedIds.length > 0
+        ? s.selectedIds
+        : s.selectedObjId
+          ? [s.selectedObjId]
+          : [];
+    if (ids.length === 0) return false;
+    e.preventDefault();
+    s.keyframeSelectionAtTime(ids, usePlaybackStore.getState().currentTime);
+    return true;
+  }
+
+  if (!mod && (e.key === ',' || e.key === '.')) {
+    // Jump scope: the selection when there is one, otherwise every object.
+    const scope =
+      s.selectedIds.length > 0
+        ? s.selectedIds
+        : s.selectedObjId
+          ? [s.selectedObjId]
+          : Object.keys(s.scene.objects);
+    const times = Array.from(
+      new Set(
+        scope.flatMap((id) => (s.scene.keyframes[id] ?? []).map((k) => k.time))
+      )
+    ).sort((a, b) => a - b);
+    if (times.length === 0) return false;
+    const t = usePlaybackStore.getState().currentTime;
+    const eps = 1e-6;
+    const target =
+      e.key === ','
+        ? [...times].reverse().find((x) => x < t - eps)
+        : times.find((x) => x > t + eps);
+    if (target === undefined) return false;
+    e.preventDefault();
+    const pb = usePlaybackStore.getState();
+    pb.pause(); // keyframe jumps are precision moves, never mid-playback
+    pb.seek(target);
     return true;
   }
 

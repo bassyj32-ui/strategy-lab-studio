@@ -306,7 +306,8 @@ export function TimelinePanel() {
       {hintsOpen ? (
         <div className="timeline-hints" data-testid="timeline-keyboard-hints">
           <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> step frame ·{' '}
-          <kbd>Home</kbd> start · <kbd>End</kbd> end
+          <kbd>Home</kbd> start · <kbd>End</kbd> end · <kbd>K</kbd> keyframe
+          selection · <kbd>,</kbd>/<kbd>.</kbd> prev/next keyframe
         </div>
       ) : null}
       <KeyframeEditor />

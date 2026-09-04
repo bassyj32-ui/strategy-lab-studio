@@ -588,8 +588,16 @@ export interface SceneState {
   // ---- Keyframes (single source of truth: scene.keyframes, PRD §65/§99) ----
   /** Insert (or replace at the same time) a keyframe; array kept sorted by time. */
   addKeyframe: (objId: ObjId, keyframe: Keyframe) => void;
+  /**
   /** Capture the object's CURRENT base transform as a keyframe at `time`. */
   setKeyframeAtTime: (objId: ObjId, time: number) => void;
+  /**
+   * Phase-1 bulk keyframe: capture EVERY listed object's current base
+   * transform as a keyframe at `time` inside ONE undoable snapshot (one
+   * history entry no matter how many objects). Unknown ids are skipped.
+   * Returns how many objects were keyframed.
+   */
+  keyframeSelectionAtTime: (ids: ObjId[], time: number) => number;
   /** Patch an existing keyframe's time, transform and/or easing. */
   updateKeyframe: (
     objId: ObjId,
@@ -1129,6 +1137,28 @@ export const useSceneStore = create<SceneState>()(
           list.sort((a, b) => a.time - b.time);
         }
       });
+    },
+
+    keyframeSelectionAtTime: (ids, time) => {
+      const valid = ids.filter((id) => get().scene.objects[id]);
+      if (valid.length === 0) return 0;
+      set((state) => {
+        pushHistory(state, `Keyframe ${valid.length} objects @ ${time}s`);
+        for (const id of valid) {
+          const obj = state.scene.objects[id];
+          if (!obj) continue;
+          const list =
+            state.scene.keyframes[id] ?? (state.scene.keyframes[id] = []);
+          const kf = { time, transform: { ...obj.transform } };
+          const idx = list.findIndex((k) => k.time === time);
+          if (idx >= 0) list[idx] = kf;
+          else {
+            list.push(kf);
+            list.sort((a, b) => a.time - b.time);
+          }
+        }
+      });
+      return valid.length;
     },
 
     updateKeyframe: (objId, time, patch) => {

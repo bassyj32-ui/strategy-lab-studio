@@ -7,6 +7,14 @@ export interface PlaybackState {
   snapToFrame: boolean; // when true, seek/tick quantize to frame grid
   duration: number; // mirror of scene.timeline.duration
   fps: number; // mirror of scene.timeline.fps
+  /**
+   * Phase-1 section preview: optional [loopStart, loopEnd) window (seconds).
+   * When set AND `loop` is on, tick() wraps inside the window instead of the
+   * whole timeline — preview seconds 15–25 without replaying everything.
+   * Null = no section (full-timeline behaviour). Transient, never saved.
+   */
+  loopStart: number | null;
+  loopEnd: number | null;
 
   play: () => void;
   pause: () => void;
@@ -19,6 +27,12 @@ export interface PlaybackState {
   seekEnd: () => void; // jump to duration
   setLoop: (loop: boolean) => void;
   setSnapToFrame: (snap: boolean) => void;
+  /** Set the section-preview window (clamped to [0, duration], ordered). */
+  setLoopRange: (start: number, end: number) => void;
+  /** Clear the section-preview window (back to full-timeline behaviour). */
+  clearLoopRange: () => void;
+  /** Jump to the section start (or 0 when no section is set). Pauses first. */
+  seekRangeStart: () => void;
   tick: (deltaSeconds: number) => void; // advance; respects duration/loop
   syncTimeline: (duration: number, fps: number) => void;
 }
@@ -48,6 +62,8 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
   snapToFrame: false,
   duration: 0,
   fps: 30,
+  loopStart: null,
+  loopEnd: null,
 
   play: () => set({ isPlaying: true }),
   pause: () => set({ isPlaying: false }),
@@ -87,6 +103,21 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
   },
   setLoop: (loop) => set({ loop }),
   setSnapToFrame: (snapToFrame) => set({ snapToFrame }),
+  setLoopRange: (start, end) => {
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return;
+    const s = get();
+    const max = Math.max(0, s.duration);
+    const a = clamp(start, 0, max);
+    const b = clamp(end, 0, max);
+    if (b <= a) return; // degenerate window: keep the old range
+    set({ loopStart: a, loopEnd: b });
+  },
+  clearLoopRange: () => set({ loopStart: null, loopEnd: null }),
+  seekRangeStart: () => {
+    const s = get();
+    s.pause();
+    s.seek(s.loopStart ?? 0);
+  },
   tick: (deltaSeconds) => {
     const s = get();
     if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0) return;
@@ -97,6 +128,31 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
     let next = s.currentTime + deltaSeconds;
     const fd = frameDuration(s.fps);
     if (s.snapToFrame && fd > 0) next = snap(next, s.fps);
+
+    // Section preview: a valid window + loop on wraps INSIDE the window.
+    const rs = s.loopStart;
+    const re = s.loopEnd;
+    const rangeValid =
+      s.loop &&
+      rs !== null &&
+      re !== null &&
+      rs >= 0 &&
+      re > rs &&
+      re <= s.duration;
+    if (rangeValid) {
+      const start = s.snapToFrame && fd > 0 ? snap(rs, s.fps) : rs;
+      const end = s.snapToFrame && fd > 0 ? snap(re, s.fps) : re;
+      if (next >= end) {
+        const wrapped = start + (next - end);
+        set({
+          currentTime:
+            s.snapToFrame && fd > 0 ? snap(wrapped, s.fps) : wrapped,
+        });
+        return;
+      }
+      set({ currentTime: next });
+      return;
+    }
 
     if (next >= s.duration) {
       if (s.loop) {

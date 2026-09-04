@@ -14,6 +14,11 @@ export function setKeyframeAtTime(objId: ObjId, time: number): void {
   useSceneStore.getState().setKeyframeAtTime(objId, time);
 }
 
+/** Bulk wrapper: keyframe every listed object at `time` in ONE undo step. */
+export function keyframeSelectionAtTime(ids: ObjId[], time: number): number {
+  return useSceneStore.getState().keyframeSelectionAtTime(ids, time);
+}
+
 export function updateKeyframe(
   objId: ObjId,
   time: number,

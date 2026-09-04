@@ -87,6 +87,8 @@ export function Inspector() {
   // Keyframe-first Object tab (owner redesign).
   const keyframes = useSceneStore((s) => s.scene.keyframes);
   const setKeyframeAtTime = useSceneStore((s) => s.setKeyframeAtTime);
+  const keyframeSelectionAtTime = useSceneStore((s) => s.keyframeSelectionAtTime);
+  const selectedIds = useSceneStore((s) => s.selectedIds);
   const updateKeyframe = useSceneStore((s) => s.updateKeyframe);
   const removeKeyframe = useSceneStore((s) => s.removeKeyframe);
   const autoKeyframe = useSceneStore((s) => s.autoKeyframe);
@@ -175,6 +177,16 @@ export function Inspector() {
           >
             + Add at playhead
           </button>
+          {selectedIds.length > 1 ? (
+            <button
+              type="button"
+              data-testid="inspector-kf-add-selection"
+              title={`Keyframe all ${selectedIds.length} selected objects at the playhead (one undo step, or press K)`}
+              onClick={() => keyframeSelectionAtTime(selectedIds, currentTime)}
+            >
+              + Keyframe all {selectedIds.length} at playhead (K)
+            </button>
+          ) : null}
           <label className="kf-auto">
             <input
               type="checkbox"

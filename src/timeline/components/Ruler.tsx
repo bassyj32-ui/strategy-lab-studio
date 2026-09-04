@@ -22,6 +22,8 @@ export function Ruler() {
   const fps = usePlaybackStore((s) => s.fps);
   const seek = usePlaybackStore((s) => s.seek);
   const pause = usePlaybackStore((s) => s.pause);
+  const loopStart = usePlaybackStore((s) => s.loopStart);
+  const loopEnd = usePlaybackStore((s) => s.loopEnd);
 
   const seekFromClientX = (clientX: number): void => {
     const el = trackRef.current;
@@ -75,6 +77,10 @@ export function Ruler() {
   };
 
   const pct = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const hasRange =
+    loopStart !== null && loopEnd !== null && loopEnd > loopStart && duration > 0;
+  const rangeLeft = hasRange ? (loopStart! / duration) * 100 : 0;
+  const rangeWidth = hasRange ? ((loopEnd! - loopStart!) / duration) * 100 : 0;
 
   return (
     <div
@@ -111,6 +117,14 @@ export function Ruler() {
           style={{ left: `${(i / TICKS) * 100}%` }}
         />
       ))}
+      {hasRange ? (
+        <div
+          className="ruler-range"
+          data-testid="ruler-range"
+          title="Section preview window"
+          style={{ left: `${rangeLeft}%`, width: `${rangeWidth}%` }}
+        />
+      ) : null}
       <div
         className="playhead"
         data-testid="playhead"
