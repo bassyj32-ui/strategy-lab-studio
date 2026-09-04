@@ -73,6 +73,11 @@ import {
   type WhyItWorkedOptions,
   type SignatureOpeningOptions,
 } from './macros';
+import {
+  buildMotionPreset,
+  type MotionPresetKind,
+  type MotionPresetOpts,
+} from '../motion/presets';
 
 const MAX_HISTORY = 100;
 
@@ -395,6 +400,25 @@ function applyResolvedOp(
           scene.keyframes[objId] = frames;
         }
         if (result.vignette) scene.vignette = true;
+        return null;
+      }
+      case 'apply_motion_preset': {
+        const result = buildMotionPreset(current(scene), op.kind, {
+          ids: op.ids,
+          ...op.opts,
+        });
+        if (
+          Object.keys(result.keyframes).length === 0 &&
+          result.cameraKeys.length === 0
+        ) {
+          return 'motion preset touched nothing (no valid targets)';
+        }
+        for (const [objId, frames] of Object.entries(result.keyframes)) {
+          scene.keyframes[objId] = frames;
+        }
+        if (result.cameraKeys.length > 0) {
+          scene.cameraTrack = result.cameraKeys;
+        }
         return null;
       }
       case 'trigger_why_it_worked': {
@@ -841,6 +865,13 @@ export interface SceneState {
     applyCameraPreset: (kind: CameraPresetKind, focus?: CameraPresetFocus) => void;
     /** §38 macro: camera push-in + highlight + arrow (+pulse/vignette), one undo step. */
     triggerDecisiveMove: (opts?: DecisiveMoveOptions) => void;
+    /**
+     * MOTION PRESET (march / charge / volley / settle / camera-push): ONE
+     * undoable transaction that writes staggered, eased, arced keyframes (or
+     * appended camera keys) for the given objects. Everything written stays
+     * ordinary editable scene data afterwards.
+     */
+    applyMotionPreset: (kind: MotionPresetKind, opts?: MotionPresetOpts) => void;
 
     /**
      * P2 "WHY IT WORKED" preset (PRD §39): ONE undoable transaction that
@@ -2058,6 +2089,27 @@ export const useSceneStore = create<SceneState>()(
         highlightId = result.highlightId;
       });
       if (highlightId) get().setSelected(highlightId);
+    },
+
+    /**
+     * MOTION PRESET: ONE undoable transaction. Builds the pure payload
+     * (motion/presets.ts) and merges it: per-object keyframe lists are
+     * replaced wholesale with the builder-merged lists; a non-empty camera
+     * result replaces the track (builders merge against the old track, so
+     * camera-push APPENDS). Selection is left alone — the commander keeps
+     * their units selected to tweak the keys afterwards.
+     */
+    applyMotionPreset: (kind, opts) => {
+      set((state) => {
+        pushHistory(state);
+        const result = buildMotionPreset(current(state.scene), kind, opts);
+        for (const [objId, frames] of Object.entries(result.keyframes)) {
+          state.scene.keyframes[objId] = frames;
+        }
+        if (result.cameraKeys.length > 0) {
+          state.scene.cameraTrack = result.cameraKeys;
+        }
+      });
     },
 
     /** Toggles the cinematic vignette flag (PRD §38). One undo step. */

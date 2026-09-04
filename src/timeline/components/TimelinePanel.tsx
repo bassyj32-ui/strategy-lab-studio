@@ -13,6 +13,7 @@ import { CameraTrack } from './CameraTrack';
 import { AudioTrackRow } from './AudioTrackRow';
 import { KeyframeEditor } from './KeyframeEditor';
 import { CAMERA_PRESETS, type CameraPresetKind } from '../../camera/presets';
+import type { MotionPresetKind } from '../../motion/presets';
 
 /**
  * True when the keydown target is an element that owns its own keys
@@ -94,6 +95,44 @@ export function TimelinePanel() {
   const autoKeyframe = useSceneStore((s) => s.autoKeyframe);
   const setAutoKeyframe = useSceneStore((s) => s.setAutoKeyframe);
   const transaction = useSceneStore((s) => s.transaction);
+  const applyMotionPreset = useSceneStore((s) => s.applyMotionPreset);
+  // Motion-preset destination/duration drafts. Null = fall back to the live
+  // camera centre at apply time ("march them to where I'm looking").
+  const [destXDraft, setDestXDraft] = useState<string | null>(null);
+  const [destYDraft, setDestYDraft] = useState<string | null>(null);
+  const [motionDurDraft, setMotionDurDraft] = useState<string | null>(null);
+  const [staggerDraft, setStaggerDraft] = useState<string | null>(null);
+
+  /** Run a motion preset on the current selection at the playhead. */
+  const runMotionPreset = (kind: MotionPresetKind) => {
+    const st = useSceneStore.getState();
+    const ids = [
+      ...(st.selectedObjId ? [st.selectedObjId] : []),
+      ...st.selectedIds,
+    ].filter((id, i, arr) => arr.indexOf(id) === i && st.scene.objects[id]);
+    if (kind !== 'camera-push' && ids.length === 0) return;
+    const cam = st.scene.camera;
+    const num = (raw: string | null, fallback: number): number => {
+      if (raw === null) return fallback;
+      const v = Number(raw);
+      return Number.isFinite(v) ? v : fallback;
+    };
+    const anchor = {
+      x: num(destXDraft, cam.x),
+      y: num(destYDraft, cam.y),
+    };
+    const startAt = usePlaybackStore.getState().currentTime;
+    const duration = Math.max(0.2, num(motionDurDraft, 3));
+    const stagger = Math.max(0, num(staggerDraft, kind === 'volley' ? 0.08 : 0.25));
+    applyMotionPreset(kind, { ids, anchor, startAt, duration, stagger });
+  };
+
+  /** Fill the destination inputs with the live camera centre. */
+  const useViewAsDestination = () => {
+    const cam = useSceneStore.getState().scene.camera;
+    setDestXDraft(String(Math.round(cam.x)));
+    setDestYDraft(String(Math.round(cam.y)));
+  };
   const [hintsOpen, setHintsOpen] = useState(false);
   const [durationDraft, setDurationDraft] = useState<string | null>(null);
   const [fpsDraft, setFpsDraft] = useState<string | null>(null);
@@ -241,6 +280,85 @@ export function TimelinePanel() {
         >
           📜 Opening Card{hasOpeningCard ? ' ✓' : ''}
         </button>
+        <span
+          className="motion-presets"
+          data-testid="motion-presets"
+          title="Motion presets — human-like movement (staggered march, arced charge, arrow volley, soft arrival, camera push). Applies to the selection at the playhead, one undo step; everything stays editable keyframes after."
+        >
+          {(
+            [
+              ['march', '🚶 March', 'Staggered steady advance to the destination (constant speed, formation kept)'],
+              ['charge', '⚔️ Charge', 'Accelerating arc to the destination (bows sideways, no corner kink)'],
+              ['volley', '🏹 Volley', 'Arrow storm onto the destination (tight stagger, upward arc, scatter)'],
+              ['settle', '🛬 Settle', 'Soften existing tracks: ease-out arrival on the final segment'],
+              ['camera-push', '🎥 Push', 'Camera hold-then-push at the playhead (appends, never replaces)'],
+            ] as [MotionPresetKind, string, string][]
+          ).map(([kind, label, hint]) => (
+            <button
+              key={kind}
+              type="button"
+              className="camera-preset"
+              data-testid={`motion-${kind}`}
+              title={`${label} — ${hint}`}
+              onClick={() => runMotionPreset(kind)}
+            >
+              {label}
+            </button>
+          ))}
+          <label className="timeline-meta" title="Destination X (world units). Empty = live camera centre.">
+            DX
+            <input
+              type="number"
+              data-testid="motion-dest-x"
+              value={destXDraft ?? ''}
+              placeholder="view"
+              onChange={(e) => setDestXDraft(e.target.value)}
+            />
+          </label>
+          <label className="timeline-meta" title="Destination Y (world units). Empty = live camera centre.">
+            DY
+            <input
+              type="number"
+              data-testid="motion-dest-y"
+              value={destYDraft ?? ''}
+              placeholder="view"
+              onChange={(e) => setDestYDraft(e.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            className="camera-preset"
+            data-testid="motion-use-view"
+            title="Fill the destination with the live camera centre"
+            onClick={useViewAsDestination}
+          >
+            ⌖
+          </button>
+          <label className="timeline-meta" title="Seconds each unit travels (default 3).">
+            Sec
+            <input
+              type="number"
+              data-testid="motion-duration"
+              min={0.2}
+              step={0.1}
+              value={motionDurDraft ?? ''}
+              placeholder="3"
+              onChange={(e) => setMotionDurDraft(e.target.value)}
+            />
+          </label>
+          <label className="timeline-meta" title="Delay between consecutive unit starts (default 0.25, volley 0.08).">
+            Stg
+            <input
+              type="number"
+              data-testid="motion-stagger"
+              min={0}
+              step={0.05}
+              value={staggerDraft ?? ''}
+              placeholder="0.25"
+              onChange={(e) => setStaggerDraft(e.target.value)}
+            />
+          </label>
+        </span>
         <label
           className="vignette-toggle"
           data-testid="closing-card-toggle"

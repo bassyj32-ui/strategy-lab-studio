@@ -215,6 +215,10 @@ export function describeOp(op: ResolvedOp): string {
       return `Camera preset: ${op.kind}`;
     case 'trigger_decisive_move':
       return 'Decisive move macro';
+    case 'apply_motion_preset':
+      return op.ids.length > 0
+        ? `${op.kind} preset on ${op.ids.length} object(s)`
+        : `${op.kind} preset`;
     case 'trigger_why_it_worked':
       return 'Why-it-worked macro';
     case 'trigger_signature_opening':

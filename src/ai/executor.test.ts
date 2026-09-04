@@ -135,6 +135,12 @@ describe('describeOp (proposal card copy)', () => {
     expect(describeOp({ tool: 'set_camera_keyframe', time: 4 })).toBe('Camera keyframe @ 4s');
     expect(describeOp({ tool: 'toggle_closing_card', on: true })).toBe('Enable closing card');
     expect(describeOp({ tool: 'trigger_decisive_move', opts: {} })).toBe('Decisive move macro');
+    expect(
+      describeOp({ tool: 'apply_motion_preset', kind: 'march', ids: ['a', 'b'], opts: {} })
+    ).toBe('march preset on 2 object(s)');
+    expect(
+      describeOp({ tool: 'apply_motion_preset', kind: 'camera-push', ids: [], opts: {} })
+    ).toBe('camera-push preset');
     expect(describeOp({ tool: 'update_brand' })).toBe('Brand metadata update');
   });
 });

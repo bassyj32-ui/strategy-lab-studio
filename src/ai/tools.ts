@@ -171,6 +171,29 @@ export const TOOL_SPECS: ToolSpec[] = [
     }),
   },
   {
+    name: 'apply_motion_preset',
+    description:
+      'Human-like movement preset: march (staggered steady advance), charge ' +
+      '(accelerating arc), volley (arrow storm onto a point), settle (soft ' +
+      'arrival on existing tracks), camera-push (appended hold-then-push). ' +
+      'Writes ordinary editable keyframes in one undo step.',
+    parameters: obj({
+      kind: en(['march', 'charge', 'volley', 'settle', 'camera-push']),
+      targets: {
+        type: 'array',
+        items: str,
+        description: 'Object ids or exact display labels. Not needed for camera-push.',
+      },
+      anchorX: num,
+      anchorY: num,
+      startAt: num,
+      duration: num,
+      stagger: { ...num, description: 'Delay between consecutive unit starts.' },
+      arc: { ...num, description: 'Arc bow in world units (charge/volley).' },
+      zoom: { ...num, description: 'End zoom (camera-push).' },
+    }, ['kind']),
+  },
+  {
     name: 'trigger_why_it_worked',
     description:
       '§39 cinematic macro: zoom-out to overview + gentle opacity pulse of one army.',
@@ -281,6 +304,19 @@ export type ResolvedOp =
         duration?: number;
         zoom?: number;
         vignette?: boolean;
+      };
+    }
+  | {
+      tool: 'apply_motion_preset';
+      kind: 'march' | 'charge' | 'volley' | 'settle' | 'camera-push';
+      ids: ObjId[];
+      opts: {
+        anchor?: { x: number; y: number };
+        startAt?: number;
+        duration?: number;
+        stagger?: number;
+        arc?: number;
+        zoom?: number;
       };
     }
   | {
@@ -637,6 +673,59 @@ export function resolveOp(op: ProposedOp, scene: Scene): ResolveResult {
           },
         },
         summary: 'decisive move macro',
+      };
+    }
+    case 'apply_motion_preset': {
+      const kind = optEnum(
+        args,
+        'kind',
+        ['march', 'charge', 'volley', 'settle', 'camera-push'] as const
+      );
+      if ('error' in kind) return fail(kind.error);
+      if (!kind.value) return fail('kind is required');
+      const ids: ObjId[] = [];
+      if (args.targets !== undefined) {
+        if (!Array.isArray(args.targets) || args.targets.length === 0) {
+          return fail('targets must be a non-empty array');
+        }
+        for (const ref of args.targets) {
+          const t = resolveTarget(scene, ref);
+          if (t.error) return fail(t.error);
+          ids.push(t.id!);
+        }
+      } else if (kind.value !== 'camera-push') {
+        return fail(`${kind.value} needs targets (object ids or labels)`);
+      }
+      const anchor = point(args, 'anchorX', 'anchorY');
+      if (anchor.error) return fail(anchor.error);
+      const startAt = optNum(args, 'startAt');
+      if ('error' in startAt) return fail(startAt.error);
+      const duration = optNum(args, 'duration');
+      if ('error' in duration) return fail(duration.error);
+      const stagger = optNum(args, 'stagger');
+      if ('error' in stagger) return fail(stagger.error);
+      const arc = optNum(args, 'arc');
+      if ('error' in arc) return fail(arc.error);
+      const zoom = optNum(args, 'zoom');
+      if ('error' in zoom) return fail(zoom.error);
+      return {
+        ok: true,
+        resolved: {
+          tool: 'apply_motion_preset',
+          kind: kind.value,
+          ids,
+          opts: {
+            ...(anchor.x !== undefined && anchor.y !== undefined
+              ? { anchor: { x: anchor.x, y: anchor.y } }
+              : {}),
+            ...(startAt.value !== undefined ? { startAt: startAt.value } : {}),
+            ...(duration.value !== undefined ? { duration: duration.value } : {}),
+            ...(stagger.value !== undefined ? { stagger: stagger.value } : {}),
+            ...(arc.value !== undefined ? { arc: arc.value } : {}),
+            ...(zoom.value !== undefined ? { zoom: zoom.value } : {}),
+          },
+        },
+        summary: `${kind.value} preset on ${ids.length} object(s)`,
       };
     }
     case 'trigger_why_it_worked': {

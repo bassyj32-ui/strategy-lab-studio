@@ -951,6 +951,16 @@ h3 {
   color: var(--signal);
 }
 
+/* Motion presets: chip group inside the timeline top row (wraps on narrow). */
+.motion-presets {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-left: 1px solid var(--edge);
+  padding-left: 8px;
+}
+
 /* Vignette (PRD §38): editor mirror of the export's radial gradient. */
 .vignette-overlay {
   position: absolute;
