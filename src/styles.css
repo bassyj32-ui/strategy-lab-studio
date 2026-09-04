@@ -873,7 +873,49 @@ h3 {
 .timeline-top-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+/* Row 2: choreography strip. Stays under the transport row, wraps on narrow
+   docks; each zone is visually separated by its own divider. */
+.timeline-presets-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Right-anchored timeline settings (duration / fps / auto-KF / hints). */
+.timeline-settings {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Grouping zone for related chips inside the presets row. */
+.preset-zone {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Muted zone heading used to label a run of preset chips. */
+.preset-caption {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10px;
+  color: var(--dim);
+  user-select: none;
+}
+
+/* Divider between the cinematic/camera zone and the FX toggle zone. */
+.timeline-presets-row > .preset-zone + .preset-zone {
+  border-left: 1px solid var(--edge);
+  padding-left: 8px;
 }
 
 /* Duration / FPS inputs: compact chip labels matching .camera-preset. */
@@ -909,10 +951,10 @@ h3 {
   margin: 0;
 }
 
+/* Transport keeps its natural width (buttons must never be crushed to 0 by
+   the rest of the row); the .timeline-settings cluster anchors the right. */
 .timeline-top-row .transport-controls {
-  flex: 1;
-  flex-wrap: nowrap;
-  min-width: 0;
+  flex: none;
 }
 
 .hints-toggle {

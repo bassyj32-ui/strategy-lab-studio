@@ -190,101 +190,130 @@ export function TimelinePanel() {
     <div className="timeline-panel" data-testid="timeline-panel" onKeyDown={onPanelKeyDown}>
       <div className="timeline-top-row">
         <TransportControls />
-        <label className="timeline-meta" title="Timeline duration in seconds">
-          Dur
-          <input
-            type="number"
-            data-testid="timeline-duration"
-            min={0.1}
-            step={0.1}
-            value={durationDraft !== null ? durationDraft : duration}
-            onChange={(e) => setDurationDraft(e.target.value)}
-            onFocus={() => setDurationDraft(String(duration))}
-            onBlur={commitDuration}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-            }}
-          />
-        </label>
-        <label className="timeline-meta" title="Frames per second">
-          FPS
-          <input
-            type="number"
-            data-testid="timeline-fps"
-            min={1}
-            max={60}
-            step={1}
-            value={fpsDraft !== null ? fpsDraft : fps}
-            onChange={(e) => setFpsDraft(e.target.value)}
-            onFocus={() => setFpsDraft(String(fps))}
-            onBlur={commitFps}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-            }}
-          />
-        </label>
-        <select
-          className="camera-preset"
-          data-testid="camera-preset"
-          value=""
-          title="Camera presets (§27) — applied to the camera track, fully editable after"
-          onChange={onPresetChange}
-        >
-          <option value="" disabled>
-            Camera preset…
-          </option>
-          {CAMERA_PRESETS.map((p) => (
-            <option key={p.kind} value={p.kind}>
-              {p.label}
+        <div className="timeline-settings">
+          <label className="timeline-meta" title="Timeline duration in seconds">
+            Dur
+            <input
+              type="number"
+              data-testid="timeline-duration"
+              min={0.1}
+              step={0.1}
+              value={durationDraft !== null ? durationDraft : duration}
+              onChange={(e) => setDurationDraft(e.target.value)}
+              onFocus={() => setDurationDraft(String(duration))}
+              onBlur={commitDuration}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+              }}
+            />
+          </label>
+          <label className="timeline-meta" title="Frames per second">
+            FPS
+            <input
+              type="number"
+              data-testid="timeline-fps"
+              min={1}
+              max={60}
+              step={1}
+              value={fpsDraft !== null ? fpsDraft : fps}
+              onChange={(e) => setFpsDraft(e.target.value)}
+              onFocus={() => setFpsDraft(String(fps))}
+              onBlur={commitFps}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+              }}
+            />
+          </label>
+          <label
+            className="vignette-toggle"
+            data-testid="auto-keyframe-toggle"
+            title="Auto-keyframe: moving/scaling/rotating a unit writes a keyframe at the playhead (part of the same undo step as the move)"
+          >
+            <input
+              type="checkbox"
+              checked={autoKeyframe}
+              onChange={(e) => setAutoKeyframe(e.target.checked)}
+            />
+            Auto-KF
+          </label>
+          <button
+            type="button"
+            className="hints-toggle"
+            data-testid="hints-toggle"
+            title="Keyboard shortcuts"
+            aria-expanded={hintsOpen}
+            onClick={() => setHintsOpen((v) => !v)}
+          >
+            ?
+          </button>
+        </div>
+      </div>
+      <div className="timeline-presets-row">
+        <span className="preset-zone" data-testid="cinematic-zone">
+          <select
+            className="camera-preset"
+            data-testid="camera-preset"
+            value=""
+            title="Camera presets (§27) — applied to the camera track, fully editable after"
+            onChange={onPresetChange}
+          >
+            <option value="" disabled>
+              Camera preset…
             </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          className="camera-preset"
-          data-testid="decisive-move"
-          title='Decisive Move (§38) — zoom onto the selection with highlight + tactical arrow, one undo step'
-          onClick={() => {
-            const sel = useSceneStore.getState();
-            const obj = sel.selectedObjId
-              ? sel.scene.objects[sel.selectedObjId]
-              : undefined;
-            triggerDecisiveMove(
-              obj ? { focus: { x: obj.transform.x, y: obj.transform.y } } : {}
-            );
-          }}
-        >
-          ⚡ Decisive Move
-        </button>
-        <button
-          type="button"
-          className="camera-preset"
-          data-testid="why-it-worked"
-          title={'Why It Worked (§39) — calm zoom-out to overview; pulses the selected object’s faction, one undo step'}
-          onClick={() => {
-            const sel = useSceneStore.getState();
-            const obj = sel.selectedObjId
-              ? sel.scene.objects[sel.selectedObjId]
-              : undefined;
-            triggerWhyItWorked(obj?.faction ? { faction: obj.faction } : {});
-          }}
-        >
-          🧠 Why It Worked
-        </button>
-        <button
-          type="button"
-          className="camera-preset"
-          data-testid="signature-opening"
-          title="Signature Opening (§95) — title card over a hold-wide camera move, one undo step"
-          onClick={() => triggerSignatureOpening()}
-        >
-          📜 Opening Card{hasOpeningCard ? ' ✓' : ''}
-        </button>
+            {CAMERA_PRESETS.map((p) => (
+              <option key={p.kind} value={p.kind}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="camera-preset"
+            data-testid="decisive-move"
+            title='Decisive Move (§38) — zoom onto the selection with highlight + tactical arrow, one undo step'
+            onClick={() => {
+              const sel = useSceneStore.getState();
+              const obj = sel.selectedObjId
+                ? sel.scene.objects[sel.selectedObjId]
+                : undefined;
+              triggerDecisiveMove(
+                obj ? { focus: { x: obj.transform.x, y: obj.transform.y } } : {}
+              );
+            }}
+          >
+            ⚡ Decisive Move
+          </button>
+          <button
+            type="button"
+            className="camera-preset"
+            data-testid="why-it-worked"
+            title={'Why It Worked (§39) — calm zoom-out to overview; pulses the selected object’s faction, one undo step'}
+            onClick={() => {
+              const sel = useSceneStore.getState();
+              const obj = sel.selectedObjId
+                ? sel.scene.objects[sel.selectedObjId]
+                : undefined;
+              triggerWhyItWorked(obj?.faction ? { faction: obj.faction } : {});
+            }}
+          >
+            🧠 Why It Worked
+          </button>
+          <button
+            type="button"
+            className="camera-preset"
+            data-testid="signature-opening"
+            title="Signature Opening (§95) — title card over a hold-wide camera move, one undo step"
+            onClick={() => triggerSignatureOpening()}
+          >
+            📜 Opening Card{hasOpeningCard ? ' ✓' : ''}
+          </button>
+        </span>
         <span
           className="motion-presets"
           data-testid="motion-presets"
           title="Motion presets — human-like movement (staggered march, arced charge, arrow volley, soft arrival, camera push). Applies to the selection at the playhead, one undo step; everything stays editable keyframes after."
         >
+          <span className="preset-caption">Move</span>
           {(
             [
               ['march', '🚶 March', 'Staggered steady advance to the destination (constant speed, formation kept)'],
@@ -297,7 +326,7 @@ export function TimelinePanel() {
             <button
               key={kind}
               type="button"
-              className="camera-preset"
+              className="camera-preset motion-btn"
               data-testid={`motion-${kind}`}
               title={`${label} — ${hint}`}
               onClick={() => runMotionPreset(kind)}
@@ -359,52 +388,32 @@ export function TimelinePanel() {
             />
           </label>
         </span>
-        <label
-          className="vignette-toggle"
-          data-testid="closing-card-toggle"
-          title="Signature Ending (§96) — 'THE LESSON' card over the final seconds"
-        >
-          <input
-            type="checkbox"
-            checked={hasClosingCard}
-            onChange={(e) => toggleClosingCard(e.target.checked)}
-          />
-          Lesson End
-        </label>
-        <label
-          className="vignette-toggle"
-          data-testid="vignette-toggle"
-          title="Cinematic edge-darkening (§38)"
-        >
-          <input
-            type="checkbox"
-            checked={Boolean(vignette)}
-            onChange={(e) => setVignette(e.target.checked)}
-          />
-          Vignette
-        </label>
-        <label
-          className="vignette-toggle"
-          data-testid="auto-keyframe-toggle"
-          title="Auto-keyframe: moving/scaling/rotating a unit writes a keyframe at the playhead (part of the same undo step as the move)"
-        >
-          <input
-            type="checkbox"
-            checked={autoKeyframe}
-            onChange={(e) => setAutoKeyframe(e.target.checked)}
-          />
-          Auto-KF
-        </label>
-        <button
-          type="button"
-          className="hints-toggle"
-          data-testid="hints-toggle"
-          title="Keyboard shortcuts"
-          aria-expanded={hintsOpen}
-          onClick={() => setHintsOpen((v) => !v)}
-        >
-          ?
-        </button>
+        <span className="preset-zone" data-testid="fx-zone">
+          <label
+            className="vignette-toggle"
+            data-testid="closing-card-toggle"
+            title="Signature Ending (§96) — 'THE LESSON' card over the final seconds"
+          >
+            <input
+              type="checkbox"
+              checked={hasClosingCard}
+              onChange={(e) => toggleClosingCard(e.target.checked)}
+            />
+            Lesson End
+          </label>
+          <label
+            className="vignette-toggle"
+            data-testid="vignette-toggle"
+            title="Cinematic edge-darkening (§38)"
+          >
+            <input
+              type="checkbox"
+              checked={Boolean(vignette)}
+              onChange={(e) => setVignette(e.target.checked)}
+            />
+            Vignette
+          </label>
+        </span>
       </div>
       <Ruler />
       <div className="timeline-tracks" data-testid="timeline-tracks">
