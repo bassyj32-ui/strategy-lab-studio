@@ -7,6 +7,7 @@ import {
   Line,
   Group,
   Circle,
+  Text as KonvaText,
   Image as KonvaImage,
 } from 'react-konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
@@ -84,13 +85,17 @@ import {
   type Box,
   type Pt,
   clampScale,
+  continuousDeg,
   cornerWorld,
   dist,
+  edgeWorld,
+  nudgeStep,
   normalizeDeg,
   rotationFromPointer,
   scaleFromDrag,
   snapDeg,
   stalkWorld,
+  topCenterWorld,
 } from './gizmo';
 import { simplifyPath } from '../objects/simplifyPath';
 
@@ -195,12 +200,15 @@ const GIZMO_COLOR = '#4d8dff';
 const STALK_LEN_SCREEN = 26;
 
 /**
- * On-canvas transform gizmos (Wave-3 UX) for the SELECTED object: four corner
- * handles (drag = multiplicative scale around the anchor) + a rotation stalk
- * above the box (drag = rotate; Shift snaps to 15°). All math is pure
- * (canvas/gizmo.ts); writes go through the EXISTING updateTransform action
- * inside ONE begin/endInteraction session per gesture — no store changes.
- * Grouped children work: pointer positions are mapped into the parent frame.
+ * On-canvas transform gizmos (Figma-style) for the SELECTED object: 8 scale
+ * handles (4 corners + 4 edge-midpoints, drag = multiplicative uniform scale
+ * around the anchor) + a rotation stalk above the box (drag = rotate; Shift
+ * snaps to 15°). MOVE is body-drag on the object itself — there is deliberately
+ * NO center move dot (it competed with the body target and made grabs miss).
+ * All math is pure (canvas/gizmo.ts); writes go through the EXISTING
+ * updateTransform action inside ONE begin/endInteraction session per gesture,
+ * coalesced with rAF so per-mousemove store writes don't jank. Grouped
+ * children work: pointer positions are mapped into the parent frame.
  */
 function SelectionGizmos({
   obj,
@@ -220,8 +228,6 @@ function SelectionGizmos({
   const beginInteraction = useSceneStore((s) => s.beginInteraction);
   const endInteraction = useSceneStore((s) => s.endInteraction);
   const updateTransform = useSceneStore((s) => s.updateTransform);
-  const moveGroup = useSceneStore((s) => s.moveGroup);
-  const objects = useSceneStore((s) => s.scene.objects);
 
   const frame = parentFrame ?? {
     x: 0,
@@ -246,7 +252,15 @@ function SelectionGizmos({
   const scaleDragRef = useRef<{ startDist: number; startScale: number } | null>(
     null
   );
-  const moveDragRef = useRef<{ startWx: number; startWy: number } | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const pendingScaleRef = useRef<number | null>(null);
+  const prevDegRef = useRef<number>(worldT.rotation);
+  const [liveDeg, setLiveDeg] = useState<number | null>(null);
+  useEffect(() => {
+    return () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
 
   const cursor = (c: string) => ({
     onMouseEnter: (e: KonvaEventObject<MouseEvent>) => {
@@ -272,115 +286,181 @@ function SelectionGizmos({
   ];
 
   const stalk = stalkWorld(anchorLocal, box, rotDeg, worldT.scale, STALK_LEN_SCREEN * k);
-  const nwCorner = cornerWorld(anchorLocal, box, rotDeg, worldT.scale, 'min', 'min');
+  // FIX: the stalk line starts at the box TOP-CENTER (not the NW corner).
+  const stalkBase = topCenterWorld(anchorLocal, box, rotDeg, worldT.scale);
+
+  const edges: Array<{ key: string; edge: 'n' | 's' | 'e' | 'w'; cur: string }> = [
+    { key: 'n', edge: 'n', cur: 'ns-resize' },
+    { key: 's', edge: 's', cur: 'ns-resize' },
+    { key: 'e', edge: 'e', cur: 'ew-resize' },
+    { key: 'w', edge: 'w', cur: 'ew-resize' },
+  ];
+
+  const beginScale = (): void => {
+    const lp = pointerInFrame();
+    scaleDragRef.current = {
+      startDist: lp ? Math.max(dist(lp, anchorLocal), 1) : 1,
+      startScale: obj.transform.scale,
+    };
+    beginInteraction();
+  };
+  const moveScale = (): void => {
+    // rAF-coalesced: compute now, commit on the next frame — per-mousemove
+    // Zustand+Immer writes were the jank source.
+    const base = scaleDragRef.current;
+    const lp = pointerInFrame();
+    if (!base || !lp) return;
+    pendingScaleRef.current = clampScale(
+      scaleFromDrag(base.startScale, base.startDist, Math.max(dist(lp, anchorLocal), 1))
+    );
+    if (rafRef.current !== null) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      const s = pendingScaleRef.current;
+      pendingScaleRef.current = null;
+      if (s !== null) updateTransform(obj.id, { scale: s });
+    });
+  };
+  const endScale = (): void => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    // Flush the last pending value synchronously so the gesture lands exact.
+    const s = pendingScaleRef.current;
+    pendingScaleRef.current = null;
+    scaleDragRef.current = null;
+    if (s !== null) updateTransform(obj.id, { scale: s });
+    endInteraction();
+  };
+
+  const scaleHandle = (
+    key: string,
+    p: Pt,
+    cur: string,
+    testId: string
+  ): ReactNode => {
+    // Screen-constant 12px handles (+ padding ease on tiny assets via the hit ring).
+    const size = 12 * k;
+    const hit = 20 * k;
+    return (
+      <Group key={key} x={p.x} y={p.y}>
+        {/* Invisible fat hit ring — small assets stay grabbable. */}
+        <Rect
+          x={-hit / 2}
+          y={-hit / 2}
+          width={hit}
+          height={hit}
+          // Invisible but HITTABLE: opacity-0 fill stays in Konva's hit graph
+          // (fillEnabled={false} would remove it — that was the dead-handles bug).
+          fill="#000000"
+          opacity={0}
+          draggable
+          {...cursor(cur)}
+          onDragStart={beginScale}
+          onDragMove={moveScale}
+          onDragEnd={endScale}
+        />
+        <Rect
+          data-testid={testId}
+          x={-size / 2}
+          y={-size / 2}
+          width={size}
+          height={size}
+          fill="#ffffff"
+          stroke={GIZMO_COLOR}
+          strokeWidth={2 * k}
+          cornerRadius={2 * k}
+          listening={false}
+        />
+      </Group>
+    );
+  };
 
   return (
     <>
       {corners.map((c) => {
         const p = cornerWorld(anchorLocal, box, rotDeg, worldT.scale, c.cx, c.cy);
-        const size = 9 * k;
-        return (
-          <Rect
-            key={c.key}
-            data-testid={`gizmo-corner-${c.key}`}
-            x={p.x - size / 2}
-            y={p.y - size / 2}
-            width={size}
-            height={size}
-            fill={GIZMO_COLOR}
-            stroke="#0b1020"
-            strokeWidth={1.5 * k}
-            draggable
-            {...cursor(c.cur)}
-            onDragStart={() => {
-              const lp = pointerInFrame();
-              scaleDragRef.current = {
-                startDist: lp ? Math.max(dist(lp, anchorLocal), 1) : 1,
-                startScale: obj.transform.scale,
-              };
-              beginInteraction();
-            }}
-            onDragMove={() => {
-              const base = scaleDragRef.current;
-              const lp = pointerInFrame();
-              if (!base || !lp) return;
-              updateTransform(obj.id, {
-                scale: clampScale(
-                  scaleFromDrag(
-                    base.startScale,
-                    base.startDist,
-                    Math.max(dist(lp, anchorLocal), 1)
-                  )
-                ),
-              });
-            }}
-            onDragEnd={() => {
-              scaleDragRef.current = null;
-              endInteraction();
-            }}
-          />
-        );
+        return scaleHandle(`corner-${c.key}`, p, c.cur, `gizmo-corner-${c.key}`);
+      })}
+      {edges.map((e) => {
+        const p = edgeWorld(anchorLocal, box, rotDeg, worldT.scale, e.edge);
+        return scaleHandle(`edge-${e.key}`, p, e.cur, `gizmo-edge-${e.key}`);
       })}
 
-      {/* Rotation stalk: line from top-center up, knob at the tip. */}
+      {/* Rotation stalk: line from TOP-CENTER up, knob at the tip. */}
       <Line
-        points={[nwCorner.x, nwCorner.y, stalk.x, stalk.y]}
+        points={[stalkBase.x, stalkBase.y, stalk.x, stalk.y]}
         stroke={GIZMO_COLOR}
         strokeWidth={1.5 * k}
         listening={false}
       />
-      <Circle
-        data-testid="gizmo-stalk"
-        x={stalk.x}
-        y={stalk.y}
-        radius={6 * k}
-        fill="#ffffff"
-        stroke={GIZMO_COLOR}
-        strokeWidth={2 * k}
-        draggable
-        {...cursor('grab')}
-        onDragStart={() => beginInteraction()}
-        onDragMove={(e) => {
-          const lp = pointerInFrame();
-          if (!lp) return;
-          let deg = rotationFromPointer(anchorLocal, lp);
-          if (e.evt.shiftKey) deg = snapDeg(deg, 15);
-          updateTransform(obj.id, { rotation: normalizeDeg(deg) });
-        }}
-        onDragEnd={() => endInteraction()}
-      />
-
-      {/* Move handle: draggable circle at the anchor for repositioning. */}
-      <Circle
-        data-testid="gizmo-move"
-        x={anchorLocal.x}
-        y={anchorLocal.y}
-        radius={7 * k}
-        fill={GIZMO_COLOR}
-        stroke="#0b1020"
-        strokeWidth={2 * k}
-        draggable
-        {...cursor('grab')}
-        onDragStart={() => {
-          const w = pointerWorld();
-          if (w) moveDragRef.current = { startWx: w.x, startWy: w.y };
-          beginInteraction();
-        }}
-        onDragMove={() => {
-          const base = moveDragRef.current;
-          const w = pointerWorld();
-          if (!base || !w) return;
-          const dx = w.x - base.startWx;
-          const dy = w.y - base.startWy;
-          const rootId = groupRootOf(objects, obj.id);
-          moveGroup(rootId, dx, dy);
-          moveDragRef.current = { startWx: w.x, startWy: w.y };
-        }}
-        onDragEnd={() => {
-          moveDragRef.current = null;
-          endInteraction();
-        }}
-      />
+      <Group x={stalk.x} y={stalk.y}>
+        {/* Fat invisible hit ring around the knob (20px screen). */}
+        <Circle
+          data-testid="gizmo-stalk-hit"
+          radius={12 * k}
+          // Same invisible-but-hittable rule as the scale hit rings above.
+          fill="#000000"
+          opacity={0}
+          draggable
+          {...cursor('grab')}
+          onDragStart={() => {
+            prevDegRef.current = obj.transform.rotation;
+            setLiveDeg(normalizeDeg(obj.transform.rotation));
+            beginInteraction();
+          }}
+          onDragMove={(e) => {
+            const lp = pointerInFrame();
+            if (!lp) return;
+            let deg = rotationFromPointer(anchorLocal, lp);
+            if (e.evt.shiftKey) deg = snapDeg(deg, 15);
+            else if (e.evt.altKey) deg = snapDeg(deg, 1); // Alt = fine 1°
+            // Shortest-path across the ±180 seam — no more 360° jumps.
+            deg = continuousDeg(prevDegRef.current, deg);
+            prevDegRef.current = deg;
+            setLiveDeg(deg);
+            updateTransform(obj.id, { rotation: normalizeDeg(deg) });
+          }}
+          onDragEnd={() => {
+            setLiveDeg(null);
+            endInteraction();
+          }}
+        />
+        <Circle
+          data-testid="gizmo-stalk"
+          radius={7 * k}
+          fill="#ffffff"
+          stroke={GIZMO_COLOR}
+          strokeWidth={2 * k}
+          listening={false}
+        />
+        {liveDeg !== null && (
+          <Group y={-18 * k} listening={false}>
+            <Rect
+              x={-26 * k}
+              y={-11 * k}
+              width={52 * k}
+              height={22 * k}
+              fill="#0b1020"
+              stroke={GIZMO_COLOR}
+              strokeWidth={1 * k}
+              cornerRadius={4 * k}
+            />
+            <KonvaText
+              x={-26 * k}
+              y={-11 * k}
+              width={52 * k}
+              height={22 * k}
+              text={`${Math.round(liveDeg)}°`}
+              fontSize={12 * k}
+              fill="#ffffff"
+              align="center"
+              verticalAlign="middle"
+            />
+          </Group>
+        )}
+      </Group>
     </>
   );
 }
@@ -639,6 +719,11 @@ export function CanvasStage() {
   };
 
   const panMovedRef = useRef(false);
+  // A Konva node drag that ends over empty canvas still fires a stage `click`
+  // whose target === Stage — handleStageClick would then wipe the selection
+  // the user just dragged. ObjectNode sets this on its FIRST real DragMove;
+  // handleStageClick swallows exactly that one trailing click.
+  const bodyDragMovedRef = useRef(false);
   const panHandlers = useCameraPan({
     getPointer: () => stageRef.current?.getPointerPosition() ?? null,
     onPan: (dx, dy) => {
@@ -669,6 +754,48 @@ export function CanvasStage() {
   const [marqueeRect, setMarqueeRect] = useState<WorldRect | null>(null);
 
   useEffect(() => bindSpaceHold(), []);
+
+  // Figma-style keyboard nudge: arrows move the selection 1px (Shift = 10px)
+  // as ONE undo step per press. Group law holds: a grouped child nudges its
+  // whole root; multi-selections move together via moveObjectsBy.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
+      )
+        return;
+      if (
+        e.key !== 'ArrowUp' &&
+        e.key !== 'ArrowDown' &&
+        e.key !== 'ArrowLeft' &&
+        e.key !== 'ArrowRight'
+      )
+        return;
+      const st = useSceneStore.getState();
+      if (!st.selectedObjId || !st.scene.objects[st.selectedObjId]) return;
+      // Don't fight text cursors or the path tool's waypoint flow.
+      if (st.activeTool === 'path' || st.activeTool === 'freehand') return;
+      e.preventDefault();
+      const step = nudgeStep(e.shiftKey);
+      const dx =
+        e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+      const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+      st.beginInteraction();
+      try {
+        if (st.selectedIds.length > 1) {
+          st.moveObjectsBy(st.selectedIds, dx, dy);
+        } else {
+          st.moveGroup(groupRootOf(st.scene.objects, st.selectedObjId), dx, dy);
+        }
+      } finally {
+        st.endInteraction();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const clearMarquee = (): void => {
     marqueeStartRef.current = null;
@@ -907,6 +1034,12 @@ export function CanvasStage() {
     // A marquee box-select release ends with a click too — same rule.
     if (marqueeMovedRef.current) {
       marqueeMovedRef.current = false;
+      return;
+    }
+    // A body-drag that landed on empty canvas emits one trailing click on the
+    // empty Stage — swallow it so the selection survives the drop.
+    if (bodyDragMovedRef.current) {
+      bodyDragMovedRef.current = false;
       return;
     }
     // Click on empty canvas (target === Stage) clears the selection AND
@@ -1233,17 +1366,18 @@ export function CanvasStage() {
                  const asset = obj.assetId ? scene.assets[obj.assetId] : undefined;
                  const wantShadow = asset?.metadata?.defaultShadow === true;
                  const shadowZoom = scene.camera.zoom * DISPLAY_SCALE;
-                 return (
-                   <ObjectNode
-                     key={obj.id}
-                     obj={obj}
-                     world={worldT}
-                     parentWorld={parentWorldT}
-                     wantShadow={wantShadow}
-                     shadowZoom={shadowZoom}
-                     onSelect={setSelected}
-                   />
-                 );
+                  return (
+                    <ObjectNode
+                      key={obj.id}
+                      obj={obj}
+                      world={worldT}
+                      parentWorld={parentWorldT}
+                      wantShadow={wantShadow}
+                      shadowZoom={shadowZoom}
+                      onSelect={setSelected}
+                      onBodyDragMoved={() => (bodyDragMovedRef.current = true)}
+                    />
+                  );
                 })}
              </Layer>
             );

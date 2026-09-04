@@ -1,10 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import {
+  axisLockDelta,
   clampScale,
+  continuousDeg,
   cornerOffset,
   rotatedOffset,
   cornerWorld,
+  edgeWorld,
+  nudgeStep,
+  snapPos,
   stalkWorld,
+  topCenterWorld,
   rotationFromPointer,
   normalizeDeg,
   snapDeg,
@@ -92,6 +98,47 @@ describe('gizmo pure math', () => {
     expect(scrubValue(100, 25, 1, false)).toBe(125);
     expect(scrubValue(100, 25, 1, true)).toBe(102.5);
     expect(scrubValue(1, 30, 0.01, false)).toBeCloseTo(1.3);
+  });
+
+  it('topCenterWorld is the stalk base (NOT the NW corner)', () => {
+    // Unrotated: top-center sits at (cx, minY); NW corner must differ.
+    const top = topCenterWorld({ x: 0, y: 0 }, BOX, 0, 1);
+    expect(top).toEqual({ x: 0, y: -10 });
+    const nw = cornerWorld({ x: 0, y: 0 }, BOX, 0, 1, 'min', 'min');
+    expect(nw).toEqual({ x: -20, y: -10 });
+    expect(top.x).not.toBe(nw.x);
+    // Rotated 90° CW: "up" becomes "right".
+    const q = topCenterWorld({ x: 0, y: 0 }, BOX, 90, 1);
+    expect(q.x).toBeCloseTo(10);
+    expect(q.y).toBeCloseTo(0);
+  });
+
+  it('edgeWorld hits edge midpoints', () => {
+    expect(edgeWorld({ x: 0, y: 0 }, BOX, 0, 1, 'n')).toEqual({ x: 0, y: -10 });
+    expect(edgeWorld({ x: 0, y: 0 }, BOX, 0, 1, 's')).toEqual({ x: 0, y: 10 });
+    expect(edgeWorld({ x: 0, y: 0 }, BOX, 0, 1, 'e')).toEqual({ x: 20, y: 0 });
+    expect(edgeWorld({ x: 0, y: 0 }, BOX, 0, 1, 'w')).toEqual({ x: -20, y: 0 });
+  });
+
+  it('axisLockDelta keeps the dominant axis (Shift move)', () => {
+    expect(axisLockDelta(30, 5)).toEqual({ x: 30, y: 0 });
+    expect(axisLockDelta(5, 30)).toEqual({ x: 0, y: 30 });
+  });
+
+  it('snapPos + nudgeStep (precision controls)', () => {
+    expect(snapPos(10.6, 1)).toBe(11);
+    expect(snapPos(10.6, 0)).toBe(10.6);
+    expect(nudgeStep(false)).toBe(1);
+    expect(nudgeStep(true)).toBe(10);
+  });
+
+  it('continuousDeg takes the short path across ±180 (no jumps)', () => {
+    // Was at +179°, pointer says -179° → lands on -179° via a +2° step,
+    // not a -358° swing.
+    const d = continuousDeg(179, -179);
+    expect(d).toBeCloseTo(-179);
+    expect(normalizeDeg(d - 179)).toBeCloseTo(2);
+    expect(continuousDeg(10, 20)).toBeCloseTo(20);
   });
 
   it('localDeltaForWorldDelta maps through worldToLocal', () => {

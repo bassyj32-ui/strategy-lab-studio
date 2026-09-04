@@ -54,8 +54,10 @@ vi.mock('react-konva', async () => {
     'wantShadow',
     'listening',
     'fillEnabled',
+    'strokeEnabled',
     'cornerRadius',
     'lineCap',
+    'lineJoin',
   ]);
   const clean = (props: Record<string, unknown>) => {
     const out: Record<string, unknown> = {};
@@ -192,7 +194,7 @@ describe('CanvasStage drop → object placement', () => {
 });
 
 describe('CanvasStage selection gizmos', () => {
-  it('renders move handle (gizmo-move) when an object is selected', () => {
+  it('renders Figma-style handles (4 corners + 4 edges + stalk, NO center move dot)', () => {
     act(() => {
       const st = useSceneStore.getState();
       st.addObject({
@@ -204,11 +206,19 @@ describe('CanvasStage selection gizmos', () => {
       useSceneStore.setState({ selectedIds: ['sel1'], selectedObjId: 'sel1' });
     });
     const { container } = render(<CanvasStage />);
-    // The gizmo-move circle should be in the DOM (rendered as a div by mock).
-    expect(container.querySelector('[data-testid="gizmo-move"]')).toBeTruthy();
+    // 4 corner handles + 4 edge handles + rotation stalk…
+    for (const c of ['nw', 'ne', 'se', 'sw']) {
+      expect(container.querySelector(`[data-testid="gizmo-corner-${c}"]`)).toBeTruthy();
+    }
+    for (const e of ['n', 's', 'e', 'w']) {
+      expect(container.querySelector(`[data-testid="gizmo-edge-${e}"]`)).toBeTruthy();
+    }
+    expect(container.querySelector('[data-testid="gizmo-stalk"]')).toBeTruthy();
+    // …and NO competing center move dot: move = drag the body itself.
+    expect(container.querySelector('[data-testid="gizmo-move"]')).toBeFalsy();
   });
 
-  it('renders move handle for a grouped child (moves the group root)', () => {
+  it('renders scale + stalk handles for a grouped child', () => {
     act(() => {
       const st = useSceneStore.getState();
       st.addObject({
@@ -227,7 +237,8 @@ describe('CanvasStage selection gizmos', () => {
       useSceneStore.setState({ selectedIds: ['child1'], selectedObjId: 'child1' });
     });
     const { container } = render(<CanvasStage />);
-    expect(container.querySelector('[data-testid="gizmo-move"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="gizmo-corner-se"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="gizmo-stalk"]')).toBeTruthy();
   });
 
   it('does not emit React unknown-prop warnings for Konva-only props', () => {

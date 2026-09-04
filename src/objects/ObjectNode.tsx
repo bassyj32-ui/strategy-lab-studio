@@ -1,10 +1,12 @@
 import { Group, Rect, Ellipse, Text, Line, Image as KonvaImage, Circle } from 'react-konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
+import { useRef } from 'react';
 import type { ReactNode } from 'react';
+import { axisLockDelta, snapPos } from '../canvas/gizmo';
 import type { ObjId, SceneObject, Transform } from '../scene/types';
 import { useSceneStore } from '../scene/store';
 import { usePlaybackStore } from '../timeline/playbackStore';
-import { worldPointToLocal, groupRootOf } from './groups';
+import { worldPointToLocal, groupRootOf, resolveWorldTransform } from './groups';
 import { useSoloEditStore } from './soloEdit';
 import {
   CONFIDENCE_META,
@@ -34,6 +36,10 @@ export const MARKER_RADIUS = 36;
 export const ARROW_SHAFT_WIDTH = 6;
 export const ARROWHEAD_LENGTH = 18;
 export const ARROWHEAD_HALF_WIDTH = 11;
+// Arrow grab band: just over 2x the thickest shaft (6) so arrows stay easy
+// to grab without stealing clicks from units parked alongside them.
+// (Was 24 — a ~14px invisible force field that swallowed nearby drags.)
+export const ARROW_HIT_WIDTH = 12;
 
 // Editor preview shadows mirror the Remotion render (src/render/draw.ts) so
 // what the commander sees matches the export. Values live in
@@ -53,6 +59,13 @@ interface ObjectNodeProps {
   wantShadow?: boolean;
   shadowZoom?: number;
   onSelect: (id: ObjId) => void;
+  /**
+   * Fired on the first real DragMove of a body drag (not on plain clicks).
+   * CanvasStage uses it to suppress the stage click that Konva emits when a
+   * node drag ends over empty canvas — without this, dropping an object onto
+   * empty space would instantly clear the selection that was just dragged.
+   */
+  onBodyDragMoved?: () => void;
 }
 
 /**
@@ -72,6 +85,7 @@ export function ObjectNode({
   wantShadow,
   shadowZoom = 1,
   onSelect,
+  onBodyDragMoved,
 }: ObjectNodeProps) {
   const beginInteraction = useSceneStore((s) => s.beginInteraction);
   const endInteraction = useSceneStore((s) => s.endInteraction);
@@ -97,47 +111,122 @@ export function ObjectNode({
   const img = useMapImage(asset?.src);
 
   const { x, y, rotation, scale, opacity } = world;
+  const duplicateObject = useSceneStore((s) => s.duplicateObject);
 
-  const handleDragStart = () => {
+  // Figma-style body drag: gesture-total delta from dragstart (no incremental
+  // drift), Shift = axis lock, Alt = duplicate-drag, 1px snap kills jitter.
+  const bodyDragRef = useRef<{
+    startWx: number;
+    startWy: number;
+    /** Store anchor at gesture start (frozen — the live `world` prop moves). */
+    startX: number;
+    startY: number;
+    lastDx: number;
+    lastDy: number;
+    altCopyId: ObjId | null;
+  } | null>(null);
+
+  const handleDragStart = (e: KonvaEventObject<DragEvent>) => {
+    const node = e.target;
+    let altCopyId: ObjId | null = null;
+    let startX = world.x;
+    let startY = world.y;
+    // Alt-drag duplicates FIRST, then the gesture drags the fresh copy —
+    // the original never moves. The duplicate pushes its own history entry
+    // directly (it runs BEFORE beginInteraction opens the drag session).
+    if ((e.evt as MouseEvent)?.altKey) {
+      altCopyId = duplicateObject(obj.id);
+      if (altCopyId) {
+        // Anchor the gesture on the COPY's world pose (store nudges it
+        // +24,+24 so it doesn't sit exactly under the original).
+        const after = useSceneStore.getState().scene.objects;
+        const copyWorld = resolveWorldTransform(after, altCopyId);
+        startX = copyWorld.x;
+        startY = copyWorld.y;
+        // Konva's node still sits at the original's spot — teleport it onto
+        // the copy so the first delta is ~0 instead of a -24 jump.
+        node.position({ x: copyWorld.x, y: copyWorld.y });
+      }
+    }
+    bodyDragRef.current = {
+      startWx: node.x(),
+      startWy: node.y(),
+      startX,
+      startY,
+      lastDx: 0,
+      lastDy: 0,
+      altCopyId,
+    };
     beginInteraction();
   };
 
   const handleDragMove = (e: KonvaEventObject<DragEvent>) => {
+    const base = bodyDragRef.current;
+    // A node drag that ends over empty canvas still emits a stage click —
+    // tell the stage to swallow it so the dragged selection survives the drop.
+    onBodyDragMoved?.();
     // Live-sync the store so the selection outline follows during the drag.
     // No extra history is pushed: only the begin snapshot matters. The node
     // position is in WORLD space (the Stage carries the camera); convert it
     // into the object's local frame before storing.
     const node = e.target;
+    const dragId = base?.altCopyId ?? obj.id;
+    // Gesture-total delta (from dragstart), so Shift-lock never compounds.
+    let dx = base ? node.x() - base.startWx : node.x() - world.x;
+    let dy = base ? node.y() - base.startWy : node.y() - world.y;
+    if ((e.evt as MouseEvent)?.shiftKey) {
+      const locked = axisLockDelta(dx, dy);
+      dx = locked.x;
+      dy = locked.y;
+    }
     // Multi-selection move-as-one: dragging any member of a loose multi-
-    // selection moves every SELECTION ROOT by the same world delta (the
-    // delta self-corrects to zero once the store catches up). Grouped
-    // hierarchies already move as one via their parent, so this path only
-    // applies to multi-selections.
+    // selection moves every SELECTION ROOT by the same world delta.
     if (
       selectedObjId !== null &&
       selectedIds.length > 1 &&
       selectedIds.includes(obj.id)
     ) {
-      moveObjectsBy(selectedIds, node.x() - world.x, node.y() - world.y);
+      // Incremental residual: moveObjectsBy applies the delta to the store,
+      // so only the not-yet-applied slice goes through each event.
+      if (base) {
+        moveObjectsBy(selectedIds, dx - base.lastDx, dy - base.lastDy);
+        base.lastDx = dx;
+        base.lastDy = dy;
+      } else {
+        moveObjectsBy(selectedIds, dx, dy);
+      }
       return;
     }
     // CAPCUT DRAG LAW: dragging ANY member of a group moves the WHOLE group.
     // Double-click "enters" a group for solo member editing; while inside,
-    // members drag individually again. `moveGroup` converts the world delta
-    // into the root's parent frame, and each dragmove event recomputes the
-    // residual delta against fresh store state, so scaled/rotated parents
-    // self-correct mid-gesture.
-    const rootId = groupRootOf(objects, obj.id);
-    if (rootId !== obj.id && soloRoot !== rootId) {
-      moveGroup(rootId, node.x() - world.x, node.y() - world.y);
+    // members drag individually again. Alt-duplicate of a member duplicates
+    // the member itself (explicit user intent), then drags the copy.
+    const rootId = base?.altCopyId ?? groupRootOf(objects, obj.id);
+    if (!base?.altCopyId && rootId !== obj.id && soloRoot !== rootId) {
+      if (base) {
+        // Same residual trick: moveGroup is incremental, our dx/dy is total.
+        const rdx = dx - base.lastDx;
+        const rdy = dy - base.lastDy;
+        if (rdx !== 0 || rdy !== 0) moveGroup(rootId, rdx, rdy);
+        base.lastDx = dx;
+        base.lastDy = dy;
+      } else {
+        moveGroup(rootId, dx, dy);
+      }
       return;
     }
     const parent = parentWorld ?? { x: 0, y: 0, rotation: 0, scale: 1, opacity: 1 };
-    const local = worldPointToLocal(parent, node.x(), node.y());
-    updateTransform(obj.id, { x: local.x, y: local.y });
+    // Desired world anchor = FROZEN gesture-start store value + locked delta,
+    // snapped to 1px. (The live `world` prop moves under us mid-gesture, so
+    // adding dx to it would double-count.)
+    const wantWx = snapPos((base?.startX ?? world.x) + dx, 1);
+    const wantWy = snapPos((base?.startY ?? world.y) + dy, 1);
+    const local = worldPointToLocal(parent, wantWx, wantWy);
+    updateTransform(dragId, { x: local.x, y: local.y });
   };
 
   const handleDragEnd = () => {
+    bodyDragRef.current = null;
     endInteraction();
   };
 
@@ -263,7 +352,7 @@ export function ObjectNode({
           strokeWidth={spec.shaftWidth}
           lineCap="round"
           dash={spec.dash}
-          hitStrokeWidth={24}
+          hitStrokeWidth={ARROW_HIT_WIDTH}
         />
         <Line
           points={[
@@ -278,7 +367,7 @@ export function ObjectNode({
           fill={color}
           stroke={color}
           strokeWidth={1}
-          hitStrokeWidth={24}
+          hitStrokeWidth={ARROW_HIT_WIDTH}
         />
       </Group>
     );

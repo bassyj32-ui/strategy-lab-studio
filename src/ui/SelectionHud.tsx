@@ -57,9 +57,11 @@ export function SelectionHud({
     updateTransform(obj.id, partial);
 
   // Anchor on screen (CSS px inside .canvas-wrap), clamped to stay visible.
+  // Sits ABOVE the rotation stalk (+24px clearance) so it never covers the
+  // object it edits — the old version floated on top of the selection.
   const sp = worldToScreen({ x: worldT.x, y: worldT.y }, displayCamera, vp);
-  const left = Math.min(Math.max(sp.x * displayScale, 110), Math.max(wrapWidth - 110, 110));
-  const top = Math.max(sp.y * displayScale - 16, 34);
+  const left = Math.min(Math.max(sp.x * displayScale, 150), Math.max(wrapWidth - 150, 150));
+  const top = Math.max(sp.y * displayScale - 64, 34);
 
   return (
     <div
@@ -69,6 +71,44 @@ export function SelectionHud({
       onMouseDown={(e) => e.stopPropagation()}
     >
       <ScrubField
+        label="X"
+        value={obj.transform.x}
+        format={(v) => `${Math.round(v)}`}
+        onBegin={beginGesture}
+        onEnd={endInteraction}
+        onScrubPx={(dx, _dy, fine) =>
+          apply({ x: scrubValue(baseRef.current.x, dx, 1, fine) })
+        }
+        onCommit={(v) => apply({ x: v })}
+      />
+      <ScrubField
+        label="Y"
+        value={obj.transform.y}
+        format={(v) => `${Math.round(v)}`}
+        onBegin={beginGesture}
+        onEnd={endInteraction}
+        onScrubPx={(dx, _dy, fine) =>
+          apply({ y: scrubValue(baseRef.current.y, dx, 1, fine) })
+        }
+        onCommit={(v) => apply({ y: v })}
+      />
+      <ScrubField
+        label="SCL"
+        value={obj.transform.scale}
+        format={(v) => `${Math.round(v * 100)}%`}
+        onBegin={beginGesture}
+        onEnd={endInteraction}
+        onScrubPx={(dx, _dy, fine) =>
+          apply({
+            scale: Math.min(
+              20,
+              Math.max(0.05, scrubValue(baseRef.current.scale, dx, 0.005, fine))
+            ),
+          })
+        }
+        onCommit={(v) => apply({ scale: Math.min(20, Math.max(0.05, v)) })}
+      />
+      <ScrubField
         label="ROT"
         value={obj.transform.rotation}
         format={(v) => `${Math.round(normalizeDeg(v))}°`}
@@ -77,7 +117,7 @@ export function SelectionHud({
         onScrubPx={(dx, _dy, fine) =>
           apply({
             rotation: normalizeDeg(
-              scrubValue(baseRef.current.rotation, dx, 0.5, fine)
+              scrubValue(baseRef.current.rotation, dx, 0.25, fine)
             ),
           })
         }

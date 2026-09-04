@@ -67,6 +67,64 @@ export function stalkWorld(
   return { x: anchor.x + rise.x, y: anchor.y + rise.y };
 }
 
+/** World position of the box's top-center edge (stalk BASE — the line starts here, not at NW). */
+export function topCenterWorld(
+  anchor: Pt,
+  box: Box,
+  rotationDeg: number,
+  scale: number
+): Pt {
+  const cx = (box.minX + box.maxX) / 2;
+  const off = rotatedOffset(cx * scale, box.minY * scale, rotationDeg);
+  return { x: anchor.x + off.x, y: anchor.y + off.y };
+}
+
+/** World position of an edge-midpoint handle (n/s/e/w). Uniform scale for now. */
+export function edgeWorld(
+  anchor: Pt,
+  box: Box,
+  rotationDeg: number,
+  scale: number,
+  edge: 'n' | 's' | 'e' | 'w'
+): Pt {
+  const cx = (box.minX + box.maxX) / 2;
+  const cy = (box.minY + box.maxY) / 2;
+  const lx = edge === 'w' ? box.minX : edge === 'e' ? box.maxX : cx;
+  const ly = edge === 'n' ? box.minY : edge === 's' ? box.maxY : cy;
+  const rot = rotatedOffset(lx * scale, ly * scale, rotationDeg);
+  return { x: anchor.x + rot.x, y: anchor.y + rot.y };
+}
+
+/**
+ * Figma-style axis lock: keep only the dominant world axis (Shift held).
+ * Returns the locked delta — call with the gesture-total delta, not per-event.
+ */
+export function axisLockDelta(dx: number, dy: number): Pt {
+  return Math.abs(dx) >= Math.abs(dy) ? { x: dx, y: 0 } : { x: 0, y: dy };
+}
+
+/** Grid snap for a world coordinate (0/<=0 disables). */
+export function snapPos(v: number, grid = 0): number {
+  if (grid <= 0) return v;
+  return Math.round(v / grid) * grid;
+}
+
+/** Keyboard nudge step: 1px, Shift = 10px (Figma-style). */
+export function nudgeStep(shift: boolean): number {
+  return shift ? 10 : 1;
+}
+
+/**
+ * Shortest-path angle delta: keeps continuous rotation across the ±180 seam
+ * so dragging through "down" doesn't jump the object (prev = last applied).
+ */
+export function continuousDeg(prev: number, next: number): number {
+  let d = (next - prev) % 360;
+  if (d > 180) d -= 360;
+  if (d < -180) d += 360;
+  return normalizeDeg(prev + d);
+}
+
 export function boxWidth(box: Box): number {
   return box.maxX - box.minX;
 }
