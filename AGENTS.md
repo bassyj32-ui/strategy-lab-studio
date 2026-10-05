@@ -1,4 +1,4 @@
-# Strategy Lab Internal Studio — Agent Rules
+# Strategy Lab Studio — Agent Rules
 
 > Read this file before doing any work on this project. It encodes the frozen
 > PRD v1.0 (sections 1–117). Violating these laws is worse than a bug.
@@ -46,12 +46,17 @@
 - Requirements are **FROZEN** (PRD v1.0). Build **P0 / MVP-1** only until the
   core loop is proven [PRD §100, §112]. Do not pull P1–P3 features forward
   unless explicitly asked.
-- **No SaaS anything:** no billing, no public signup, no teams, no
-  marketplace, no multi-tenant architecture [PRD §3].
-- **INTERNAL-ONLY, FOREVER:** this is a private single-user tool for the
-  owner (bassyj32-ui). It must NEVER be published, shared publicly, or
-  deployed as a public site under any circumstance. No feature work exists
-  to serve hypothetical other users.
+- **No SaaS anything:** no billing, public signup, teams, or marketplace.
+  The studio remains a single-creator tool [PRD §3]. Public availability of the
+  code does not make it a hosted multi-tenant service.
+- **PUBLIC REPO:** the code is published at
+  github.com/bassyj32-ui/strategy-lab-studio so others can read, learn from and
+  contribute to it. Publish means the *code* is public — not that feature work
+  is driven by hypothetical other users. Build what makes the studio excellent.
+- **No LICENSE is granted yet.** Until one is added, default copyright applies
+  and nobody may legally reuse the code. Do not imply otherwise in docs.
+- **Never commit secrets.** API keys are entered by the user at runtime and
+  stored in localStorage only. No credential belongs in source or history.
 - CapCut/DaVinci own final filmmaking — we stop at exported footage [PRD §92].
 
 ## Coding

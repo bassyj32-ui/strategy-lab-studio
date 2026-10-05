@@ -1,4 +1,4 @@
-# Decisions — Strategy Lab Internal Studio
+# Decisions — Strategy Lab Studio
 
 > Every architectural or scope choice is recorded here with a date and the
 > reason. When in doubt, this log is the authority on *why* something is the

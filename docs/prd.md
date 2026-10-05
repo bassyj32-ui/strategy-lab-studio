@@ -1,8 +1,8 @@
 # Strategy Lab Studio — PRD
 
-STRATEGY LAB INTERNAL STUDIO
+Strategy Lab Studio
 Master Product Requirements Document — v1.0
-Product: Strategy Lab Internal Studio
+Product: Strategy Lab Studio
  Type: Private battle-animation production studio
  Primary user: Strategy Lab creator
  Primary purpose: Create professional, highly controllable historical battle-animation footage for final editing in CapCut/DaVinci Resolve.
@@ -16,7 +16,7 @@ FFmpeg encodes them.
 CapCut/DaVinci turns the rendered footage into the final film.
 
 1. PRODUCT VISION
-Strategy Lab Internal Studio is a specialized 2D/2.5D tactical animation environment for reconstructing historical battles.
+Strategy Lab Studio is a specialized 2D/2.5D tactical animation environment for reconstructing historical battles.
 The creator imports a beautiful clean battlefield map and independently builds the battle on top of it.
 The creator must be able to control:
 armies
@@ -93,14 +93,17 @@ There will be:
 ❌ No Stripe
 ❌ No subscriptions
 ❌ No billing
-❌ No public onboarding
 ❌ No multi-tenant architecture
 ❌ No customer dashboard
 ❌ No public API marketplace
 ❌ No licensing-management system
 This is:
-Strategy Lab Internal Studio
-A private production tool.
+Strategy Lab Studio
+A deterministic battle-animation studio, published as open code for others to
+read and learn from. It remains a single-creator production tool — there is no
+hosted service, no signup and no multi-tenancy. "No public onboarding" was
+dropped on 2026-10-05: the code is now public, so others will read it, run it,
+and ask questions. That is publication, not a product surface.
 
 4. FINAL PRODUCTION WORKFLOW
 HISTORICAL RESEARCH
@@ -111,7 +114,7 @@ CLEAN MAP
         ↓
 ASSETS
         ↓
-STRATEGY LAB INTERNAL STUDIO
+Strategy Lab Studio
         ↓
 IMPORT MAP
         ↓
@@ -153,7 +156,7 @@ Beautiful clean battlefield map
               ↓
 HD cleanup
               ↓
-Strategy Lab Internal Studio
+Strategy Lab Studio
               ↓
 Add tactical elements
 
@@ -1855,7 +1858,7 @@ The export system is part of the creative control system.
 
 111. FINAL SYSTEM ARCHITECTURE
                  STRATEGY LAB
-                 INTERNAL STUDIO
+                 STUDIO
                        │
           ┌────────────┴────────────┐
           │                         │
@@ -1946,7 +1949,7 @@ complex maneuver generation
 
 113. CODING AGENT — ABSOLUTE RULES
 Put these at the very top of the development specification.
-DO NOT build Strategy Lab Internal Studio as an AI video generator.
+DO NOT build Strategy Lab Studio as an AI video generator.
 Build it as a deterministic, object-based, commander-controlled battlefield animation editor.
 Every important battlefield object must remain independently editable after placement and animation.
 AI is optional and assistive.
