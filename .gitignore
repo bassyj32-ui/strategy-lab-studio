@@ -21,3 +21,11 @@ out/
 
 # Local browser-automation artifacts
 .playwright-mcp/
+
+# Local AI-assistant workflow config. Personal tooling, not product code —
+# kept on disk for the owner's own use and intentionally untracked so it does
+# not read as repo content. Nothing in src/, scripts/ or the build references
+# any of it.
+.opencode/
+.agents/
+skills-lock.json

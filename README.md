@@ -1,133 +1,110 @@
 # Strategy Lab Studio
 
-A deterministic, commander-controlled **battlefield animation editor** for the web.
+A battlefield animation editor that runs in the browser.
 
-Import a clean map, place and animate every tactical element, drive the camera
-and timeline, then render deterministic 1080p footage you finish in CapCut or
-DaVinci Resolve.
+Import a map, place and animate units, arrows and shapes, drive a camera track
+and timeline, then render 1080p footage to finish in CapCut or DaVinci Resolve.
 
-> This is **not** an AI video generator. There is no prompt-to-video here. You
-> place every unit; the AI Commander only proposes structured scene edits that
-> you approve before anything changes.
+It is not a text-to-video tool. Nothing is generated from a prompt. You place
+every element; the optional AI Commander proposes structured scene edits that
+you approve before anything changes.
 
----
+## Design
 
-## Why this exists
+One function paints every frame. `drawScene` in `src/render/draw.ts` is called
+by the live editor preview through Remotion's `<Player>`, and by the headless
+`remotion render` CLI. It does not mutate scene state.
 
-Most battle-animation tooling makes you choose between control and speed. You
-either hand-place every element over hours, or you accept whatever an opaque
-model produced. This studio is built for the opposite trade: **deterministic,
-inspectable, repeatable** output, where the creator stays in command.
+That constraint is the reason output is reproducible. There is no separate
+"export path" that can drift from what you saw while editing, and byte-stability
+across independent headless renders is provable rather than assumed.
 
-The core bet is that **one frame painter serves two consumers**. The same
-`drawScene` function paints the live editor preview and the headless
-Remotion/FFmpeg render. What you see is what renders — there is no second
-representation to drift out of sync.
+## Features
 
-## What it does
-
-- **Scene-graph canvas** — Konva/stage-based, with marquee select, transform
-  gizmos, group transforms, and per-object independent editing
-- **Timeline** — keyframes on any property, a dedicated camera track, bulk
-  keyframe operations, cubic bezier easing with five easing modes, and section
-  preview
-- **Deterministic video export** — MP4, ProRes 4444 (alpha), VP9 WebM (alpha),
-  or PNG sequence, at a hard 1920×1080
-- **AI Commander** — 17 validated tools (`create_unit`, `move_group`,
-  `set_keyframe`, …) over an OpenAI-compatible endpoint (DeepSeek by default)
-- **Motion presets, camera paths, parallax, battle SFX** — layered background
-  removal and cached image previews for smooth scrubbing
+- **Canvas** — Konva stage with marquee select, transform gizmos, group transforms, per-object editing
+- **Timeline** — keyframes on any property, dedicated camera track, bulk keyframe operations, cubic bezier easing with five modes, section preview
+- **Export** — MP4, ProRes 4444 with alpha, VP9 WebM with alpha, or PNG sequence, at 1920×1080
+- **AI Commander** — 17 validated tools (`create_unit`, `move_group`, `set_keyframe`, …) over an OpenAI-compatible endpoint, DeepSeek by default
+- **Scene** — multi-project support with schema migration, layer panel, motion presets, camera paths, parallax, background removal
 
 ## Stack
 
 React 18 · TypeScript (strict) · Vite · Konva · Remotion · Zustand + Immer · Vitest
 
-## Getting started
+## Running it
 
 ```bash
 npm install
-npm run dev        # local editor
-npm run check      # typecheck + lint + tests + build
+npm run dev
 ```
 
-| Script | Does |
+| Script | |
 |---|---|
-| `npm run dev` | Vite dev server |
+| `npm run dev` | dev server |
 | `npm run build` | production bundle |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint |
-| `npm test` | Vitest suite (764 tests) |
-| `npm run check` | all of the above, in order |
+| `npm test` | Vitest (764 tests) |
+| `npm run check` | typecheck, lint, tests, build |
 | `npm run render` | headless Remotion render |
 
-### API keys
+CI runs `npm run check` on every push and pull request, plus a check that fails
+if a credential-shaped literal is committed.
 
-There are **no credentials in this repository, and none are required to run the
-editor.** If you enable the optional integrations, you supply your own key at
-runtime and it is stored in that browser's `localStorage` only — it is never
-committed, never logged, and never sent anywhere except the provider:
+## API keys
 
-- **AI Commander** — your DeepSeek (or other OpenAI-compatible) key, entered
-  in the AI Commander panel
+None are needed to run the editor, and none are in this repository. The two
+optional integrations take a key you supply at runtime; it is held in that
+browser's `localStorage` and sent only to the provider.
+
+- **AI Commander** — a DeepSeek (or other OpenAI-compatible) key, entered in the panel
 - **Battle SFX** — a free Freesound token from freesound.org/apiv2
 
 ## Architecture
 
-Five laws that explain most of the code:
+The constraints that shape most of the code, expanded in
+[`docs/architecture.md`](docs/architecture.md):
 
-1. **The scene model is the single source of truth.** Editor, AI Commander,
-   save/load, and the Remotion render all read the same data.
-2. **Assets, animation, and rendering stay separate.** Tactical objects are
-   never baked into a map or into video.
-3. **Every object has a unique ID** and stays independently editable after
-   placement and animation.
-4. **Editing is non-destructive.** We store asset + transform + animation and
-   never modify source files.
-5. **Rendering runs outside the request lifecycle.** Long renders are never
-   blocking.
+1. The scene model is the single source of truth — editor, AI, save/load and render all read it
+2. Assets, animation and rendering stay separate; objects are never baked into a map or into video
+3. Every object has a unique ID and stays independently editable
+4. Editing is non-destructive — asset + transform + animation, never modified source files
+5. Rendering runs outside the request lifecycle
 
-The AI layer deserves specific mention: `src/ai/tools.ts` is a pure validation
-module. Model output is parsed against a schema, bounds-checked, and resolved
-through a **closed switch** — an unrecognised tool name is rejected, never
-executed. The model proposes; a human approves; the store applies. There is no
-`eval`, no dynamic dispatch, and no path from model output to scene state
-without a click.
+The AI layer is worth a specific note. `src/ai/tools.ts` validates model output
+against a schema, bounds-checks it, and resolves it through a closed `switch`.
+An unrecognised tool name is rejected, not executed. There is no `eval` and no
+dynamic dispatch. The model proposes, a human approves, and only then does the
+store change — as a single undoable transaction.
 
-See [`docs/architecture.md`](docs/architecture.md), [`docs/rendering.md`](docs/rendering.md),
-and [`docs/decisions.md`](docs/decisions.md) for the full rationale, including
-dated decisions and superseded entries.
+## Status
 
-## Current status
+The MVP-1 loop works end to end: project system, map and asset import, canvas,
+objects, layers, transforms, keyframes, timeline, playback, camera, live preview,
+and deterministic export. See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full
+inventory.
 
-Working: the full MVP-1 loop — project system, map import, asset import,
-canvas, object system, layers, transforms, keyframes, timeline, playback,
-camera, live preview, and deterministic export.
+Gaps worth knowing:
 
-Known gaps, honestly:
+- Export is fixed at 1920×1080. 4K was specified in PRD §72 and is not built.
+- No automated test asserts that a render produces a valid MP4. Remotion needs headless Chrome and FFmpeg, so the render tests stub the canvas context and check call sequences rather than pixels. Output has been verified manually instead.
+- The audio subsystem (`src/audio/`, `src/ui/AudioPanel.tsx`) is complete but unmounted, because blob audio broke export.
+- `src/scene/store.ts` is 2441 lines with roughly 118 members. Stable and well tested, but it is the main obstacle for anyone contributing.
+- The AI provider layer has one implementation. The abstraction is designed for more and does not have them yet.
 
-- Export resolution is fixed at 1080p. 4K was intended and is not built.
-- There is **no automated test that a render produces a valid MP4.** Remotion
-  needs headless Chrome and FFmpeg, which the unit suite stubs out, so the
-  render tests assert call sequences rather than pixels.
-- The battle SFX panel and audio subsystem are present but not currently
-  mounted in the UI.
-- `src/scene/store.ts` is large and is the main obstacle for new contributors.
-- The AI provider abstraction has one real implementation; it is designed for
-  more and does not have them yet.
+## Licence
 
-## Licence status
-
-**No licence file is present yet, so default copyright applies.** You may read
-this code, but nobody — including you — may legally copy, fork, modify or
-redistribute it until a licence is added. This is deliberate for now and will
-change.
+No licence file is present, so default copyright applies. The code is publicly
+readable, but nobody may copy, fork or redistribute it until a licence is added.
 
 ## Documentation
 
-| File | What's in it |
+| File | |
 |---|---|
-| [`docs/prd.md`](docs/prd.md) | The frozen product requirements — the source of truth for what this is meant to be |
-| [`docs/architecture.md`](docs/architecture.md) | Module layout and the design rationale |
-| [`docs/rendering.md`](docs/rendering.md) | The four export modes and how the frame painter stays single-source |
-| [`docs/decisions.md`](docs/decisions.md) | Dated decisions, including superseded ones and why |
-| [`AGENTS.md`](AGENTS.md) | The engineering laws this codebase is held to |
+| [`docs/prd.md`](docs/prd.md) | Frozen product requirements |
+| [`docs/architecture.md`](docs/architecture.md) | Module layout and rationale |
+| [`docs/rendering.md`](docs/rendering.md) | The four export modes |
+| [`docs/decisions.md`](docs/decisions.md) | Dated decisions, including superseded ones |
+| [`docs/STRUCTURE.md`](docs/STRUCTURE.md) | Directory layout and module discipline |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | What is done, what is not |
+| [`AGENTS.md`](AGENTS.md) | Engineering constraints and conventions |
