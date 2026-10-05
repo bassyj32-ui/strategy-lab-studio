@@ -1,11 +1,11 @@
-# Strategy Lab Studio — Agent Rules
+# Strategy Lab Studio — Engineering Notes
 
-> Read this file before doing any work on this project. It encodes the frozen
-> PRD v1.0 (sections 1–117). Violating these laws is worse than a bug.
+> Conventions and constraints for this codebase, with references to the frozen
+> PRD v1.0 (sections 1–117) in brackets. Read before changing anything here.
 
 ## Product Identity (read first)
 - This is a **deterministic, commander-controlled battlefield animation editor**.
-- It is **NOT an AI video generator**. Never blur this line.
+- It is **Not an AI video generator**. Never blur this line.
 - The creator is the absolute commander at every stage. AI is an optional
   assistive layer only — it accelerates commands, it never decides.
 
@@ -18,11 +18,11 @@
 - **Supabase** = optional cloud only (auth / scene backup / sync). The core
   editor must run fully without it [PRD §76]
 
-## Architecture Laws
+## Architecture constraints
 1. **Scene model is the single source of truth** — editor preview, AI
    Commander, save/load, and Remotion rendering all read the same data
    [PRD §65, §99]. Never maintain a second incompatible representation.
-2. **Separate forever:** ASSETS vs ANIMATION (transforms/keyframes) vs
+2. **Keep separate:** ASSETS vs ANIMATION (transforms/keyframes) vs
    RENDERING. Never bake tactical objects into maps or into video [PRD §98].
 3. **Every battlefield object has a unique ID** and stays independently
    editable after placement and animation [PRD §8].
@@ -32,7 +32,7 @@
 6. **Rendering runs OUTSIDE the web request lifecycle** — never block on
    1080p/4K renders inside request handlers [PRD §68].
 
-## AI Rules
+## AI constraints
 - AI acts ONLY through approved tool calls on structured scene data
   (e.g. `create_unit`, `move_group`, `set_keyframe`) [PRD §53–54].
 - Wrap each complex AI operation in **ONE undoable transaction** [PRD §60].
@@ -69,7 +69,7 @@
 ## Workflow
 1. Inspect → 2. Plan → 3. Implement → 4. Test → 5. Review → 6. Report
 
-## Never
+## Do not
 - Expose secrets or commit `.env` files.
 - Change database schema without approval.
 - Make irreversible scene changes without undo history.
