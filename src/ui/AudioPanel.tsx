@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useSceneStore } from '../scene/store';
 import {
   searchSounds,
@@ -9,7 +9,30 @@ import {
 import type { Asset, AudioTrack } from '../scene/types';
 import { createId } from '../scene/id';
 
-const API_KEY = '1VgWgZ8eMZDgU0YelE4sc4E0b4XVNZaSnN8i8FXp';
+/**
+ * Freesound token. Lives ONLY in localStorage under `sls.freesound.api-key`,
+ * mirroring the AI provider's key handling (src/ai/provider.ts) — user
+ * supplied, never committed, never logged. The value below is a placeholder,
+ * not a credential.
+ */
+export const FREESOUND_KEY_STORAGE = 'sls.freesound.api-key';
+
+function readFreesoundKey(): string {
+  try {
+    return localStorage.getItem(FREESOUND_KEY_STORAGE) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function writeFreesoundKey(value: string): void {
+  try {
+    if (value) localStorage.setItem(FREESOUND_KEY_STORAGE, value);
+    else localStorage.removeItem(FREESOUND_KEY_STORAGE);
+  } catch {
+    /* private mode / quota — search simply stays disabled */
+  }
+}
 
 /**
  * Battle SFX panel: search Freesound.org, preview sounds, import as audio
@@ -25,17 +48,36 @@ export function AudioPanel() {
   const [importing, setImporting] = useState<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playingId, setPlayingId] = useState<number | null>(null);
+  const [apiKey, setApiKey] = useState('');
+  const [keyDraft, setKeyDraft] = useState('');
 
   const addAudioTrack = useSceneStore((s) => s.addAudioTrack);
   const registerAsset = useSceneStore((s) => s.registerAsset);
 
+  // Load any previously saved token once on mount.
+  useEffect(() => {
+    const saved = readFreesoundKey();
+    setApiKey(saved);
+    setKeyDraft(saved);
+  }, []);
+
+  const saveKey = useCallback(() => {
+    const trimmed = keyDraft.trim();
+    writeFreesoundKey(trimmed);
+    setApiKey(trimmed);
+  }, [keyDraft]);
+
   const doSearch = useCallback(
     async (q: string) => {
       if (!q.trim()) return;
+      if (!apiKey) {
+        setError('Add a Freesound API token first (free at freesound.org/apiv2).');
+        return;
+      }
       setLoading(true);
       setError(null);
       try {
-        const res = await searchSounds(q, API_KEY);
+        const res = await searchSounds(q, apiKey);
         setResults(res.results);
         setCount(res.count);
       } catch (e) {
@@ -45,7 +87,7 @@ export function AudioPanel() {
         setLoading(false);
       }
     },
-    [],
+    [apiKey],
   );
 
   const previewSound = useCallback(
@@ -109,6 +151,32 @@ export function AudioPanel() {
   return (
     <div className="audio-panel" data-testid="audio-panel">
       <div className="audio-search">
+        {!apiKey && (
+          <div className="audio-key-setup">
+            <input
+              type="password"
+              value={keyDraft}
+              onChange={(e) => setKeyDraft(e.target.value)}
+              placeholder="Freesound API token"
+              className="audio-search-input"
+              data-testid="freesound-key-input"
+              autoComplete="off"
+            />
+            <button
+              type="button"
+              onClick={saveKey}
+              disabled={!keyDraft.trim()}
+              className="btn btn-sm"
+              data-testid="freesound-key-save"
+            >
+              Save token
+            </button>
+            <p className="audio-key-hint">
+              Stored only in this browser (localStorage). Get a free token at
+              freesound.org/apiv2. It is never sent anywhere except Freesound.
+            </p>
+          </div>
+        )}
         <input
           type="text"
           value={query}

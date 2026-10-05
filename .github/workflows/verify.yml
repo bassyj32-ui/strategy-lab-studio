@@ -1,0 +1,41 @@
+name: Verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same ref instead of queueing them.
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # typecheck + lint + tests + build, in that order. Same command as local.
+      - name: Check
+        run: npm run check
+
+      # The editor must run fully offline from a local browser storage state,
+      # with no Supabase account and no API keys. Fail if any credential is
+      # required to boot.
+      - name: Verify no committed credentials
+        run: |
+          if git grep -nIE "(sk-[A-Za-z0-9]{16,}|1VgWgZ8eMZDgU0YelE4sc4E0b4XVNZaSnN8i8FXp)" -- \
+            ':!package-lock.json' ':!.github/workflows/*'; then
+            echo "::error::credential-shaped literal found in tracked files"
+            exit 1
+          fi
+          echo "no credential-shaped literals in tracked files"

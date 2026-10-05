@@ -1,4 +1,4 @@
-# Architecture — Strategy Lab Internal Studio
+# Architecture — Strategy Lab Studio
 
 > Status: MVP-1 (P0) build. Requirements frozen from PRD v1.0 (§1–§117).
 > This document is the single architectural reference. If it conflicts with

@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Deterministic commander-controlled battlefield animation editor (MVP-1 / P0 scaffold).",
+  "description": "Deterministic, commander-controlled battlefield animation editor for the web. Konva canvas + Remotion video export.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

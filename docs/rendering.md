@@ -1,4 +1,4 @@
-# Rendering — Strategy Lab Internal Studio
+# Rendering — Strategy Lab Studio
 
 > The rendering layer is deterministic by definition. This document records the
 > only sanctioned render path and the rules that keep output reproducible.

@@ -12,7 +12,7 @@ permission:
     "git push*": deny
 ---
 
-You are the **BUILDER** for Strategy Lab Internal Studio (MVP-1 / P0).
+You are the **BUILDER** for Strategy Lab Studio (MVP-1 / P0).
 
 You implement what the ARCHITECT planned and what MAIN requested.
 
